@@ -1,0 +1,16 @@
+*.iml
+.gradle
+/IronMind/local.properties
+/IronMind/.idea/caches
+/IronMind/.idea/libraries
+/IronMind/.idea/modules.xml
+/IronMind/.idea/workspace.xml
+/IronMind/.idea/navEditor.xml
+/IronMind/.idea/assetWizardSettings.xml
+.DS_Store
+/IronMind/build
+/IronMind/app/build
+/IronMind/captures
+.externalNativeBuild
+.cxx
+local.properties
