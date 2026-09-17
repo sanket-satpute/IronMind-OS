@@ -3,35 +3,35 @@ package com.sanket_satpute_20.ironmind.data.repository
 import com.sanket_satpute_20.ironmind.data.local.dao.IronMindDao
 import com.sanket_satpute_20.ironmind.data.local.entity.*
 import com.sanket_satpute_20.ironmind.domain.common.Result
-import com.sanket_satpute_20.ironmind.domain.model.Goal
-import com.sanket_satpute_20.ironmind.domain.model.GoalStatus
+import com.sanket_satpute_20.ironmind.domain.model.EntitySource
+import com.sanket_satpute_20.ironmind.domain.model.Plan
+import com.sanket_satpute_20.ironmind.domain.model.PlanStatus
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-class GoalRepositoryImplTest {
+class PlanRepositoryImplTest {
 
     private lateinit var dao: StubDao
-    private lateinit var repository: GoalRepositoryImpl
+    private lateinit var repository: PlanRepositoryImpl
 
     class StubDao : IronMindDao {
-        var insertedGoal: GoalEntity? = null
-        var returnedGoal: GoalEntity? = null
+        var insertedPlan: PlanEntity? = null
+        var returnedPlan: PlanEntity? = null
         
         override fun insertUserProfile(profile: UserProfileEntity) {}
         override fun getUserProfile(id: String): UserProfileEntity? = null
         override fun getLocalUserProfile(): UserProfileEntity? = null
-        
-        override fun insertGoal(goal: GoalEntity) {
-            insertedGoal = goal
-        }
-        override fun getGoal(id: String): GoalEntity? = returnedGoal
+        override fun insertGoal(goal: GoalEntity) {}
+        override fun getGoal(id: String): GoalEntity? = null
         override fun getGoalsForUser(userId: String): List<GoalEntity> = emptyList()
         
-        override fun insertPlan(plan: PlanEntity) {}
-        override fun getPlan(id: String): PlanEntity? = null
+        override fun insertPlan(plan: PlanEntity) {
+            insertedPlan = plan
+        }
+        override fun getPlan(id: String): PlanEntity? = returnedPlan
         override fun getPlansForGoal(goalId: String): List<PlanEntity> = emptyList()
         
         override fun insertTask(task: TaskEntity) {}
@@ -49,79 +49,74 @@ class GoalRepositoryImplTest {
     @Before
     fun setup() {
         dao = StubDao()
-        repository = GoalRepositoryImpl(dao)
+        repository = PlanRepositoryImpl(dao)
     }
 
     @Test
-    fun `saveGoal correctly maps domain model to entity`() = runTest {
-        val domainGoal = Goal(
-            id = "goal-1",
+    fun `savePlan correctly maps domain model to entity`() = runTest {
+        val domainPlan = Plan(
+            id = "plan-1",
             userId = "user-1",
-            ambitionId = "ambition-1",
+            goalId = "goal-1",
+            ambitionId = null,
             title = "Title",
             description = "Desc",
-            why = "Why",
-            importance = 8,
-            status = GoalStatus.ACTIVE,
-            targetAt = 1000L,
-            startedAt = 2000L,
+            status = PlanStatus.ACTIVE,
+            createdAt = 1000L,
+            updatedAt = 2000L,
+            startedAt = 1000L,
             completedAt = null,
-            createdAt = 3000L,
-            updatedAt = 4000L
+            source = EntitySource.USER
         )
 
-        val result = repository.saveGoal(domainGoal)
-        
+        val result = repository.savePlan(domainPlan)
         assertTrue(result is Result.Success)
         
-        val expectedEntity = GoalEntity(
-            id = "goal-1",
+        val expectedEntity = PlanEntity(
+            id = "plan-1",
             userId = "user-1",
-            ambitionId = "ambition-1",
+            goalId = "goal-1",
+            ambitionId = null,
             title = "Title",
             description = "Desc",
-            why = "Why",
-            importance = 8,
             status = "ACTIVE",
-            targetAt = 1000L,
-            startedAt = 2000L,
+            createdAt = 1000L,
+            updatedAt = 2000L,
+            startedAt = 1000L,
             completedAt = null,
-            createdAt = 3000L,
-            updatedAt = 4000L,
+            source = "USER",
             schemaVersion = 1
         )
         
-        assertEquals(expectedEntity, dao.insertedGoal)
+        assertEquals(expectedEntity, dao.insertedPlan)
     }
 
     @Test
-    fun `getGoal correctly maps entity to domain model`() = runTest {
-        val entity = GoalEntity(
-            id = "goal-1",
+    fun `getPlan correctly maps entity to domain model`() = runTest {
+        val entity = PlanEntity(
+            id = "plan-1",
             userId = "user-1",
-            ambitionId = "ambition-1",
+            goalId = "goal-1",
+            ambitionId = null,
             title = "Title",
             description = "Desc",
-            why = "Why",
-            importance = 8,
             status = "ACTIVE",
-            targetAt = 1000L,
-            startedAt = 2000L,
+            createdAt = 1000L,
+            updatedAt = 2000L,
+            startedAt = 1000L,
             completedAt = null,
-            createdAt = 3000L,
-            updatedAt = 4000L,
+            source = "USER",
             schemaVersion = 1
         )
 
-        dao.returnedGoal = entity
+        dao.returnedPlan = entity
 
-        val result = repository.getGoal("goal-1")
-        
+        val result = repository.getPlan("plan-1")
         assertTrue(result is Result.Success)
-        val domainGoal = (result as Result.Success).data!!
+        val domainPlan = (result as Result.Success).data!!
         
-        assertEquals("goal-1", domainGoal.id)
-        assertEquals(GoalStatus.ACTIVE, domainGoal.status)
-        assertEquals(8, domainGoal.importance)
+        assertEquals("plan-1", domainPlan.id)
+        assertEquals(PlanStatus.ACTIVE, domainPlan.status)
+        assertEquals(EntitySource.USER, domainPlan.source)
     }
 }

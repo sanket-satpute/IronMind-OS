@@ -32,11 +32,20 @@ interface IronMindDao {
     @Query("SELECT * FROM plan WHERE id = :id LIMIT 1")
     fun getPlan(id: String): PlanEntity?
 
+    @Query("SELECT * FROM plan WHERE goalId = :goalId ORDER BY createdAt DESC")
+    fun getPlansForGoal(goalId: String): List<PlanEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertTask(task: TaskEntity)
 
     @Query("SELECT * FROM task WHERE id = :id LIMIT 1")
     fun getTask(id: String): TaskEntity?
+
+    @Query("SELECT * FROM task WHERE planId = :planId ORDER BY createdAt ASC")
+    fun getTasksForPlan(planId: String): List<TaskEntity>
+
+    @Query("SELECT * FROM task WHERE goalId = :goalId ORDER BY createdAt ASC")
+    fun getTasksForGoal(goalId: String): List<TaskEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertCommitment(commitment: CommitmentEntity)
