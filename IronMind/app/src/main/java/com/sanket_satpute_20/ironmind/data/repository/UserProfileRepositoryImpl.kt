@@ -55,4 +55,26 @@ class UserProfileRepositoryImpl(
             Result.Failure(e)
         }
     }
+
+    override suspend fun getLocalProfile(): Result<UserProfile?, Exception> {
+        return try {
+            val entity = withContext(Dispatchers.IO) {
+                dao.getLocalUserProfile()
+            }
+            val profile = entity?.let {
+                UserProfile(
+                    id = it.id,
+                    createdAt = it.createdAt,
+                    updatedAt = it.updatedAt,
+                    displayName = it.displayName,
+                    timezone = it.timezone,
+                    createdFrom = it.createdFrom,
+                    status = it.status
+                )
+            }
+            Result.Success(profile)
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
 }

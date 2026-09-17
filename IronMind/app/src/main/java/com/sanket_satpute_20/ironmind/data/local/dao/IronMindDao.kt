@@ -14,6 +14,9 @@ interface IronMindDao {
     @Query("SELECT * FROM user_profile WHERE id = :id LIMIT 1")
     fun getUserProfile(id: String): UserProfileEntity?
 
+    @Query("SELECT * FROM user_profile LIMIT 1")
+    fun getLocalUserProfile(): UserProfileEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertGoal(goal: GoalEntity)
 

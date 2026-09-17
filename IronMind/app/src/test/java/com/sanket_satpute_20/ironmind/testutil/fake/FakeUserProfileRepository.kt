@@ -19,6 +19,11 @@ class FakeUserProfileRepository : UserProfileRepository {
         return Result.Success(profiles[id])
     }
 
+    override suspend fun getLocalProfile(): Result<UserProfile?, Exception> {
+        if (shouldFail) return Result.Failure(Exception("Fake failure"))
+        return Result.Success(profiles.values.firstOrNull())
+    }
+
     fun clear() {
         profiles.clear()
     }

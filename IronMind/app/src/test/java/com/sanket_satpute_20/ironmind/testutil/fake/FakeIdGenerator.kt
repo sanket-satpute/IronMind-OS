@@ -7,7 +7,14 @@ class FakeIdGenerator(
 ) : IdGenerator {
     private var counter = 0
 
+    var nextId: String? = null
+
     override fun generateId(): String {
+        nextId?.let {
+            val idToReturn = it
+            nextId = null
+            return idToReturn
+        }
         counter++
         return "$prefix$counter"
     }
