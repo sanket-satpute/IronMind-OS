@@ -12,6 +12,7 @@ room = "2.6.1"
 robolectric = "4.12"
 
 coroutines = "1.7.3"
+navigationCompose = "2.7.7"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -33,6 +34,8 @@ room-compiler = { group = "androidx.room", name = "room-compiler", version.ref =
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
+androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
+androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
