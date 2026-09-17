@@ -23,6 +23,9 @@ interface IronMindDao {
     @Query("SELECT * FROM goal WHERE id = :id LIMIT 1")
     fun getGoal(id: String): GoalEntity?
 
+    @Query("SELECT * FROM goal WHERE userId = :userId ORDER BY createdAt DESC")
+    fun getGoalsForUser(userId: String): List<GoalEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertPlan(plan: PlanEntity)
 
