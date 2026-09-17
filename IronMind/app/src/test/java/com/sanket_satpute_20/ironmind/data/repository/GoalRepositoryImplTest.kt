@@ -40,6 +40,10 @@ class GoalRepositoryImplTest {
         override fun getTasksForGoal(goalId: String): List<TaskEntity> = emptyList()
         override fun insertCommitment(commitment: CommitmentEntity) {}
         override fun getCommitment(id: String): CommitmentEntity? = null
+        override fun getCommitmentsForUser(userId: String): List<CommitmentEntity> = emptyList()
+        override fun getCommitmentsForGoal(goalId: String): List<CommitmentEntity> = emptyList()
+        override fun getCommitmentsForPlan(planId: String): List<CommitmentEntity> = emptyList()
+        override fun getCommitmentsForTask(taskId: String): List<CommitmentEntity> = emptyList()
         override fun insertOutcome(outcome: OutcomeEntity) {}
         override fun getOutcome(id: String): OutcomeEntity? = null
         override fun insertReflection(reflection: ReflectionEntity) {}
