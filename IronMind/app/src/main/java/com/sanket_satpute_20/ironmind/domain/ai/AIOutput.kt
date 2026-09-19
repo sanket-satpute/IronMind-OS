@@ -74,13 +74,19 @@ sealed class AIOutput {
     }
 
     /**
-     * AI recommends an intervention.
+     * AI recommends a typed intervention candidate.
      * Per §78, §80: INTERVENTION_RECOMMENDATION category.
-     * Must flow through Decision Engine before execution (§4).
+     * Per Sprint V2.10: now carries a structured [InterventionType].
+     *
+     * CRITICAL RULE: Must NOT be executed directly. Must flow through the Decision Engine
+     * and user policy before any action is taken (§4, §5, INTERVENTION_RULES.md).
+     * This is a CANDIDATE only.
      */
     data class InterventionRecommendation(
+        val interventionType: InterventionType = InterventionType.REMIND,
         val recommendation: String,
         val reason: String,
+        val supportingContext: String? = null,
         val targetEntityId: String? = null,
         override val confidence: Float,
         override val reasoning: String? = null,

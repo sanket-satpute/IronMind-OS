@@ -8,6 +8,7 @@ import com.sanket_satpute_20.ironmind.domain.ai.AIRequest
 import com.sanket_satpute_20.ironmind.domain.ai.AIRequestType
 import com.sanket_satpute_20.ironmind.domain.ai.BarrierCandidate
 import com.sanket_satpute_20.ironmind.domain.ai.BarrierCategory
+import com.sanket_satpute_20.ironmind.domain.ai.InterventionType
 import com.sanket_satpute_20.ironmind.domain.ai.IronMindAI
 import com.sanket_satpute_20.ironmind.domain.ai.TaskCandidate
 import com.sanket_satpute_20.ironmind.domain.ai.isValid
@@ -102,6 +103,20 @@ class GeminiIronMindAI(
                   description (tentative hypothesis phrased as a possibility or question).
                 Do NOT include isConfirmed (always false from AI).
             """.trimIndent()
+            AIRequestType.INTERVENTION_SUGGESTION -> """
+                You are recommending a single intervention candidate to help the user move forward.
+                CRITICAL RULES:
+                - This is a CANDIDATE only. You must NOT execute any action.
+                - Select exactly one interventionType from: REMIND, REDIRECT, PROTECT, BREAK_DOWN, REASSURE, CHALLENGE, ASK, RECOVER, RESCHEDULE, REFLECT, CELEBRATE, STAY_SILENT.
+                - If no useful intervention is warranted, use STAY_SILENT.
+                - Do NOT manipulate, pressure, or alarm the user.
+                - Keep recommendations contextual, bounded, and explainable.
+                Output JSON with type "INTERVENTION_RECOMMENDATION" and fields:
+                  interventionType (one of the types above),
+                  recommendation (short actionable suggestion),
+                  reason (why this intervention is suggested),
+                  supportingContext (optional: observable evidence that supports this recommendation).
+            """.trimIndent()
             else -> "Match the output type to the request type. Return relevant fields for that type."
         }
 
@@ -173,14 +188,24 @@ class GeminiIronMindAI(
                         reasoning = reasoning,
                         schemaVersion = schemaVersion
                     )
-                    AIOutputType.INTERVENTION_RECOMMENDATION.name -> AIOutput.InterventionRecommendation(
-                        recommendation = jsonObject.optString("recommendation", ""),
-                        reason = jsonObject.optString("reason", ""),
-                        targetEntityId = if (jsonObject.has("targetEntityId")) jsonObject.getString("targetEntityId") else null,
-                        confidence = confidence,
-                        reasoning = reasoning,
-                        schemaVersion = schemaVersion
-                    )
+                    AIOutputType.INTERVENTION_RECOMMENDATION.name -> {
+                        val interventionTypeStr = jsonObject.optString("interventionType", "")
+                        val interventionType = try {
+                            InterventionType.valueOf(interventionTypeStr)
+                        } catch (e: IllegalArgumentException) {
+                            InterventionType.REMIND // Safe fallback
+                        }
+                        AIOutput.InterventionRecommendation(
+                            interventionType = interventionType,
+                            recommendation = jsonObject.optString("recommendation", ""),
+                            reason = jsonObject.optString("reason", ""),
+                            supportingContext = if (jsonObject.has("supportingContext") && !jsonObject.isNull("supportingContext")) jsonObject.getString("supportingContext") else null,
+                            targetEntityId = if (jsonObject.has("targetEntityId")) jsonObject.getString("targetEntityId") else null,
+                            confidence = confidence,
+                            reasoning = reasoning,
+                            schemaVersion = schemaVersion
+                        )
+                    }
                     AIOutputType.PLAN.name -> {
                         val tasksArray = jsonObject.optJSONArray("proposedTasks")
                         val tasks = mutableListOf<TaskCandidate>()
