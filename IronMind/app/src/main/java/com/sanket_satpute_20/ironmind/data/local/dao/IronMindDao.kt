@@ -82,4 +82,22 @@ interface IronMindDao {
 
     @Query("SELECT * FROM reflection WHERE id = :id LIMIT 1")
     fun getReflection(id: String): ReflectionEntity?
+    
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertProtectionRule(rule: ProtectionRuleEntity)
+
+    @Query("SELECT * FROM protection_rules WHERE id = :id LIMIT 1")
+    fun getProtectionRule(id: String): ProtectionRuleEntity?
+
+    @Query("SELECT * FROM protection_rules WHERE userId = :userId ORDER BY priority DESC")
+    fun getProtectionRulesForUser(userId: String): List<ProtectionRuleEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertProtectionSession(session: ProtectionSessionEntity)
+
+    @Query("SELECT * FROM protection_sessions WHERE id = :id LIMIT 1")
+    fun getProtectionSession(id: String): ProtectionSessionEntity?
+
+    @Query("SELECT * FROM protection_sessions WHERE userId = :userId AND status = 'ACTIVE' ORDER BY startedAt DESC")
+    fun getActiveProtectionSessionsForUser(userId: String): List<ProtectionSessionEntity>
 }

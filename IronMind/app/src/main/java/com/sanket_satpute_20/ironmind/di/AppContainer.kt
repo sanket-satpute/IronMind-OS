@@ -10,6 +10,9 @@ import com.sanket_satpute_20.ironmind.domain.repository.CommitmentRepository
 import com.sanket_satpute_20.ironmind.domain.repository.OutcomeRepository
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetActiveCommitmentsUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.UpdateCommitmentStatusUseCase
+import com.sanket_satpute_20.ironmind.domain.repository.ProtectionRepository
+import com.sanket_satpute_20.ironmind.domain.usecase.protection.StartProtectionSessionUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.protection.StopProtectionSessionUseCase
 import java.util.UUID
 
 interface AppContainer {
@@ -17,6 +20,9 @@ interface AppContainer {
     val outcomeRepository: OutcomeRepository
     val getActiveCommitmentsUseCase: GetActiveCommitmentsUseCase
     val updateCommitmentStatusUseCase: UpdateCommitmentStatusUseCase
+    val protectionRepository: ProtectionRepository
+    val startProtectionSessionUseCase: StartProtectionSessionUseCase
+    val stopProtectionSessionUseCase: StopProtectionSessionUseCase
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -51,5 +57,17 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val updateCommitmentStatusUseCase: UpdateCommitmentStatusUseCase by lazy {
         UpdateCommitmentStatusUseCase(commitmentRepository, outcomeRepository, clock, idGenerator)
+    }
+
+    override val protectionRepository: ProtectionRepository by lazy {
+        com.sanket_satpute_20.ironmind.data.repository.ProtectionRepositoryImpl(database.ironMindDao())
+    }
+
+    override val startProtectionSessionUseCase: StartProtectionSessionUseCase by lazy {
+        StartProtectionSessionUseCase(protectionRepository, idGenerator, clock)
+    }
+
+    override val stopProtectionSessionUseCase: StopProtectionSessionUseCase by lazy {
+        StopProtectionSessionUseCase(protectionRepository, clock)
     }
 }

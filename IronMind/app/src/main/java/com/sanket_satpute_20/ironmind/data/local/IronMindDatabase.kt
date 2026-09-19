@@ -13,7 +13,9 @@ import com.sanket_satpute_20.ironmind.data.local.entity.*
         TaskEntity::class,
         CommitmentEntity::class,
         OutcomeEntity::class,
-        ReflectionEntity::class
+        ReflectionEntity::class,
+        ProtectionRuleEntity::class,
+        ProtectionSessionEntity::class
     ],
     version = 1,
     exportSchema = false

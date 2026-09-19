@@ -48,8 +48,14 @@ class GoalRepositoryImplTest {
         override fun insertOutcome(outcome: OutcomeEntity) {}
         override fun getOutcome(id: String): OutcomeEntity? = null
         override fun getOutcomeForSource(sourceEntityId: String): OutcomeEntity? = null
-        override fun insertReflection(reflection: com.sanket_satpute_20.ironmind.data.local.entity.ReflectionEntity) {}
-        override fun getReflection(id: String): com.sanket_satpute_20.ironmind.data.local.entity.ReflectionEntity? = null
+        override fun insertReflection(reflection: ReflectionEntity) {}
+        override fun getReflection(id: String): ReflectionEntity? = null
+        override fun insertProtectionRule(rule: ProtectionRuleEntity) {}
+        override fun getProtectionRule(id: String): ProtectionRuleEntity? = null
+        override fun getProtectionRulesForUser(userId: String): List<ProtectionRuleEntity> = emptyList()
+        override fun insertProtectionSession(session: ProtectionSessionEntity) {}
+        override fun getProtectionSession(id: String): ProtectionSessionEntity? = null
+        override fun getActiveProtectionSessionsForUser(userId: String): List<ProtectionSessionEntity> = emptyList()
     }
 
     @Before
