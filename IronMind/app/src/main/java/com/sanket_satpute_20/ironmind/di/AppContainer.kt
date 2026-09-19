@@ -47,6 +47,12 @@ import com.sanket_satpute_20.ironmind.domain.usecase.reflection.GetReflectionUse
 import com.sanket_satpute_20.ironmind.domain.usecase.memory.GetMemoryUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.history.GetEventUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.search.LocalSearchUseCase
+import com.sanket_satpute_20.ironmind.domain.repository.AuthRepository
+import com.sanket_satpute_20.ironmind.data.repository.AuthRepositoryImpl
+import com.sanket_satpute_20.ironmind.domain.usecase.auth.SignInAnonymouslyUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.auth.ObserveAuthUserUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.auth.SignOutUseCase
+import com.google.firebase.auth.FirebaseAuth
 import java.util.UUID
 
 interface AppContainer {
@@ -66,6 +72,10 @@ interface AppContainer {
     val getMemoryUseCase: GetMemoryUseCase
     val getEventUseCase: GetEventUseCase
     val localSearchUseCase: LocalSearchUseCase
+    val authRepository: AuthRepository
+    val signInAnonymouslyUseCase: SignInAnonymouslyUseCase
+    val observeAuthUserUseCase: ObserveAuthUserUseCase
+    val signOutUseCase: SignOutUseCase
     val updateCommitmentStatusUseCase: UpdateCommitmentStatusUseCase
     val saveReflectionUseCase: SaveReflectionUseCase
     val protectionRepository: ProtectionRepository
@@ -181,6 +191,22 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val localSearchUseCase: LocalSearchUseCase by lazy {
         LocalSearchUseCase(goalRepository, commitmentRepository, reflectionRepository, memoryRepository, eventRepository)
+    }
+
+    override val authRepository: AuthRepository by lazy {
+        AuthRepositoryImpl(FirebaseAuth.getInstance())
+    }
+    
+    override val signInAnonymouslyUseCase: SignInAnonymouslyUseCase by lazy {
+        SignInAnonymouslyUseCase(authRepository)
+    }
+    
+    override val observeAuthUserUseCase: ObserveAuthUserUseCase by lazy {
+        ObserveAuthUserUseCase(authRepository)
+    }
+    
+    override val signOutUseCase: SignOutUseCase by lazy {
+        SignOutUseCase(authRepository)
     }
 
     override val updateCommitmentStatusUseCase: UpdateCommitmentStatusUseCase by lazy {
