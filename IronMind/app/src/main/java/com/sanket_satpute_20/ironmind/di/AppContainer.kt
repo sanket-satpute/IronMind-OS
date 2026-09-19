@@ -74,6 +74,7 @@ import com.sanket_satpute_20.ironmind.domain.ai.IronMindAI
 import com.sanket_satpute_20.ironmind.data.ai.GeminiIronMindAI
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.ExtractIntentUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.GeneratePlanUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.ai.HandleInterventionResultUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.RecommendInterventionUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.UnderstandBarriersUseCase
 
@@ -127,6 +128,7 @@ interface AppContainer {
     val generatePlanUseCase: GeneratePlanUseCase
     val understandBarriersUseCase: UnderstandBarriersUseCase
     val recommendInterventionUseCase: RecommendInterventionUseCase
+    val handleInterventionResultUseCase: HandleInterventionResultUseCase
     val ironMindAI: IronMindAI
 }
 
@@ -377,6 +379,14 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val recommendInterventionUseCase: RecommendInterventionUseCase by lazy {
         RecommendInterventionUseCase(ironMindAI)
+    }
+
+    override val handleInterventionResultUseCase: HandleInterventionResultUseCase by lazy {
+        HandleInterventionResultUseCase(
+            eventRepository = eventRepository,
+            clock = clock,
+            idGenerator = idGenerator
+        )
     }
 }
 

@@ -5,6 +5,11 @@ import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.CreateCommitmentUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetActiveCommitmentsUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.UpdateCommitmentStatusUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.ai.RecommendInterventionUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.ai.HandleInterventionResultUseCase
+import com.sanket_satpute_20.ironmind.domain.ai.AIOutput
+import com.sanket_satpute_20.ironmind.domain.ai.InterventionType
+import com.sanket_satpute_20.ironmind.domain.ai.AIRequest
 import com.sanket_satpute_20.ironmind.testutil.TestDispatcherRule
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeCommitmentRepository
@@ -31,6 +36,8 @@ class TodayViewModelTest {
     private lateinit var outcomeRepository: FakeOutcomeRepository
     private lateinit var getActiveCommitmentsUseCase: GetActiveCommitmentsUseCase
     private lateinit var updateCommitmentStatusUseCase: UpdateCommitmentStatusUseCase
+    private lateinit var recommendInterventionUseCase: RecommendInterventionUseCase
+    private lateinit var handleInterventionResultUseCase: HandleInterventionResultUseCase
     private lateinit var createCommitmentUseCase: CreateCommitmentUseCase
     private lateinit var clock: FakeClock
     private lateinit var idGenerator: FakeIdGenerator
@@ -51,13 +58,24 @@ class TodayViewModelTest {
         getActiveCommitmentsUseCase = GetActiveCommitmentsUseCase(repository)
         updateCommitmentStatusUseCase = UpdateCommitmentStatusUseCase(repository, outcomeRepository, reminderScheduler, clock, idGenerator, eventRepository)
         createCommitmentUseCase = CreateCommitmentUseCase(repository, reminderScheduler, idGenerator, clock, eventRepository)
+        recommendInterventionUseCase = RecommendInterventionUseCase(FakeIronMindAI())
+        handleInterventionResultUseCase = HandleInterventionResultUseCase(eventRepository, clock, idGenerator)
+    }
+
+    private fun createViewModel() {
+        viewModel = TodayViewModel(
+            getActiveCommitmentsUseCase,
+            updateCommitmentStatusUseCase,
+            recommendInterventionUseCase,
+            handleInterventionResultUseCase
+        )
     }
 
     @Test
     fun `loadCommitments success updates state with active commitments`() = runTest {
         createCommitmentUseCase("user-1", null, null, null, null, "C1", "D1", 1, initialStatus = CommitmentStatus.COMMITTED)
         
-        viewModel = TodayViewModel(getActiveCommitmentsUseCase, updateCommitmentStatusUseCase)
+        createViewModel()
         
         advanceUntilIdle()
 
@@ -73,7 +91,7 @@ class TodayViewModelTest {
     fun `loadCommitments error updates state to Error`() = runTest {
         repository.shouldFail = true
         
-        viewModel = TodayViewModel(getActiveCommitmentsUseCase, updateCommitmentStatusUseCase)
+        createViewModel()
         
         advanceUntilIdle()
 
@@ -85,7 +103,7 @@ class TodayViewModelTest {
     fun `updateCommitmentStatus refreshes commitments after success`() = runTest {
         createCommitmentUseCase("user-1", null, null, null, null, "C1", "D1", 1, initialStatus = CommitmentStatus.COMMITTED)
         
-        viewModel = TodayViewModel(getActiveCommitmentsUseCase, updateCommitmentStatusUseCase)
+        createViewModel()
         advanceUntilIdle()
 
         val initialState = viewModel.uiState.value as TodayUiState.Success
@@ -103,7 +121,7 @@ class TodayViewModelTest {
         val c1Result = createCommitmentUseCase("user-1", null, null, null, null, "C1", "D1", 1, initialStatus = CommitmentStatus.COMMITTED)
         updateCommitmentStatusUseCase((c1Result as Result.Success).data.id, CommitmentStatus.STARTED)
         
-        viewModel = TodayViewModel(getActiveCommitmentsUseCase, updateCommitmentStatusUseCase)
+        createViewModel()
         advanceUntilIdle()
 
         val initialState = viewModel.uiState.value as TodayUiState.Success
@@ -114,5 +132,11 @@ class TodayViewModelTest {
 
         val updatedState = viewModel.uiState.value as TodayUiState.Success
         assertEquals(0, updatedState.activeCommitments.size)
+    }
+}
+
+class FakeIronMindAI : com.sanket_satpute_20.ironmind.domain.ai.IronMindAI {
+    override suspend fun process(request: AIRequest): Result<AIOutput, Exception> {
+        return Result.Failure(Exception("Not implemented"))
     }
 }

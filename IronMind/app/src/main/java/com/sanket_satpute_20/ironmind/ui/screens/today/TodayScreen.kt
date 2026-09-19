@@ -17,6 +17,10 @@ import com.sanket_satpute_20.ironmind.domain.model.Commitment
 import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
 import com.sanket_satpute_20.ironmind.domain.model.ResultStatus
 import com.sanket_satpute_20.ironmind.ui.components.CommitmentStatusControls
+import com.sanket_satpute_20.ironmind.ui.components.InterventionSuggestionCard
+import com.sanket_satpute_20.ironmind.domain.ai.AIOutput
+import com.sanket_satpute_20.ironmind.domain.usecase.ai.HandleInterventionResultUseCase
+import com.sanket_satpute_20.ironmind.ui.components.CommitmentStatusControls
 
 @Composable
 fun TodayScreen(
@@ -28,7 +32,10 @@ fun TodayScreen(
     TodayScreenContent(
         modifier = modifier,
         uiState = uiState,
-        onStatusChange = { id, newStatus, outcome -> viewModel.updateCommitmentStatus(id, newStatus, outcome) }
+        onStatusChange = { id, newStatus, outcome -> viewModel.updateCommitmentStatus(id, newStatus, outcome) },
+        onSuggestionAction = { recommendation, action, correctedText -> 
+            viewModel.handleSuggestionAction(recommendation, action, correctedText) 
+        }
     )
 }
 
@@ -36,7 +43,8 @@ fun TodayScreen(
 fun TodayScreenContent(
     modifier: Modifier = Modifier,
     uiState: TodayUiState,
-    onStatusChange: (String, CommitmentStatus, ResultStatus?) -> Unit
+    onStatusChange: (String, CommitmentStatus, ResultStatus?) -> Unit,
+    onSuggestionAction: (AIOutput.InterventionRecommendation, HandleInterventionResultUseCase.Action, String?) -> Unit = { _, _, _ -> }
 ) {
     Box(modifier = modifier.fillMaxSize()) {
         when (val state = uiState) {
@@ -53,7 +61,9 @@ fun TodayScreenContent(
             is TodayUiState.Success -> {
                 TodayContent(
                     commitments = state.activeCommitments,
-                    onStatusChange = onStatusChange
+                    activeSuggestion = state.activeSuggestion,
+                    onStatusChange = onStatusChange,
+                    onSuggestionAction = onSuggestionAction
                 )
             }
         }
@@ -63,7 +73,9 @@ fun TodayScreenContent(
 @Composable
 fun TodayContent(
     commitments: List<Commitment>,
-    onStatusChange: (String, CommitmentStatus, ResultStatus?) -> Unit
+    activeSuggestion: AIOutput.InterventionRecommendation? = null,
+    onStatusChange: (String, CommitmentStatus, ResultStatus?) -> Unit,
+    onSuggestionAction: (AIOutput.InterventionRecommendation, HandleInterventionResultUseCase.Action, String?) -> Unit = { _, _, _ -> }
 ) {
     if (commitments.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -81,6 +93,18 @@ fun TodayContent(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        if (activeSuggestion != null) {
+            item {
+                InterventionSuggestionCard(
+                    recommendation = activeSuggestion,
+                    onAction = { action, correctedText ->
+                        onSuggestionAction(activeSuggestion, action, correctedText)
+                    },
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+            }
+        }
+
         item {
             Text(
                 text = "Next Action",
