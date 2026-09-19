@@ -71,7 +71,7 @@ import com.sanket_satpute_20.ironmind.domain.engine.PatternEngineImpl
 import com.sanket_satpute_20.ironmind.domain.repository.PatternRepository
 import com.sanket_satpute_20.ironmind.data.repository.PatternRepositoryImpl
 import com.sanket_satpute_20.ironmind.domain.ai.IronMindAI
-import com.sanket_satpute_20.ironmind.data.ai.StubIronMindAI
+import com.sanket_satpute_20.ironmind.data.ai.GeminiIronMindAI
 
 interface AppContainer {
     val goalRepository: GoalRepository
@@ -351,7 +351,8 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     override val ironMindAI: IronMindAI by lazy {
-        StubIronMindAI()
+        // TODO: Inject actual API key from BuildConfig or secure storage
+        GeminiIronMindAI(apiKey = "API_KEY_PLACEHOLDER")
     }
 }
 
