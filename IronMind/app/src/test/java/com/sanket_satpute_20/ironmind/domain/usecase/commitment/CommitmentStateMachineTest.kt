@@ -4,6 +4,7 @@ import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeCommitmentRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeOutcomeRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -16,6 +17,7 @@ import org.junit.Test
 class CommitmentStateMachineTest {
 
     private lateinit var repository: FakeCommitmentRepository
+    private lateinit var outcomeRepository: FakeOutcomeRepository
     private lateinit var clock: FakeClock
     private lateinit var idGenerator: FakeIdGenerator
     
@@ -25,11 +27,12 @@ class CommitmentStateMachineTest {
     @Before
     fun setup() {
         repository = FakeCommitmentRepository()
+        outcomeRepository = FakeOutcomeRepository()
         clock = FakeClock()
         idGenerator = FakeIdGenerator()
         
         createCommitmentUseCase = CreateCommitmentUseCase(repository, idGenerator, clock)
-        updateStatusUseCase = UpdateCommitmentStatusUseCase(repository, clock)
+        updateStatusUseCase = UpdateCommitmentStatusUseCase(repository, outcomeRepository, clock, idGenerator)
     }
 
     @Test

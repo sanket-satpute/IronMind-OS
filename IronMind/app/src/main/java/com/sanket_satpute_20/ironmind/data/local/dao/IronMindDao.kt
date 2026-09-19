@@ -56,6 +56,9 @@ interface IronMindDao {
     @Query("SELECT * FROM commitment WHERE userId = :userId ORDER BY createdAt DESC")
     fun getCommitmentsForUser(userId: String): List<CommitmentEntity>
 
+    @Query("SELECT * FROM commitment WHERE userId = :userId AND status IN (:statuses) ORDER BY priority DESC, createdAt ASC")
+    fun getActiveCommitmentsForUser(userId: String, statuses: List<String>): List<CommitmentEntity>
+
     @Query("SELECT * FROM commitment WHERE goalId = :goalId ORDER BY createdAt DESC")
     fun getCommitmentsForGoal(goalId: String): List<CommitmentEntity>
 
@@ -70,6 +73,9 @@ interface IronMindDao {
 
     @Query("SELECT * FROM outcome WHERE id = :id LIMIT 1")
     fun getOutcome(id: String): OutcomeEntity?
+
+    @Query("SELECT * FROM outcome WHERE sourceEntityId = :sourceEntityId LIMIT 1")
+    fun getOutcomeForSource(sourceEntityId: String): OutcomeEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertReflection(reflection: ReflectionEntity)

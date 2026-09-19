@@ -1,18 +1,26 @@
 package com.sanket_satpute_20.ironmind.domain.usecase.commitment
 
 import com.sanket_satpute_20.ironmind.domain.common.Clock
+import com.sanket_satpute_20.ironmind.domain.common.IdGenerator
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.Commitment
 import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
+import com.sanket_satpute_20.ironmind.domain.model.Outcome
+import com.sanket_satpute_20.ironmind.domain.model.ResultStatus
 import com.sanket_satpute_20.ironmind.domain.repository.CommitmentRepository
+import com.sanket_satpute_20.ironmind.domain.repository.OutcomeRepository
 
 class UpdateCommitmentStatusUseCase(
     private val repository: CommitmentRepository,
-    private val clock: Clock
+    private val outcomeRepository: OutcomeRepository,
+    private val clock: Clock,
+    private val idGenerator: IdGenerator
 ) {
     suspend operator fun invoke(
         commitmentId: String,
-        newStatus: CommitmentStatus
+        newStatus: CommitmentStatus,
+        resultStatus: ResultStatus? = null,
+        actualDurationMinutes: Int? = null
     ): Result<Commitment, Exception> {
         val existingResult = repository.getCommitment(commitmentId)
         if (existingResult is Result.Failure) return Result.Failure(existingResult.error)
@@ -103,7 +111,23 @@ class UpdateCommitmentStatusUseCase(
 
         return when (val saveResult = repository.saveCommitment(updatedCommitment)) {
             is Result.Failure -> Result.Failure(saveResult.error)
-            is Result.Success -> Result.Success(updatedCommitment)
+            is Result.Success -> {
+                // If a terminal/meaningful state transition is provided with a result, record the outcome
+                if (resultStatus != null) {
+                    val outcome = Outcome(
+                        id = idGenerator.generateId(),
+                        userId = commitment.userId,
+                        sourceEntityId = commitment.id,
+                        sourceEntityType = "COMMITMENT",
+                        resultStatus = resultStatus,
+                        actualDurationMinutes = actualDurationMinutes,
+                        completedAt = now,
+                        createdAt = now
+                    )
+                    outcomeRepository.saveOutcome(outcome)
+                }
+                Result.Success(updatedCommitment)
+            }
         }
     }
 }

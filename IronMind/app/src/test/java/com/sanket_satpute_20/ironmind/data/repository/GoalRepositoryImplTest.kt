@@ -41,13 +41,15 @@ class GoalRepositoryImplTest {
         override fun insertCommitment(commitment: CommitmentEntity) {}
         override fun getCommitment(id: String): CommitmentEntity? = null
         override fun getCommitmentsForUser(userId: String): List<CommitmentEntity> = emptyList()
+        override fun getActiveCommitmentsForUser(userId: String, statuses: List<String>): List<CommitmentEntity> = emptyList()
         override fun getCommitmentsForGoal(goalId: String): List<CommitmentEntity> = emptyList()
         override fun getCommitmentsForPlan(planId: String): List<CommitmentEntity> = emptyList()
         override fun getCommitmentsForTask(taskId: String): List<CommitmentEntity> = emptyList()
         override fun insertOutcome(outcome: OutcomeEntity) {}
         override fun getOutcome(id: String): OutcomeEntity? = null
-        override fun insertReflection(reflection: ReflectionEntity) {}
-        override fun getReflection(id: String): ReflectionEntity? = null
+        override fun getOutcomeForSource(sourceEntityId: String): OutcomeEntity? = null
+        override fun insertReflection(reflection: com.sanket_satpute_20.ironmind.data.local.entity.ReflectionEntity) {}
+        override fun getReflection(id: String): com.sanket_satpute_20.ironmind.data.local.entity.ReflectionEntity? = null
     }
 
     @Before

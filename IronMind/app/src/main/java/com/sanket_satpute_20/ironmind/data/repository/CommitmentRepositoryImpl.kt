@@ -47,6 +47,20 @@ class CommitmentRepositoryImpl(
         }
     }
 
+    override suspend fun getActiveCommitmentsForUser(
+        userId: String,
+        statuses: List<CommitmentStatus>
+    ): Result<List<Commitment>, Exception> {
+        return try {
+            val entities = withContext(Dispatchers.IO) {
+                dao.getActiveCommitmentsForUser(userId, statuses.map { it.name })
+            }
+            Result.Success(entities.map { it.toDomain() })
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
+
     override suspend fun getCommitmentsForGoal(goalId: String): Result<List<Commitment>, Exception> {
         return try {
             val entities = withContext(Dispatchers.IO) {
