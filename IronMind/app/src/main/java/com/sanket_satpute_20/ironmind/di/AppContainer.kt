@@ -53,6 +53,13 @@ import com.sanket_satpute_20.ironmind.domain.usecase.auth.SignInAnonymouslyUseCa
 import com.sanket_satpute_20.ironmind.domain.usecase.auth.ObserveAuthUserUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.auth.SignOutUseCase
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.sanket_satpute_20.ironmind.domain.repository.OutboxRepository
+import com.sanket_satpute_20.ironmind.data.repository.OutboxRepositoryImpl
+import com.sanket_satpute_20.ironmind.domain.repository.SyncRepository
+import com.sanket_satpute_20.ironmind.data.repository.FirestoreSyncRepository
+import com.sanket_satpute_20.ironmind.data.sync.SyncOrchestrator
+import com.sanket_satpute_20.ironmind.domain.usecase.sync.SyncUseCase
 import java.util.UUID
 
 interface AppContainer {
@@ -93,6 +100,10 @@ interface AppContainer {
     val speechToTextProvider: SpeechToTextProvider
     val logger: IronLogger
     val clock: Clock
+    val outboxRepository: OutboxRepository
+    val syncRepository: SyncRepository
+    val syncOrchestrator: SyncOrchestrator
+    val syncUseCase: SyncUseCase
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -106,7 +117,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             context,
             IronMindDatabase::class.java,
             "ironmind_database"
-        ).addMigrations(IronMindDatabase.MIGRATION_1_2).build()
+        ).addMigrations(
+            IronMindDatabase.MIGRATION_1_2,
+            IronMindDatabase.MIGRATION_2_3
+        ).build()
     }
     
     override val clock: Clock = object : Clock {
@@ -274,4 +288,21 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             eventRepository
         )
     }
+
+    override val outboxRepository: OutboxRepository by lazy {
+        OutboxRepositoryImpl(database.outboxDao())
+    }
+
+    override val syncRepository: SyncRepository by lazy {
+        FirestoreSyncRepository(FirebaseFirestore.getInstance())
+    }
+
+    override val syncOrchestrator: SyncOrchestrator by lazy {
+        SyncOrchestrator(outboxRepository, syncRepository)
+    }
+
+    override val syncUseCase: SyncUseCase by lazy {
+        SyncUseCase(syncOrchestrator)
+    }
 }
+

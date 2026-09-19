@@ -5,6 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.sanket_satpute_20.ironmind.data.local.dao.IronMindDao
+import com.sanket_satpute_20.ironmind.data.local.dao.OutboxDao
 import com.sanket_satpute_20.ironmind.data.local.entity.*
 
 @Database(
@@ -19,13 +20,15 @@ import com.sanket_satpute_20.ironmind.data.local.entity.*
         ProtectionRuleEntity::class,
         ProtectionSessionEntity::class,
         EventEntity::class,
-        MemoryEntity::class
+        MemoryEntity::class,
+        OutboxEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class IronMindDatabase : RoomDatabase() {
     abstract fun ironMindDao(): IronMindDao
+    abstract fun outboxDao(): OutboxDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -53,6 +56,28 @@ abstract class IronMindDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
                 println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=2")
+            }
+        }
+
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `outbox` (
+                        `operationId` TEXT NOT NULL,
+                        `entityType` TEXT NOT NULL,
+                        `entityId` TEXT NOT NULL,
+                        `operationType` TEXT NOT NULL,
+                        `payload` TEXT NOT NULL,
+                        `createdAt` INTEGER NOT NULL,
+                        `retryCount` INTEGER NOT NULL,
+                        `lastAttemptAt` INTEGER,
+                        `status` TEXT NOT NULL,
+                        PRIMARY KEY(`operationId`)
+                    )
+                    """.trimIndent()
+                )
+                println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=3")
             }
         }
     }
