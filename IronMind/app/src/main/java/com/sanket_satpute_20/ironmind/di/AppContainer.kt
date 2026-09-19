@@ -72,6 +72,7 @@ import com.sanket_satpute_20.ironmind.domain.repository.PatternRepository
 import com.sanket_satpute_20.ironmind.data.repository.PatternRepositoryImpl
 import com.sanket_satpute_20.ironmind.domain.ai.IronMindAI
 import com.sanket_satpute_20.ironmind.data.ai.GeminiIronMindAI
+import com.sanket_satpute_20.ironmind.domain.usecase.ai.ExtractIntentUseCase
 
 interface AppContainer {
     val goalRepository: GoalRepository
@@ -119,6 +120,7 @@ interface AppContainer {
     val contextEngine: ContextEngine
     val patternRepository: PatternRepository
     val patternEngine: PatternEngine
+    val extractIntentUseCase: ExtractIntentUseCase
     val ironMindAI: IronMindAI
 }
 
@@ -353,6 +355,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     override val ironMindAI: IronMindAI by lazy {
         // TODO: Inject actual API key from BuildConfig or secure storage
         GeminiIronMindAI(apiKey = "API_KEY_PLACEHOLDER")
+    }
+
+    override val extractIntentUseCase: ExtractIntentUseCase by lazy {
+        ExtractIntentUseCase(ironMindAI)
     }
 }
 
