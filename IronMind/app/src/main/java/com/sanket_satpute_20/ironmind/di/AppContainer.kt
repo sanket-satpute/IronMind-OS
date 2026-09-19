@@ -41,6 +41,7 @@ import com.sanket_satpute_20.ironmind.domain.usecase.memory.ConfirmMemoryUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.memory.CorrectMemoryUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.memory.WeakenMemoryUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.memory.ExpireMemoryUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.goal.EditGoalUseCase
 import java.util.UUID
 
 interface AppContainer {
@@ -52,6 +53,7 @@ interface AppContainer {
     val getTimelineUseCase: GetTimelineUseCase
     val createCommitmentUseCase: CreateCommitmentUseCase
     val editCommitmentUseCase: EditCommitmentUseCase
+    val editGoalUseCase: EditGoalUseCase
     val getActiveCommitmentsUseCase: GetActiveCommitmentsUseCase
     val getCommitmentsForDateRangeUseCase: GetCommitmentsForDateRangeUseCase
     val updateCommitmentStatusUseCase: UpdateCommitmentStatusUseCase
@@ -140,7 +142,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     override val editCommitmentUseCase: EditCommitmentUseCase by lazy {
-        EditCommitmentUseCase(commitmentRepository, reminderScheduler, clock)
+        EditCommitmentUseCase(commitmentRepository, reminderScheduler, clock, idGenerator, eventRepository)
     }
 
     override val getActiveCommitmentsUseCase: GetActiveCommitmentsUseCase by lazy {
@@ -164,6 +166,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val saveReflectionUseCase: SaveReflectionUseCase by lazy {
         SaveReflectionUseCase(reflectionRepository, idGenerator, clock, eventRepository)
+    }
+
+    override val editGoalUseCase: EditGoalUseCase by lazy {
+        EditGoalUseCase(goalRepository, clock, idGenerator, eventRepository)
     }
 
     override val proposeMemoryUseCase: ProposeMemoryUseCase by lazy {

@@ -3,6 +3,7 @@ package com.sanket_satpute_20.ironmind.domain.usecase.goal
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.GoalStatus
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeEventRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeGoalRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
 import kotlinx.coroutines.test.runTest
@@ -17,6 +18,7 @@ class GoalCreationTest {
     private lateinit var repository: FakeGoalRepository
     private lateinit var clock: FakeClock
     private lateinit var idGenerator: FakeIdGenerator
+    private lateinit var eventRepository: FakeEventRepository
     
     private lateinit var createGoalUseCase: CreateGoalUseCase
     private lateinit var editGoalUseCase: EditGoalUseCase
@@ -26,9 +28,10 @@ class GoalCreationTest {
         repository = FakeGoalRepository()
         clock = FakeClock()
         idGenerator = FakeIdGenerator()
+        eventRepository = FakeEventRepository()
         
         createGoalUseCase = CreateGoalUseCase(repository, idGenerator, clock)
-        editGoalUseCase = EditGoalUseCase(repository, clock)
+        editGoalUseCase = EditGoalUseCase(repository, clock, idGenerator, eventRepository)
     }
 
     @Test
@@ -100,6 +103,7 @@ class GoalCreationTest {
         clock.advanceTimeBy(1000)
 
         val editResult = editGoalUseCase(
+            userId = "user-1",
             goalId = initialGoal.id,
             title = "New Title",
             description = null, // Should remain original

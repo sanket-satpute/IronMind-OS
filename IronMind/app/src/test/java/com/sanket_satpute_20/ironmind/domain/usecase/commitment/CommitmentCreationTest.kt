@@ -34,7 +34,7 @@ class CommitmentCreationTest {
         eventRepository = FakeEventRepository()
         
         createCommitmentUseCase = CreateCommitmentUseCase(repository, reminderScheduler, idGenerator, clock, eventRepository)
-        editCommitmentUseCase = EditCommitmentUseCase(repository, reminderScheduler, clock)
+        editCommitmentUseCase = EditCommitmentUseCase(repository, reminderScheduler, clock, idGenerator, eventRepository)
     }
 
     @Test
@@ -95,6 +95,7 @@ class CommitmentCreationTest {
         clock.advanceTimeBy(1000)
         
         val editResult = editCommitmentUseCase(
+            userId = "user-1",
             commitmentId = commitment.id,
             title = "New Title",
             description = null,
