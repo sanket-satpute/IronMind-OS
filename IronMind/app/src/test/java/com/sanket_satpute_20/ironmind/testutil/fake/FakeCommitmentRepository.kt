@@ -42,6 +42,18 @@ class FakeCommitmentRepository : CommitmentRepository {
         return Result.Success(commitments.values.filter { it.goalId == goalId }.sortedByDescending { it.createdAt })
     }
 
+    override suspend fun getCommitmentsForDateRange(userId: String, startTime: Long, endTime: Long): Result<List<Commitment>, Exception> {
+        if (shouldFail) return Result.Failure(Exception("Fake failure"))
+        val filtered = commitments.values.filter { 
+            it.userId == userId && (
+                (it.createdAt in startTime..endTime) ||
+                (it.committedAt != null && it.committedAt!! in startTime..endTime) ||
+                (it.completedAt != null && it.completedAt!! in startTime..endTime)
+            )
+        }.sortedByDescending { it.createdAt }
+        return Result.Success(filtered)
+    }
+
     override suspend fun getCommitmentsForPlan(planId: String): Result<List<Commitment>, Exception> {
         if (shouldFail) return Result.Failure(Exception("Fake failure"))
         return Result.Success(commitments.values.filter { it.planId == planId }.sortedBy { it.createdAt })

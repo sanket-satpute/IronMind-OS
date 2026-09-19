@@ -61,6 +61,17 @@ class CommitmentRepositoryImpl(
         }
     }
 
+    override suspend fun getCommitmentsForDateRange(userId: String, startTime: Long, endTime: Long): Result<List<Commitment>, Exception> {
+        return try {
+            val entities = withContext(Dispatchers.IO) {
+                dao.getCommitmentsForDateRange(userId, startTime, endTime)
+            }
+            Result.Success(entities.map { it.toDomain() })
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
+
     override suspend fun getCommitmentsForGoal(goalId: String): Result<List<Commitment>, Exception> {
         return try {
             val entities = withContext(Dispatchers.IO) {

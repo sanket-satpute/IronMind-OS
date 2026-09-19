@@ -9,6 +9,7 @@ interface CommitmentRepository : Repository {
     suspend fun getCommitment(id: String): Result<Commitment?, Exception>
     suspend fun getCommitmentsForUser(userId: String): Result<List<Commitment>, Exception>
     suspend fun getActiveCommitmentsForUser(userId: String, statuses: List<CommitmentStatus>): Result<List<Commitment>, Exception>
+    suspend fun getCommitmentsForDateRange(userId: String, startTime: Long, endTime: Long): Result<List<Commitment>, Exception>
     suspend fun getCommitmentsForGoal(goalId: String): Result<List<Commitment>, Exception>
     suspend fun getCommitmentsForPlan(planId: String): Result<List<Commitment>, Exception>
     suspend fun getCommitmentsForTask(taskId: String): Result<List<Commitment>, Exception>

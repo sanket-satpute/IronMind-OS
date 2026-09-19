@@ -21,21 +21,29 @@ import com.sanket_satpute_20.ironmind.data.provider.AndroidReminderScheduler
 import com.sanket_satpute_20.ironmind.data.provider.AndroidNotificationProvider
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.CreateCommitmentUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.EditCommitmentUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetCommitmentsForDateRangeUseCase
+import com.sanket_satpute_20.ironmind.domain.repository.ReflectionRepository
+import com.sanket_satpute_20.ironmind.data.repository.ReflectionRepositoryImpl
+import com.sanket_satpute_20.ironmind.domain.usecase.reflection.SaveReflectionUseCase
 import java.util.UUID
 
 interface AppContainer {
     val commitmentRepository: CommitmentRepository
     val outcomeRepository: OutcomeRepository
+    val reflectionRepository: ReflectionRepository
     val createCommitmentUseCase: CreateCommitmentUseCase
     val editCommitmentUseCase: EditCommitmentUseCase
     val getActiveCommitmentsUseCase: GetActiveCommitmentsUseCase
+    val getCommitmentsForDateRangeUseCase: GetCommitmentsForDateRangeUseCase
     val updateCommitmentStatusUseCase: UpdateCommitmentStatusUseCase
+    val saveReflectionUseCase: SaveReflectionUseCase
     val protectionRepository: ProtectionRepository
     val startProtectionSessionUseCase: StartProtectionSessionUseCase
     val stopProtectionSessionUseCase: StopProtectionSessionUseCase
     val appProtectionProvider: AppProtectionProvider
     val reminderScheduler: ReminderScheduler
     val notificationProvider: NotificationProvider
+    val clock: Clock
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -48,7 +56,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         ).build()
     }
     
-    private val clock = object : Clock {
+    override val clock: Clock = object : Clock {
         override fun currentTimeMillis(): Long = System.currentTimeMillis()
     }
     
@@ -62,6 +70,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val outcomeRepository: OutcomeRepository by lazy {
         com.sanket_satpute_20.ironmind.data.repository.OutcomeRepositoryImpl(database.ironMindDao())
+    }
+
+    override val reflectionRepository: ReflectionRepository by lazy {
+        ReflectionRepositoryImpl(database.ironMindDao())
     }
 
     override val reminderScheduler: ReminderScheduler by lazy {
@@ -84,6 +96,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         GetActiveCommitmentsUseCase(commitmentRepository)
     }
 
+    override val getCommitmentsForDateRangeUseCase: GetCommitmentsForDateRangeUseCase by lazy {
+        GetCommitmentsForDateRangeUseCase(commitmentRepository)
+    }
+
     override val updateCommitmentStatusUseCase: UpdateCommitmentStatusUseCase by lazy {
         UpdateCommitmentStatusUseCase(
             commitmentRepository, 
@@ -92,6 +108,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             clock, 
             idGenerator
         )
+    }
+
+    override val saveReflectionUseCase: SaveReflectionUseCase by lazy {
+        SaveReflectionUseCase(reflectionRepository, idGenerator, clock)
     }
 
     override val protectionRepository: ProtectionRepository by lazy {

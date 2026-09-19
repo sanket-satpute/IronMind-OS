@@ -43,6 +43,7 @@ class PlanRepositoryImplTest {
         override fun getCommitmentsForUser(userId: String): List<CommitmentEntity> = emptyList()
         override fun getActiveCommitmentsForUser(userId: String, statuses: List<String>): List<CommitmentEntity> = emptyList()
         override fun getCommitmentsForGoal(goalId: String): List<CommitmentEntity> = emptyList()
+        override fun getCommitmentsForDateRange(userId: String, startTime: Long, endTime: Long): List<CommitmentEntity> = emptyList()
         override fun getCommitmentsForPlan(planId: String): List<CommitmentEntity> = emptyList()
         override fun getCommitmentsForTask(taskId: String): List<CommitmentEntity> = emptyList()
         override fun insertOutcome(outcome: OutcomeEntity) {}

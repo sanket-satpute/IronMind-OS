@@ -62,6 +62,9 @@ interface IronMindDao {
     @Query("SELECT * FROM commitment WHERE goalId = :goalId ORDER BY createdAt DESC")
     fun getCommitmentsForGoal(goalId: String): List<CommitmentEntity>
 
+    @Query("SELECT * FROM commitment WHERE userId = :userId AND ((createdAt >= :startTime AND createdAt <= :endTime) OR (committedAt >= :startTime AND committedAt <= :endTime) OR (completedAt >= :startTime AND completedAt <= :endTime)) ORDER BY createdAt DESC")
+    fun getCommitmentsForDateRange(userId: String, startTime: Long, endTime: Long): List<CommitmentEntity>
+
     @Query("SELECT * FROM commitment WHERE planId = :planId ORDER BY createdAt ASC")
     fun getCommitmentsForPlan(planId: String): List<CommitmentEntity>
 
