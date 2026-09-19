@@ -19,8 +19,12 @@ import com.sanket_satpute_20.ironmind.domain.provider.AppProtectionProvider
 import com.sanket_satpute_20.ironmind.data.provider.AndroidAppProtectionProvider
 import com.sanket_satpute_20.ironmind.domain.provider.ReminderScheduler
 import com.sanket_satpute_20.ironmind.domain.provider.NotificationProvider
+import com.sanket_satpute_20.ironmind.domain.provider.SpeechToTextProvider
+import com.sanket_satpute_20.ironmind.domain.logging.IronLogger
+import com.sanket_satpute_20.ironmind.infrastructure.logging.DebugIronLogger
 import com.sanket_satpute_20.ironmind.data.provider.AndroidReminderScheduler
 import com.sanket_satpute_20.ironmind.data.provider.AndroidNotificationProvider
+import com.sanket_satpute_20.ironmind.data.provider.AndroidSpeechToTextProvider
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.CreateCommitmentUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.EditCommitmentUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetCommitmentsForDateRangeUseCase
@@ -51,10 +55,16 @@ interface AppContainer {
     val appProtectionProvider: AppProtectionProvider
     val reminderScheduler: ReminderScheduler
     val notificationProvider: NotificationProvider
+    val speechToTextProvider: SpeechToTextProvider
+    val logger: IronLogger
     val clock: Clock
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
+
+    override val logger: IronLogger by lazy {
+        DebugIronLogger()
+    }
     
     private val database: IronMindDatabase by lazy {
         Room.databaseBuilder(
@@ -102,6 +112,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val notificationProvider: NotificationProvider by lazy {
         AndroidNotificationProvider(context)
+    }
+
+    override val speechToTextProvider: SpeechToTextProvider by lazy {
+        AndroidSpeechToTextProvider(context, logger)
     }
     
     override val createCommitmentUseCase: CreateCommitmentUseCase by lazy {
