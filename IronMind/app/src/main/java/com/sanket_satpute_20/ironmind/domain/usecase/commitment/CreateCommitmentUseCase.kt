@@ -6,10 +6,12 @@ import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.Commitment
 import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
 import com.sanket_satpute_20.ironmind.domain.model.EntitySource
+import com.sanket_satpute_20.ironmind.domain.provider.ReminderScheduler
 import com.sanket_satpute_20.ironmind.domain.repository.CommitmentRepository
 
 class CreateCommitmentUseCase(
     private val repository: CommitmentRepository,
+    private val reminderScheduler: ReminderScheduler,
     private val idGenerator: IdGenerator,
     private val clock: Clock
 ) {
@@ -56,7 +58,12 @@ class CreateCommitmentUseCase(
 
         return when (val result = repository.saveCommitment(commitment)) {
             is Result.Failure -> Result.Failure(result.error)
-            is Result.Success -> Result.Success(commitment)
+            is Result.Success -> {
+                if (scheduledStartAt != null) {
+                    reminderScheduler.scheduleReminder(commitment.id, scheduledStartAt, commitment.title)
+                }
+                Result.Success(commitment)
+            }
         }
     }
 }

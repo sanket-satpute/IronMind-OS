@@ -10,6 +10,7 @@ import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeCommitmentRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeOutcomeRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeReminderScheduler
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -32,6 +33,7 @@ class TodayViewModelTest {
     private lateinit var createCommitmentUseCase: CreateCommitmentUseCase
     private lateinit var clock: FakeClock
     private lateinit var idGenerator: FakeIdGenerator
+    private lateinit var reminderScheduler: FakeReminderScheduler
 
     private lateinit var viewModel: TodayViewModel
 
@@ -41,10 +43,11 @@ class TodayViewModelTest {
         outcomeRepository = FakeOutcomeRepository()
         clock = FakeClock()
         idGenerator = FakeIdGenerator()
+        reminderScheduler = FakeReminderScheduler()
 
         getActiveCommitmentsUseCase = GetActiveCommitmentsUseCase(repository)
-        updateCommitmentStatusUseCase = UpdateCommitmentStatusUseCase(repository, outcomeRepository, clock, idGenerator)
-        createCommitmentUseCase = CreateCommitmentUseCase(repository, idGenerator, clock)
+        updateCommitmentStatusUseCase = UpdateCommitmentStatusUseCase(repository, outcomeRepository, reminderScheduler, clock, idGenerator)
+        createCommitmentUseCase = CreateCommitmentUseCase(repository, reminderScheduler, idGenerator, clock)
     }
 
     @Test

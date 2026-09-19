@@ -6,6 +6,7 @@ import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeCommitmentRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeOutcomeRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeReminderScheduler
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -24,6 +25,7 @@ class GetActiveCommitmentsUseCaseTest {
         getActiveCommitmentsUseCase = GetActiveCommitmentsUseCase(repository)
         createCommitmentUseCase = CreateCommitmentUseCase(
             repository = repository,
+            reminderScheduler = FakeReminderScheduler(),
             idGenerator = FakeIdGenerator(),
             clock = FakeClock()
         )
@@ -34,7 +36,8 @@ class GetActiveCommitmentsUseCaseTest {
         val clock = FakeClock()
         val idGenerator = FakeIdGenerator()
         val outcomeRepository = FakeOutcomeRepository()
-        val updateCommitmentStatusUseCase = UpdateCommitmentStatusUseCase(repository, outcomeRepository, clock, idGenerator)
+        val reminderScheduler = FakeReminderScheduler()
+        val updateCommitmentStatusUseCase = UpdateCommitmentStatusUseCase(repository, outcomeRepository, reminderScheduler, clock, idGenerator)
         val userId = "user-1"
         
         // C1: COMMITTED

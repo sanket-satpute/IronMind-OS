@@ -7,12 +7,14 @@ import com.sanket_satpute_20.ironmind.domain.model.Commitment
 import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
 import com.sanket_satpute_20.ironmind.domain.model.Outcome
 import com.sanket_satpute_20.ironmind.domain.model.ResultStatus
+import com.sanket_satpute_20.ironmind.domain.provider.ReminderScheduler
 import com.sanket_satpute_20.ironmind.domain.repository.CommitmentRepository
 import com.sanket_satpute_20.ironmind.domain.repository.OutcomeRepository
 
 class UpdateCommitmentStatusUseCase(
     private val repository: CommitmentRepository,
     private val outcomeRepository: OutcomeRepository,
+    private val reminderScheduler: ReminderScheduler,
     private val clock: Clock,
     private val idGenerator: IdGenerator
 ) {
@@ -126,6 +128,18 @@ class UpdateCommitmentStatusUseCase(
                     )
                     outcomeRepository.saveOutcome(outcome)
                 }
+
+                // Cancel reminder if transitioning to a state where it is no longer needed
+                if (newStatus in listOf(
+                        CommitmentStatus.COMPLETED, 
+                        CommitmentStatus.MISSED, 
+                        CommitmentStatus.POSTPONED, 
+                        CommitmentStatus.ABANDONED,
+                        CommitmentStatus.STARTED
+                    )) {
+                    reminderScheduler.cancelReminder(commitment.id)
+                }
+
                 Result.Success(updatedCommitment)
             }
         }

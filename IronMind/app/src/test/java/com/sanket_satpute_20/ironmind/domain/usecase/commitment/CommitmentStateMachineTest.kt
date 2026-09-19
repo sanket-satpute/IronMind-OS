@@ -6,6 +6,7 @@ import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeCommitmentRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeOutcomeRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeReminderScheduler
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -20,6 +21,7 @@ class CommitmentStateMachineTest {
     private lateinit var outcomeRepository: FakeOutcomeRepository
     private lateinit var clock: FakeClock
     private lateinit var idGenerator: FakeIdGenerator
+    private lateinit var reminderScheduler: FakeReminderScheduler
     
     private lateinit var createCommitmentUseCase: CreateCommitmentUseCase
     private lateinit var updateStatusUseCase: UpdateCommitmentStatusUseCase
@@ -30,9 +32,10 @@ class CommitmentStateMachineTest {
         outcomeRepository = FakeOutcomeRepository()
         clock = FakeClock()
         idGenerator = FakeIdGenerator()
+        reminderScheduler = FakeReminderScheduler()
         
-        createCommitmentUseCase = CreateCommitmentUseCase(repository, idGenerator, clock)
-        updateStatusUseCase = UpdateCommitmentStatusUseCase(repository, outcomeRepository, clock, idGenerator)
+        createCommitmentUseCase = CreateCommitmentUseCase(repository, reminderScheduler, idGenerator, clock)
+        updateStatusUseCase = UpdateCommitmentStatusUseCase(repository, outcomeRepository, reminderScheduler, clock, idGenerator)
     }
 
     @Test

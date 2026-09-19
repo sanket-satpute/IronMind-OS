@@ -15,17 +15,27 @@ import com.sanket_satpute_20.ironmind.domain.usecase.protection.StartProtectionS
 import com.sanket_satpute_20.ironmind.domain.usecase.protection.StopProtectionSessionUseCase
 import com.sanket_satpute_20.ironmind.domain.provider.AppProtectionProvider
 import com.sanket_satpute_20.ironmind.data.provider.AndroidAppProtectionProvider
+import com.sanket_satpute_20.ironmind.domain.provider.ReminderScheduler
+import com.sanket_satpute_20.ironmind.domain.provider.NotificationProvider
+import com.sanket_satpute_20.ironmind.data.provider.AndroidReminderScheduler
+import com.sanket_satpute_20.ironmind.data.provider.AndroidNotificationProvider
+import com.sanket_satpute_20.ironmind.domain.usecase.commitment.CreateCommitmentUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.commitment.EditCommitmentUseCase
 import java.util.UUID
 
 interface AppContainer {
     val commitmentRepository: CommitmentRepository
     val outcomeRepository: OutcomeRepository
+    val createCommitmentUseCase: CreateCommitmentUseCase
+    val editCommitmentUseCase: EditCommitmentUseCase
     val getActiveCommitmentsUseCase: GetActiveCommitmentsUseCase
     val updateCommitmentStatusUseCase: UpdateCommitmentStatusUseCase
     val protectionRepository: ProtectionRepository
     val startProtectionSessionUseCase: StartProtectionSessionUseCase
     val stopProtectionSessionUseCase: StopProtectionSessionUseCase
     val appProtectionProvider: AppProtectionProvider
+    val reminderScheduler: ReminderScheduler
+    val notificationProvider: NotificationProvider
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -54,12 +64,34 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         com.sanket_satpute_20.ironmind.data.repository.OutcomeRepositoryImpl(database.ironMindDao())
     }
 
+    override val reminderScheduler: ReminderScheduler by lazy {
+        AndroidReminderScheduler(context)
+    }
+
+    override val notificationProvider: NotificationProvider by lazy {
+        AndroidNotificationProvider(context)
+    }
+    
+    override val createCommitmentUseCase: CreateCommitmentUseCase by lazy {
+        CreateCommitmentUseCase(commitmentRepository, reminderScheduler, idGenerator, clock)
+    }
+
+    override val editCommitmentUseCase: EditCommitmentUseCase by lazy {
+        EditCommitmentUseCase(commitmentRepository, reminderScheduler, clock)
+    }
+
     override val getActiveCommitmentsUseCase: GetActiveCommitmentsUseCase by lazy {
         GetActiveCommitmentsUseCase(commitmentRepository)
     }
 
     override val updateCommitmentStatusUseCase: UpdateCommitmentStatusUseCase by lazy {
-        UpdateCommitmentStatusUseCase(commitmentRepository, outcomeRepository, clock, idGenerator)
+        UpdateCommitmentStatusUseCase(
+            commitmentRepository, 
+            outcomeRepository, 
+            reminderScheduler,
+            clock, 
+            idGenerator
+        )
     }
 
     override val protectionRepository: ProtectionRepository by lazy {
