@@ -7,6 +7,7 @@ import com.sanket_satpute_20.ironmind.domain.ai.AIOutputType
 import com.sanket_satpute_20.ironmind.domain.ai.AIRequest
 import com.sanket_satpute_20.ironmind.domain.ai.AIRequestType
 import com.sanket_satpute_20.ironmind.domain.ai.IronMindAI
+import com.sanket_satpute_20.ironmind.domain.ai.TaskCandidate
 import com.sanket_satpute_20.ironmind.domain.ai.isValid
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import kotlinx.coroutines.delay
@@ -77,6 +78,18 @@ class GeminiIronMindAI(
     }
 
     private fun buildPrompt(request: AIRequest): String {
+        val typeSpecificInstructions = when (request.requestType) {
+            AIRequestType.PLAN_GENERATION -> """
+                You are proposing a practical breakdown for a user goal.
+                Consider current commitments, time constraints, user-confirmed goals, and realistic workload.
+                Propose tasks ordered by priority. Mark one task as the immediate next action (isNextAction: true).
+                Output JSON with type "PLAN" and a "proposedTasks" array. Each task must have:
+                  title, description, estimatedDurationMinutes (nullable int), isNextAction (boolean).
+                Also include "goalId" (pass through the goalId from context if provided).
+            """.trimIndent()
+            else -> "Match the output type to the request type. Return relevant fields for that type."
+        }
+
         return """
             [SYSTEM INSTRUCTION]
             You are the IronMind AI Reasoning Layer (Prompt Version: $promptVersion).
@@ -92,6 +105,9 @@ class GeminiIronMindAI(
             
             [REQUEST TYPE]
             ${request.requestType.name}
+            
+            [TYPE-SPECIFIC INSTRUCTIONS]
+            $typeSpecificInstructions
             
             Return JSON only. Format it as:
             {
@@ -150,6 +166,30 @@ class GeminiIronMindAI(
                         reasoning = reasoning,
                         schemaVersion = schemaVersion
                     )
+                    AIOutputType.PLAN.name -> {
+                        val tasksArray = jsonObject.optJSONArray("proposedTasks")
+                        val tasks = mutableListOf<TaskCandidate>()
+                        if (tasksArray != null) {
+                            for (i in 0 until tasksArray.length()) {
+                                val taskObj = tasksArray.getJSONObject(i)
+                                tasks.add(
+                                    TaskCandidate(
+                                        title = taskObj.optString("title", ""),
+                                        description = taskObj.optString("description", ""),
+                                        estimatedDurationMinutes = if (taskObj.has("estimatedDurationMinutes") && !taskObj.isNull("estimatedDurationMinutes")) taskObj.getInt("estimatedDurationMinutes") else null,
+                                        isNextAction = taskObj.optBoolean("isNextAction", false)
+                                    )
+                                )
+                            }
+                        }
+                        AIOutput.PlanOutput(
+                            goalId = jsonObject.optString("goalId", ""),
+                            proposedTasks = tasks,
+                            confidence = confidence,
+                            reasoning = reasoning,
+                            schemaVersion = schemaVersion
+                        )
+                    }
                     AIOutputType.SUMMARY.name -> AIOutput.Summary(
                         summaryText = jsonObject.optString("summaryText", ""),
                         confidence = confidence,

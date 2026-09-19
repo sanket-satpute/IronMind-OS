@@ -73,6 +73,7 @@ import com.sanket_satpute_20.ironmind.data.repository.PatternRepositoryImpl
 import com.sanket_satpute_20.ironmind.domain.ai.IronMindAI
 import com.sanket_satpute_20.ironmind.data.ai.GeminiIronMindAI
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.ExtractIntentUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.ai.GeneratePlanUseCase
 
 interface AppContainer {
     val goalRepository: GoalRepository
@@ -121,6 +122,7 @@ interface AppContainer {
     val patternRepository: PatternRepository
     val patternEngine: PatternEngine
     val extractIntentUseCase: ExtractIntentUseCase
+    val generatePlanUseCase: GeneratePlanUseCase
     val ironMindAI: IronMindAI
 }
 
@@ -359,6 +361,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val extractIntentUseCase: ExtractIntentUseCase by lazy {
         ExtractIntentUseCase(ironMindAI)
+    }
+
+    override val generatePlanUseCase: GeneratePlanUseCase by lazy {
+        GeneratePlanUseCase(ironMindAI)
     }
 }
 

@@ -103,6 +103,23 @@ sealed class AIOutput {
     }
 
     /**
+     * AI proposes a practical plan breakdown for a goal.
+     * Per Sprint V2.8: PLAN category.
+     * This is a recommendation only — must NOT automatically become domain state (§4, §5).
+     * The caller (UI/Presenter) must present this for explicit user confirmation before any
+     * domain mutation is permitted.
+     */
+    data class PlanOutput(
+        val goalId: String,
+        val proposedTasks: List<TaskCandidate>,
+        override val confidence: Float,
+        override val reasoning: String? = null,
+        override val schemaVersion: Int = 1
+    ) : AIOutput() {
+        override val type: AIOutputType = AIOutputType.PLAN
+    }
+
+    /**
      * AI requires more information before producing output.
      * Per §78, §29: CLARIFICATION_REQUEST category.
      */
