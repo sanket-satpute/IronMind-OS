@@ -70,6 +70,8 @@ import com.sanket_satpute_20.ironmind.domain.engine.PatternEngine
 import com.sanket_satpute_20.ironmind.domain.engine.PatternEngineImpl
 import com.sanket_satpute_20.ironmind.domain.repository.PatternRepository
 import com.sanket_satpute_20.ironmind.data.repository.PatternRepositoryImpl
+import com.sanket_satpute_20.ironmind.domain.ai.IronMindAI
+import com.sanket_satpute_20.ironmind.data.ai.StubIronMindAI
 
 interface AppContainer {
     val goalRepository: GoalRepository
@@ -117,6 +119,7 @@ interface AppContainer {
     val contextEngine: ContextEngine
     val patternRepository: PatternRepository
     val patternEngine: PatternEngine
+    val ironMindAI: IronMindAI
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -345,6 +348,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             clock = clock,
             patternRepository = patternRepository
         )
+    }
+
+    override val ironMindAI: IronMindAI by lazy {
+        StubIronMindAI()
     }
 }
 
