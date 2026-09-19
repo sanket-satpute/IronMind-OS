@@ -11,6 +11,8 @@ import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetCommitmentsFo
 import com.sanket_satpute_20.ironmind.domain.usecase.reflection.SaveReflectionUseCase
 import com.sanket_satpute_20.ironmind.domain.repository.ReflectionRepository
 import com.sanket_satpute_20.ironmind.domain.common.Clock
+import com.sanket_satpute_20.ironmind.domain.logging.IronLogger
+import com.sanket_satpute_20.ironmind.domain.provider.SpeechToTextProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,14 +39,59 @@ class NightReflectionViewModel(
     private val getCommitmentsForDateRangeUseCase: GetCommitmentsForDateRangeUseCase,
     private val saveReflectionUseCase: SaveReflectionUseCase,
     private val reflectionRepository: ReflectionRepository,
-    private val clock: Clock
+    private val clock: Clock,
+    private val speechToTextProvider: SpeechToTextProvider,
+    private val logger: IronLogger
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<NightReflectionUiState>(NightReflectionUiState.Loading)
     val uiState: StateFlow<NightReflectionUiState> = _uiState.asStateFlow()
 
+    private val _reflectionText = MutableStateFlow("")
+    val reflectionText: StateFlow<String> = _reflectionText.asStateFlow()
+
+    private val _isListening = MutableStateFlow(false)
+    val isListening: StateFlow<Boolean> = _isListening.asStateFlow()
+
+    private val _partialSpeechText = MutableStateFlow("")
+    val partialSpeechText: StateFlow<String> = _partialSpeechText.asStateFlow()
+
     init {
         loadSummary()
+        observeSpeechInput()
+    }
+
+    private fun observeSpeechInput() {
+        viewModelScope.launch {
+            speechToTextProvider.speechFlow.collect { input ->
+                if (input.error != null) {
+                    _isListening.value = false
+                    _partialSpeechText.value = ""
+                } else if (input.isFinal && input.text.isNotEmpty()) {
+                    val current = _reflectionText.value
+                    _reflectionText.value = if (current.isBlank()) input.text else "$current ${input.text}"
+                    _isListening.value = false
+                    _partialSpeechText.value = ""
+                } else {
+                    _partialSpeechText.value = input.text
+                }
+            }
+        }
+    }
+
+    fun updateReflectionText(text: String) {
+        _reflectionText.value = text
+    }
+
+    fun toggleListening() {
+        if (_isListening.value) {
+            speechToTextProvider.stopListening()
+            _isListening.value = false
+        } else {
+            logger.logLifecycle("Reflection", "VOICE_CAPTURED")
+            speechToTextProvider.startListening()
+            _isListening.value = true
+        }
     }
 
     fun loadSummary(userId: String = "user-1") { // Default user for V0
@@ -116,6 +163,13 @@ class NightReflectionViewModel(
         }
     }
 
+    override fun onCleared() {
+        super.onCleared()
+        if (_isListening.value) {
+            speechToTextProvider.stopListening()
+        }
+    }
+
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -124,12 +178,16 @@ class NightReflectionViewModel(
                 val saveReflectionUseCase = application.container.saveReflectionUseCase
                 val reflectionRepository = application.container.reflectionRepository
                 val clock = application.container.clock
+                val speechToTextProvider = application.container.speechToTextProvider
+                val logger = application.container.logger
                 
                 NightReflectionViewModel(
                     getCommitmentsForDateRangeUseCase = getCommitmentsForDateRangeUseCase,
                     saveReflectionUseCase = saveReflectionUseCase,
                     reflectionRepository = reflectionRepository,
-                    clock = clock
+                    clock = clock,
+                    speechToTextProvider = speechToTextProvider,
+                    logger = logger
                 )
             }
         }

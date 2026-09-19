@@ -12,6 +12,8 @@ import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeCommitmentRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeEventRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeSpeechToTextProvider
+import com.sanket_satpute_20.ironmind.domain.logging.IronLogger
 import com.sanket_satpute_20.ironmind.domain.usecase.reflection.FakeReflectionRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -36,6 +38,8 @@ class NightReflectionViewModelTest {
     
     private lateinit var getCommitmentsForDateRangeUseCase: GetCommitmentsForDateRangeUseCase
     private lateinit var saveReflectionUseCase: SaveReflectionUseCase
+    private lateinit var speechToTextProvider: FakeSpeechToTextProvider
+    private lateinit var logger: IronLogger
 
     private lateinit var viewModel: NightReflectionViewModel
 
@@ -46,6 +50,10 @@ class NightReflectionViewModelTest {
         clock = FakeClock()
         idGenerator = FakeIdGenerator()
         eventRepository = FakeEventRepository()
+        speechToTextProvider = FakeSpeechToTextProvider()
+        logger = object : IronLogger {
+            override fun logLifecycle(component: String, event: String, parameters: Map<String, Any?>) {}
+        }
 
         getCommitmentsForDateRangeUseCase = GetCommitmentsForDateRangeUseCase(commitmentRepository)
         saveReflectionUseCase = SaveReflectionUseCase(reflectionRepository, idGenerator, clock, eventRepository)
@@ -75,7 +83,7 @@ class NightReflectionViewModelTest {
         createCommitment("4", CommitmentStatus.POSTPONED)
         createCommitment("5", CommitmentStatus.STARTED) // Active, but included in total
 
-        viewModel = NightReflectionViewModel(getCommitmentsForDateRangeUseCase, saveReflectionUseCase, reflectionRepository, clock)
+        viewModel = NightReflectionViewModel(getCommitmentsForDateRangeUseCase, saveReflectionUseCase, reflectionRepository, clock, speechToTextProvider, logger)
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
@@ -89,7 +97,7 @@ class NightReflectionViewModelTest {
 
     @Test
     fun `saveReflection succeeds and updates state`() = runTest {
-        viewModel = NightReflectionViewModel(getCommitmentsForDateRangeUseCase, saveReflectionUseCase, reflectionRepository, clock)
+        viewModel = NightReflectionViewModel(getCommitmentsForDateRangeUseCase, saveReflectionUseCase, reflectionRepository, clock, speechToTextProvider, logger)
         advanceUntilIdle()
         
         viewModel.saveReflection(content = "Good day")

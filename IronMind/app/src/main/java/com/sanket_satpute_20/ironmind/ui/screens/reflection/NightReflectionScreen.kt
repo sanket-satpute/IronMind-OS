@@ -9,6 +9,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -17,7 +26,18 @@ fun NightReflectionScreen(
     onNavigateBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var reflectionText by remember { mutableStateOf("") }
+    val reflectionText by viewModel.reflectionText.collectAsState()
+    val isListening by viewModel.isListening.collectAsState()
+    val partialSpeechText by viewModel.partialSpeechText.collectAsState()
+    
+    val context = LocalContext.current
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            viewModel.toggleListening()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -149,13 +169,42 @@ fun NightReflectionScreen(
                                 
                                 OutlinedTextField(
                                     value = reflectionText,
-                                    onValueChange = { reflectionText = it },
+                                    onValueChange = { viewModel.updateReflectionText(it) },
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(200.dp),
                                     placeholder = { Text("How did today go? What did you learn?") },
-                                    maxLines = 10
+                                    maxLines = 10,
+                                    trailingIcon = {
+                                        IconButton(onClick = {
+                                            val hasPermission = ContextCompat.checkSelfPermission(
+                                                context,
+                                                Manifest.permission.RECORD_AUDIO
+                                            ) == PackageManager.PERMISSION_GRANTED
+                                            
+                                            if (hasPermission) {
+                                                viewModel.toggleListening()
+                                            } else {
+                                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                            }
+                                        }) {
+                                            Icon(
+                                                imageVector = if (isListening) Icons.Default.MicOff else Icons.Default.Mic,
+                                                contentDescription = if (isListening) "Stop recording" else "Start recording",
+                                                tint = if (isListening) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
                                 )
+                                
+                                if (isListening && partialSpeechText.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Hearing: $partialSpeechText...",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
 
                                 Spacer(modifier = Modifier.height(16.dp))
 
