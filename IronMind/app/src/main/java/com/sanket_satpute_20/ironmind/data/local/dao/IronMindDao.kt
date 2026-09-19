@@ -115,4 +115,16 @@ interface IronMindDao {
 
     @Query("SELECT * FROM events WHERE userId = :userId ORDER BY occurredAt ASC")
     fun getEventsForUser(userId: String): List<EventEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertMemory(memory: MemoryEntity)
+
+    @Query("SELECT * FROM memory WHERE id = :id LIMIT 1")
+    fun getMemoryById(id: String): MemoryEntity?
+
+    @Query("SELECT * FROM memory WHERE userId = :userId ORDER BY createdAt DESC")
+    fun getMemoriesForUser(userId: String): List<MemoryEntity>
+
+    @Query("SELECT * FROM memory WHERE userId = :userId AND status NOT IN ('EXPIRED', 'DELETED') ORDER BY confidence DESC")
+    fun getActiveMemoriesForUser(userId: String): List<MemoryEntity>
 }

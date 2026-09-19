@@ -34,6 +34,13 @@ import com.sanket_satpute_20.ironmind.domain.usecase.reflection.SaveReflectionUs
 import com.sanket_satpute_20.ironmind.domain.repository.EventRepository
 import com.sanket_satpute_20.ironmind.data.repository.EventRepositoryImpl
 import com.sanket_satpute_20.ironmind.domain.usecase.history.GetTimelineUseCase
+import com.sanket_satpute_20.ironmind.domain.repository.MemoryRepository
+import com.sanket_satpute_20.ironmind.data.repository.MemoryRepositoryImpl
+import com.sanket_satpute_20.ironmind.domain.usecase.memory.ProposeMemoryUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.memory.ConfirmMemoryUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.memory.CorrectMemoryUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.memory.WeakenMemoryUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.memory.ExpireMemoryUseCase
 import java.util.UUID
 
 interface AppContainer {
@@ -55,6 +62,12 @@ interface AppContainer {
     val appProtectionProvider: AppProtectionProvider
     val reminderScheduler: ReminderScheduler
     val notificationProvider: NotificationProvider
+    val memoryRepository: MemoryRepository
+    val proposeMemoryUseCase: ProposeMemoryUseCase
+    val confirmMemoryUseCase: ConfirmMemoryUseCase
+    val correctMemoryUseCase: CorrectMemoryUseCase
+    val weakenMemoryUseCase: WeakenMemoryUseCase
+    val expireMemoryUseCase: ExpireMemoryUseCase
     val speechToTextProvider: SpeechToTextProvider
     val logger: IronLogger
     val clock: Clock
@@ -71,7 +84,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             context,
             IronMindDatabase::class.java,
             "ironmind_database"
-        ).build()
+        ).addMigrations(IronMindDatabase.MIGRATION_1_2).build()
     }
     
     override val clock: Clock = object : Clock {
@@ -100,6 +113,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val goalRepository: GoalRepository by lazy {
         GoalRepositoryImpl(database.ironMindDao())
+    }
+
+    override val memoryRepository: MemoryRepository by lazy {
+        MemoryRepositoryImpl(database.ironMindDao())
     }
 
     override val getTimelineUseCase: GetTimelineUseCase by lazy {
@@ -147,6 +164,26 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val saveReflectionUseCase: SaveReflectionUseCase by lazy {
         SaveReflectionUseCase(reflectionRepository, idGenerator, clock, eventRepository)
+    }
+
+    override val proposeMemoryUseCase: ProposeMemoryUseCase by lazy {
+        ProposeMemoryUseCase(memoryRepository, eventRepository, idGenerator, clock)
+    }
+
+    override val confirmMemoryUseCase: ConfirmMemoryUseCase by lazy {
+        ConfirmMemoryUseCase(memoryRepository, eventRepository, idGenerator, clock)
+    }
+
+    override val correctMemoryUseCase: CorrectMemoryUseCase by lazy {
+        CorrectMemoryUseCase(memoryRepository, eventRepository, idGenerator, clock)
+    }
+
+    override val weakenMemoryUseCase: WeakenMemoryUseCase by lazy {
+        WeakenMemoryUseCase(memoryRepository, eventRepository, idGenerator, clock)
+    }
+
+    override val expireMemoryUseCase: ExpireMemoryUseCase by lazy {
+        ExpireMemoryUseCase(memoryRepository, eventRepository, idGenerator, clock)
     }
 
     override val protectionRepository: ProtectionRepository by lazy {

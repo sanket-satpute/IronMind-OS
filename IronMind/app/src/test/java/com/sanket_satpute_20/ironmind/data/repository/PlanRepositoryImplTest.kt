@@ -61,6 +61,10 @@ class PlanRepositoryImplTest {
         override fun insertEvent(event: EventEntity) {}
         override fun getEventsForEntity(entityId: String): List<EventEntity> = emptyList()
         override fun getEventsForUser(userId: String): List<EventEntity> = emptyList()
+        override fun insertMemory(memory: MemoryEntity) {}
+        override fun getMemoryById(id: String): MemoryEntity? = null
+        override fun getMemoriesForUser(userId: String): List<MemoryEntity> = emptyList()
+        override fun getActiveMemoriesForUser(userId: String): List<MemoryEntity> = emptyList()
     }
 
     @Before

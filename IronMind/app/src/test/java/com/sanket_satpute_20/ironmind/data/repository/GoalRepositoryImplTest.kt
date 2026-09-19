@@ -63,6 +63,10 @@ class GoalRepositoryImplTest {
         override fun insertEvent(event: com.sanket_satpute_20.ironmind.data.local.entity.EventEntity) {}
         override fun getEventsForEntity(entityId: String): List<com.sanket_satpute_20.ironmind.data.local.entity.EventEntity> = emptyList()
         override fun getEventsForUser(userId: String): List<com.sanket_satpute_20.ironmind.data.local.entity.EventEntity> = emptyList()
+        override fun insertMemory(memory: MemoryEntity) {}
+        override fun getMemoryById(id: String): MemoryEntity? = null
+        override fun getMemoriesForUser(userId: String): List<MemoryEntity> = emptyList()
+        override fun getActiveMemoriesForUser(userId: String): List<MemoryEntity> = emptyList()
     }
 
     @Before
