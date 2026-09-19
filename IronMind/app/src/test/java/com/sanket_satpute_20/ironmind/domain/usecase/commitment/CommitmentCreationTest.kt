@@ -5,6 +5,7 @@ import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
 import com.sanket_satpute_20.ironmind.domain.model.EntitySource
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeCommitmentRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeEventRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeReminderScheduler
 import kotlinx.coroutines.test.runTest
@@ -19,6 +20,7 @@ class CommitmentCreationTest {
     private lateinit var clock: FakeClock
     private lateinit var idGenerator: FakeIdGenerator
     private lateinit var reminderScheduler: FakeReminderScheduler
+    private lateinit var eventRepository: FakeEventRepository
     
     private lateinit var createCommitmentUseCase: CreateCommitmentUseCase
     private lateinit var editCommitmentUseCase: EditCommitmentUseCase
@@ -29,8 +31,9 @@ class CommitmentCreationTest {
         clock = FakeClock()
         idGenerator = FakeIdGenerator()
         reminderScheduler = FakeReminderScheduler()
+        eventRepository = FakeEventRepository()
         
-        createCommitmentUseCase = CreateCommitmentUseCase(repository, reminderScheduler, idGenerator, clock)
+        createCommitmentUseCase = CreateCommitmentUseCase(repository, reminderScheduler, idGenerator, clock, eventRepository)
         editCommitmentUseCase = EditCommitmentUseCase(repository, reminderScheduler, clock)
     }
 

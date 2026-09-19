@@ -4,6 +4,7 @@ import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeCommitmentRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeEventRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeOutcomeRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeReminderScheduler
@@ -27,7 +28,8 @@ class GetActiveCommitmentsUseCaseTest {
             repository = repository,
             reminderScheduler = FakeReminderScheduler(),
             idGenerator = FakeIdGenerator(),
-            clock = FakeClock()
+            clock = FakeClock(),
+            eventRepository = FakeEventRepository()
         )
     }
 
@@ -37,7 +39,8 @@ class GetActiveCommitmentsUseCaseTest {
         val idGenerator = FakeIdGenerator()
         val outcomeRepository = FakeOutcomeRepository()
         val reminderScheduler = FakeReminderScheduler()
-        val updateCommitmentStatusUseCase = UpdateCommitmentStatusUseCase(repository, outcomeRepository, reminderScheduler, clock, idGenerator)
+        val eventRepository = FakeEventRepository()
+        val updateCommitmentStatusUseCase = UpdateCommitmentStatusUseCase(repository, outcomeRepository, reminderScheduler, clock, idGenerator, eventRepository)
         val userId = "user-1"
         
         // C1: COMMITTED

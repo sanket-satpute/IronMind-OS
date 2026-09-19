@@ -11,6 +11,7 @@ import com.sanket_satpute_20.ironmind.testutil.TestDispatcherRule
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeCommitmentRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeEventRepository
 import com.sanket_satpute_20.ironmind.domain.usecase.reflection.FakeReflectionRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -31,6 +32,7 @@ class NightReflectionViewModelTest {
     private lateinit var reflectionRepository: FakeReflectionRepository
     private lateinit var clock: FakeClock
     private lateinit var idGenerator: FakeIdGenerator
+    private lateinit var eventRepository: FakeEventRepository
     
     private lateinit var getCommitmentsForDateRangeUseCase: GetCommitmentsForDateRangeUseCase
     private lateinit var saveReflectionUseCase: SaveReflectionUseCase
@@ -43,9 +45,10 @@ class NightReflectionViewModelTest {
         reflectionRepository = FakeReflectionRepository()
         clock = FakeClock()
         idGenerator = FakeIdGenerator()
+        eventRepository = FakeEventRepository()
 
         getCommitmentsForDateRangeUseCase = GetCommitmentsForDateRangeUseCase(commitmentRepository)
-        saveReflectionUseCase = SaveReflectionUseCase(reflectionRepository, idGenerator, clock)
+        saveReflectionUseCase = SaveReflectionUseCase(reflectionRepository, idGenerator, clock, eventRepository)
     }
 
     private suspend fun createCommitment(id: String, status: CommitmentStatus) {

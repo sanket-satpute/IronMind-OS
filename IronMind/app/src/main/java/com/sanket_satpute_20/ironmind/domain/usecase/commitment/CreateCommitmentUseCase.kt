@@ -8,12 +8,16 @@ import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
 import com.sanket_satpute_20.ironmind.domain.model.EntitySource
 import com.sanket_satpute_20.ironmind.domain.provider.ReminderScheduler
 import com.sanket_satpute_20.ironmind.domain.repository.CommitmentRepository
+import com.sanket_satpute_20.ironmind.domain.repository.EventRepository
+import com.sanket_satpute_20.ironmind.domain.model.Event
+import com.sanket_satpute_20.ironmind.domain.model.EventType
 
 class CreateCommitmentUseCase(
     private val repository: CommitmentRepository,
     private val reminderScheduler: ReminderScheduler,
     private val idGenerator: IdGenerator,
-    private val clock: Clock
+    private val clock: Clock,
+    private val eventRepository: EventRepository
 ) {
     suspend operator fun invoke(
         userId: String,
@@ -62,6 +66,37 @@ class CreateCommitmentUseCase(
                 if (scheduledStartAt != null) {
                     reminderScheduler.scheduleReminder(commitment.id, scheduledStartAt, commitment.title)
                 }
+                
+                val createEvent = Event(
+                    id = idGenerator.generateId(),
+                    userId = userId,
+                    type = EventType.COMMITMENT_CREATED,
+                    entityType = "COMMITMENT",
+                    entityId = commitment.id,
+                    occurredAt = now,
+                    recordedAt = now,
+                    source = EntitySource.USER
+                )
+                eventRepository.saveEvent(createEvent)
+                println("IronMindLifecycle [Commitment] [CREATED] commitmentId=${commitment.id}")
+
+                if (initialStatus == CommitmentStatus.COMMITTED) {
+                    val commitEvent = Event(
+                        id = idGenerator.generateId(),
+                        userId = userId,
+                        type = EventType.COMMITMENT_COMMITTED,
+                        entityType = "COMMITMENT",
+                        entityId = commitment.id,
+                        occurredAt = now,
+                        recordedAt = now,
+                        source = EntitySource.USER,
+                        previousState = CommitmentStatus.PLANNED.name,
+                        newState = CommitmentStatus.COMMITTED.name
+                    )
+                    eventRepository.saveEvent(commitEvent)
+                    println("IronMindLifecycle [Commitment] [COMMITTED] commitmentId=${commitment.id}")
+                }
+                
                 Result.Success(commitment)
             }
         }

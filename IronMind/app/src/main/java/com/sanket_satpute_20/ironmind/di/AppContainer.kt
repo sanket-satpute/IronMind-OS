@@ -25,12 +25,15 @@ import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetCommitmentsFo
 import com.sanket_satpute_20.ironmind.domain.repository.ReflectionRepository
 import com.sanket_satpute_20.ironmind.data.repository.ReflectionRepositoryImpl
 import com.sanket_satpute_20.ironmind.domain.usecase.reflection.SaveReflectionUseCase
+import com.sanket_satpute_20.ironmind.domain.repository.EventRepository
+import com.sanket_satpute_20.ironmind.data.repository.EventRepositoryImpl
 import java.util.UUID
 
 interface AppContainer {
     val commitmentRepository: CommitmentRepository
     val outcomeRepository: OutcomeRepository
     val reflectionRepository: ReflectionRepository
+    val eventRepository: EventRepository
     val createCommitmentUseCase: CreateCommitmentUseCase
     val editCommitmentUseCase: EditCommitmentUseCase
     val getActiveCommitmentsUseCase: GetActiveCommitmentsUseCase
@@ -76,6 +79,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         ReflectionRepositoryImpl(database.ironMindDao())
     }
 
+    override val eventRepository: EventRepository by lazy {
+        EventRepositoryImpl(database.ironMindDao())
+    }
+
     override val reminderScheduler: ReminderScheduler by lazy {
         AndroidReminderScheduler(context)
     }
@@ -85,7 +92,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
     
     override val createCommitmentUseCase: CreateCommitmentUseCase by lazy {
-        CreateCommitmentUseCase(commitmentRepository, reminderScheduler, idGenerator, clock)
+        CreateCommitmentUseCase(commitmentRepository, reminderScheduler, idGenerator, clock, eventRepository)
     }
 
     override val editCommitmentUseCase: EditCommitmentUseCase by lazy {
@@ -106,12 +113,13 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             outcomeRepository, 
             reminderScheduler,
             clock, 
-            idGenerator
+            idGenerator,
+            eventRepository
         )
     }
 
     override val saveReflectionUseCase: SaveReflectionUseCase by lazy {
-        SaveReflectionUseCase(reflectionRepository, idGenerator, clock)
+        SaveReflectionUseCase(reflectionRepository, idGenerator, clock, eventRepository)
     }
 
     override val protectionRepository: ProtectionRepository by lazy {
@@ -127,7 +135,8 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             protectionRepository, 
             appProtectionProvider,
             idGenerator, 
-            clock
+            clock,
+            eventRepository
         )
     }
 
@@ -135,7 +144,8 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         StopProtectionSessionUseCase(
             protectionRepository, 
             appProtectionProvider,
-            clock
+            clock,
+            eventRepository
         )
     }
 }

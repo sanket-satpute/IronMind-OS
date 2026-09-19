@@ -2,9 +2,10 @@ package com.sanket_satpute_20.ironmind.domain.usecase.reflection
 
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
-import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
 import com.sanket_satpute_20.ironmind.domain.model.Reflection
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
 import com.sanket_satpute_20.ironmind.domain.repository.ReflectionRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeEventRepository
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -29,6 +30,7 @@ class SaveReflectionUseCaseTest {
     private lateinit var repository: FakeReflectionRepository
     private lateinit var idGenerator: FakeIdGenerator
     private lateinit var clock: FakeClock
+    private lateinit var eventRepository: FakeEventRepository
     private lateinit var useCase: SaveReflectionUseCase
 
     @Before
@@ -36,7 +38,8 @@ class SaveReflectionUseCaseTest {
         repository = FakeReflectionRepository()
         idGenerator = FakeIdGenerator()
         clock = FakeClock()
-        useCase = SaveReflectionUseCase(repository, idGenerator, clock)
+        eventRepository = FakeEventRepository()
+        useCase = SaveReflectionUseCase(repository, idGenerator, clock, eventRepository)
     }
 
     @Test

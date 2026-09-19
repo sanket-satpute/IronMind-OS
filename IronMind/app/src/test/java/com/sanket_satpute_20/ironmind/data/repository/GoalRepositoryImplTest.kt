@@ -58,7 +58,10 @@ class GoalRepositoryImplTest {
         override fun getProtectionRulesForUser(userId: String): List<ProtectionRuleEntity> = emptyList()
         override fun insertProtectionSession(session: ProtectionSessionEntity) {}
         override fun getProtectionSession(id: String): ProtectionSessionEntity? = null
-        override fun getActiveProtectionSessionsForUser(userId: String): List<ProtectionSessionEntity> = emptyList()
+        override fun getActiveProtectionSessionsForUser(userId: String): List<com.sanket_satpute_20.ironmind.data.local.entity.ProtectionSessionEntity> = emptyList()
+        override fun insertEvent(event: com.sanket_satpute_20.ironmind.data.local.entity.EventEntity) {}
+        override fun getEventsForEntity(entityId: String): List<com.sanket_satpute_20.ironmind.data.local.entity.EventEntity> = emptyList()
+        override fun getEventsForUser(userId: String): List<com.sanket_satpute_20.ironmind.data.local.entity.EventEntity> = emptyList()
     }
 
     @Before

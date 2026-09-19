@@ -57,6 +57,9 @@ class PlanRepositoryImplTest {
         override fun insertProtectionSession(session: ProtectionSessionEntity) {}
         override fun getProtectionSession(id: String): ProtectionSessionEntity? = null
         override fun getActiveProtectionSessionsForUser(userId: String): List<ProtectionSessionEntity> = emptyList()
+        override fun insertEvent(event: EventEntity) {}
+        override fun getEventsForEntity(entityId: String): List<EventEntity> = emptyList()
+        override fun getEventsForUser(userId: String): List<EventEntity> = emptyList()
     }
 
     @Before

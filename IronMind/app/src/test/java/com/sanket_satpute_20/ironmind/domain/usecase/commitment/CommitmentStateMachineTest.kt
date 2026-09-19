@@ -4,6 +4,7 @@ import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeCommitmentRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeEventRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeOutcomeRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeReminderScheduler
@@ -22,6 +23,7 @@ class CommitmentStateMachineTest {
     private lateinit var clock: FakeClock
     private lateinit var idGenerator: FakeIdGenerator
     private lateinit var reminderScheduler: FakeReminderScheduler
+    private lateinit var eventRepository: FakeEventRepository
     
     private lateinit var createCommitmentUseCase: CreateCommitmentUseCase
     private lateinit var updateStatusUseCase: UpdateCommitmentStatusUseCase
@@ -33,9 +35,10 @@ class CommitmentStateMachineTest {
         clock = FakeClock()
         idGenerator = FakeIdGenerator()
         reminderScheduler = FakeReminderScheduler()
+        eventRepository = FakeEventRepository()
         
-        createCommitmentUseCase = CreateCommitmentUseCase(repository, reminderScheduler, idGenerator, clock)
-        updateStatusUseCase = UpdateCommitmentStatusUseCase(repository, outcomeRepository, reminderScheduler, clock, idGenerator)
+        createCommitmentUseCase = CreateCommitmentUseCase(repository, reminderScheduler, idGenerator, clock, eventRepository)
+        updateStatusUseCase = UpdateCommitmentStatusUseCase(repository, outcomeRepository, reminderScheduler, clock, idGenerator, eventRepository)
     }
 
     @Test

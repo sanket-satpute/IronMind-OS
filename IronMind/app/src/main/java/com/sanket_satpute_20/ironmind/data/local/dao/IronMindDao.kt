@@ -103,4 +103,13 @@ interface IronMindDao {
 
     @Query("SELECT * FROM protection_sessions WHERE userId = :userId AND status = 'ACTIVE' ORDER BY startedAt DESC")
     fun getActiveProtectionSessionsForUser(userId: String): List<ProtectionSessionEntity>
+    
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertEvent(event: EventEntity)
+
+    @Query("SELECT * FROM events WHERE entityId = :entityId ORDER BY occurredAt ASC")
+    fun getEventsForEntity(entityId: String): List<EventEntity>
+
+    @Query("SELECT * FROM events WHERE userId = :userId ORDER BY occurredAt ASC")
+    fun getEventsForUser(userId: String): List<EventEntity>
 }

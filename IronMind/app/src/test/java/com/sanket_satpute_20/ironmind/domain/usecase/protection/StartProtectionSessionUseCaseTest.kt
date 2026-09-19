@@ -7,6 +7,7 @@ import com.sanket_satpute_20.ironmind.testutil.fake.FakeAppProtectionProvider
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeProtectionRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeEventRepository
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -22,6 +23,7 @@ class StartProtectionSessionUseCaseTest {
     private lateinit var protectionProvider: FakeAppProtectionProvider
     private lateinit var idGenerator: FakeIdGenerator
     private lateinit var clock: FakeClock
+    private lateinit var eventRepository: FakeEventRepository
     private lateinit var startProtectionSessionUseCase: StartProtectionSessionUseCase
 
     @Before
@@ -30,11 +32,13 @@ class StartProtectionSessionUseCaseTest {
         protectionProvider = FakeAppProtectionProvider()
         idGenerator = FakeIdGenerator()
         clock = FakeClock()
+        eventRepository = FakeEventRepository()
         startProtectionSessionUseCase = StartProtectionSessionUseCase(
             protectionRepository = protectionRepository,
             protectionProvider = protectionProvider,
             idGenerator = idGenerator,
-            clock = clock
+            clock = clock,
+            eventRepository = eventRepository
         )
     }
 

@@ -8,12 +8,16 @@ import com.sanket_satpute_20.ironmind.domain.model.ProtectionSession
 import com.sanket_satpute_20.ironmind.domain.model.ProtectionSessionStatus
 import com.sanket_satpute_20.ironmind.domain.provider.AppProtectionProvider
 import com.sanket_satpute_20.ironmind.domain.repository.ProtectionRepository
+import com.sanket_satpute_20.ironmind.domain.repository.EventRepository
+import com.sanket_satpute_20.ironmind.domain.model.Event
+import com.sanket_satpute_20.ironmind.domain.model.EventType
 
 class StartProtectionSessionUseCase(
     private val protectionRepository: ProtectionRepository,
     private val protectionProvider: AppProtectionProvider,
     private val idGenerator: IdGenerator,
-    private val clock: Clock
+    private val clock: Clock,
+    private val eventRepository: EventRepository
 ) {
     suspend operator fun invoke(
         userId: String,
@@ -53,6 +57,18 @@ class StartProtectionSessionUseCase(
 
         val result = protectionRepository.saveProtectionSession(session)
         return if (result is Result.Success) {
+            val event = Event(
+                id = idGenerator.generateId(),
+                userId = userId,
+                type = EventType.PROTECTION_STARTED,
+                entityType = "PROTECTION_SESSION",
+                entityId = session.id,
+                occurredAt = now,
+                recordedAt = now,
+                source = EntitySource.USER,
+                metadata = null
+            )
+            eventRepository.saveEvent(event)
             println("IronMindLifecycle [Protection] [SESSION_STARTED] sessionId=${session.id}")
             Result.Success(session)
         } else {

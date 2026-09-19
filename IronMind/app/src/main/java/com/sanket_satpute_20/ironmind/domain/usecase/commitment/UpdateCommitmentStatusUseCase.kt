@@ -10,13 +10,18 @@ import com.sanket_satpute_20.ironmind.domain.model.ResultStatus
 import com.sanket_satpute_20.ironmind.domain.provider.ReminderScheduler
 import com.sanket_satpute_20.ironmind.domain.repository.CommitmentRepository
 import com.sanket_satpute_20.ironmind.domain.repository.OutcomeRepository
+import com.sanket_satpute_20.ironmind.domain.repository.EventRepository
+import com.sanket_satpute_20.ironmind.domain.model.Event
+import com.sanket_satpute_20.ironmind.domain.model.EventType
+import com.sanket_satpute_20.ironmind.domain.model.EntitySource
 
 class UpdateCommitmentStatusUseCase(
     private val repository: CommitmentRepository,
     private val outcomeRepository: OutcomeRepository,
     private val reminderScheduler: ReminderScheduler,
     private val clock: Clock,
-    private val idGenerator: IdGenerator
+    private val idGenerator: IdGenerator,
+    private val eventRepository: EventRepository
 ) {
     suspend operator fun invoke(
         commitmentId: String,
@@ -138,6 +143,48 @@ class UpdateCommitmentStatusUseCase(
                         CommitmentStatus.STARTED
                     )) {
                     reminderScheduler.cancelReminder(commitment.id)
+                }
+                
+                val eventType = when (newStatus) {
+                    CommitmentStatus.COMMITTED -> EventType.COMMITMENT_COMMITTED
+                    CommitmentStatus.STARTED -> EventType.COMMITMENT_STARTED
+                    CommitmentStatus.COMPLETED -> EventType.COMMITMENT_COMPLETED
+                    CommitmentStatus.POSTPONED -> EventType.COMMITMENT_POSTPONED
+                    CommitmentStatus.MISSED -> EventType.COMMITMENT_MISSED
+                    CommitmentStatus.RECOVERED -> EventType.COMMITMENT_RECOVERED
+                    CommitmentStatus.ABANDONED -> EventType.COMMITMENT_ABANDONED
+                    else -> EventType.COMMITMENT_POSTPONED // Fallback, shouldn't happen based on graph
+                }
+
+                val transitionEvent = Event(
+                    id = idGenerator.generateId(),
+                    userId = commitment.userId,
+                    type = eventType,
+                    entityType = "COMMITMENT",
+                    entityId = commitment.id,
+                    occurredAt = now,
+                    recordedAt = now,
+                    source = EntitySource.USER,
+                    previousState = currentStatus.name,
+                    newState = newStatus.name
+                )
+                eventRepository.saveEvent(transitionEvent)
+                println("IronMindLifecycle [Commitment] [${newStatus.name}] commitmentId=${commitment.id}")
+
+                if (resultStatus != null) {
+                    val outcomeEvent = Event(
+                        id = idGenerator.generateId(),
+                        userId = commitment.userId,
+                        type = EventType.OUTCOME_RECORDED,
+                        entityType = "COMMITMENT",
+                        entityId = commitment.id,
+                        occurredAt = now,
+                        recordedAt = now,
+                        source = EntitySource.USER,
+                        metadata = "resultStatus=${resultStatus.name}"
+                    )
+                    eventRepository.saveEvent(outcomeEvent)
+                    println("IronMindLifecycle [Outcome] [RECORDED] commitmentId=${commitment.id}")
                 }
 
                 Result.Success(updatedCommitment)
