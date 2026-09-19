@@ -6,6 +6,8 @@ import com.sanket_satpute_20.ironmind.domain.ai.AIOutput
 import com.sanket_satpute_20.ironmind.domain.ai.AIOutputType
 import com.sanket_satpute_20.ironmind.domain.ai.AIRequest
 import com.sanket_satpute_20.ironmind.domain.ai.AIRequestType
+import com.sanket_satpute_20.ironmind.domain.ai.BarrierCandidate
+import com.sanket_satpute_20.ironmind.domain.ai.BarrierCategory
 import com.sanket_satpute_20.ironmind.domain.ai.IronMindAI
 import com.sanket_satpute_20.ironmind.domain.ai.TaskCandidate
 import com.sanket_satpute_20.ironmind.domain.ai.isValid
@@ -86,6 +88,19 @@ class GeminiIronMindAI(
                 Output JSON with type "PLAN" and a "proposedTasks" array. Each task must have:
                   title, description, estimatedDurationMinutes (nullable int), isNextAction (boolean).
                 Also include "goalId" (pass through the goalId from context if provided).
+            """.trimIndent()
+            AIRequestType.BARRIER_UNDERSTANDING -> """
+                You are identifying potential barriers that may be contributing to user inaction.
+                CRITICAL RULES:
+                - Barriers are HYPOTHESES only. Never assert them as confirmed psychological facts.
+                - FORBIDDEN: "You procrastinate because you are afraid."
+                - ALLOWED: "I've noticed X often happens before Y. Could that be part of what is getting in the way?"
+                - Do NOT use identity labels ("You are a procrastinator", "You have anxiety").
+                - Use tentative, questioning language in descriptions.
+                Output JSON with type "BARRIER" and a "proposedBarriers" array. Each barrier must have:
+                  category (one of: UNCERTAINTY, DISTRACTION, FEAR, BOREDOM, LACK_OF_CLARITY, ENVIRONMENTAL_FRICTION, LOW_ENERGY, EXCESSIVE_TASK_SIZE, COMPETING_PRIORITIES, SCHEDULING_MISMATCH),
+                  description (tentative hypothesis phrased as a possibility or question).
+                Do NOT include isConfirmed (always false from AI).
             """.trimIndent()
             else -> "Match the output type to the request type. Return relevant fields for that type."
         }
@@ -185,6 +200,34 @@ class GeminiIronMindAI(
                         AIOutput.PlanOutput(
                             goalId = jsonObject.optString("goalId", ""),
                             proposedTasks = tasks,
+                            confidence = confidence,
+                            reasoning = reasoning,
+                            schemaVersion = schemaVersion
+                        )
+                    }
+                    AIOutputType.BARRIER.name -> {
+                        val barriersArray = jsonObject.optJSONArray("proposedBarriers")
+                        val barriers = mutableListOf<BarrierCandidate>()
+                        if (barriersArray != null) {
+                            for (i in 0 until barriersArray.length()) {
+                                val barrierObj = barriersArray.getJSONObject(i)
+                                val categoryStr = barrierObj.optString("category", "")
+                                val category = try {
+                                    BarrierCategory.valueOf(categoryStr)
+                                } catch (e: IllegalArgumentException) {
+                                    BarrierCategory.UNCERTAINTY // Safe fallback
+                                }
+                                barriers.add(
+                                    BarrierCandidate(
+                                        category = category,
+                                        description = barrierObj.optString("description", ""),
+                                        isConfirmed = false // Always false from AI layer
+                                    )
+                                )
+                            }
+                        }
+                        AIOutput.BarrierOutput(
+                            proposedBarriers = barriers,
                             confidence = confidence,
                             reasoning = reasoning,
                             schemaVersion = schemaVersion

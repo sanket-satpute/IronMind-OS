@@ -120,6 +120,26 @@ sealed class AIOutput {
     }
 
     /**
+     * AI proposes a list of hypothesised barriers that may be contributing to user inaction.
+     * Per Sprint V2.9: BARRIER category.
+     *
+     * CRITICAL CONTRACT RULES:
+     * - Barriers are HYPOTHESES only. They must never be asserted as facts.
+     * - [proposedBarriers] entries carry isConfirmed=false. Only user action can confirm.
+     * - Descriptions must use tentative language ("Could X be part of what is getting in the way?").
+     * - No identity labels or psychological certainty permitted.
+     * Per AI_BEHAVIOR_CONTRACT.md §4, §5 and IRONMIND_IMPLEMENTATION_ROADMAP.md V2.9.
+     */
+    data class BarrierOutput(
+        val proposedBarriers: List<BarrierCandidate>,
+        override val confidence: Float,
+        override val reasoning: String? = null,
+        override val schemaVersion: Int = 1
+    ) : AIOutput() {
+        override val type: AIOutputType = AIOutputType.BARRIER
+    }
+
+    /**
      * AI requires more information before producing output.
      * Per §78, §29: CLARIFICATION_REQUEST category.
      */
