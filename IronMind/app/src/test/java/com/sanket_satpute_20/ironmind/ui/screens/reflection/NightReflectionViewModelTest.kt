@@ -75,22 +75,21 @@ class NightReflectionViewModelTest {
         createCommitment("4", CommitmentStatus.POSTPONED)
         createCommitment("5", CommitmentStatus.STARTED) // Active, but included in total
 
-        viewModel = NightReflectionViewModel(getCommitmentsForDateRangeUseCase, saveReflectionUseCase, clock)
+        viewModel = NightReflectionViewModel(getCommitmentsForDateRangeUseCase, saveReflectionUseCase, reflectionRepository, clock)
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
         assertTrue(state is NightReflectionUiState.Success)
         
         val summary = (state as NightReflectionUiState.Success).summary
-        assertEquals(5, summary.totalPlanned)
-        assertEquals(2, summary.completed)
-        assertEquals(1, summary.missed)
-        assertEquals(1, summary.postponed)
+        assertEquals(2, summary.completed.size)
+        assertEquals(1, summary.missed.size)
+        assertEquals(1, summary.postponed.size)
     }
 
     @Test
     fun `saveReflection succeeds and updates state`() = runTest {
-        viewModel = NightReflectionViewModel(getCommitmentsForDateRangeUseCase, saveReflectionUseCase, clock)
+        viewModel = NightReflectionViewModel(getCommitmentsForDateRangeUseCase, saveReflectionUseCase, reflectionRepository, clock)
         advanceUntilIdle()
         
         viewModel.saveReflection(content = "Good day")

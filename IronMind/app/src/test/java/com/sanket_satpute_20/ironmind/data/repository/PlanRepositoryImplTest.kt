@@ -51,6 +51,7 @@ class PlanRepositoryImplTest {
         override fun getOutcomeForSource(sourceEntityId: String): OutcomeEntity? = null
         override fun insertReflection(reflection: ReflectionEntity) {}
         override fun getReflection(id: String): ReflectionEntity? = null
+        override fun getReflectionsForDateRange(userId: String, startTime: Long, endTime: Long): List<ReflectionEntity> = emptyList()
         override fun insertProtectionRule(rule: ProtectionRuleEntity) {}
         override fun getProtectionRule(id: String): ProtectionRuleEntity? = null
         override fun getProtectionRulesForUser(userId: String): List<ProtectionRuleEntity> = emptyList()

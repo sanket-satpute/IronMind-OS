@@ -7,6 +7,8 @@ import com.sanket_satpute_20.ironmind.data.repository.CommitmentRepositoryImpl
 import com.sanket_satpute_20.ironmind.domain.common.Clock
 import com.sanket_satpute_20.ironmind.domain.common.IdGenerator
 import com.sanket_satpute_20.ironmind.domain.repository.CommitmentRepository
+import com.sanket_satpute_20.ironmind.domain.repository.GoalRepository
+import com.sanket_satpute_20.ironmind.data.repository.GoalRepositoryImpl
 import com.sanket_satpute_20.ironmind.domain.repository.OutcomeRepository
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetActiveCommitmentsUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.UpdateCommitmentStatusUseCase
@@ -27,13 +29,16 @@ import com.sanket_satpute_20.ironmind.data.repository.ReflectionRepositoryImpl
 import com.sanket_satpute_20.ironmind.domain.usecase.reflection.SaveReflectionUseCase
 import com.sanket_satpute_20.ironmind.domain.repository.EventRepository
 import com.sanket_satpute_20.ironmind.data.repository.EventRepositoryImpl
+import com.sanket_satpute_20.ironmind.domain.usecase.history.GetTimelineUseCase
 import java.util.UUID
 
 interface AppContainer {
+    val goalRepository: GoalRepository
     val commitmentRepository: CommitmentRepository
     val outcomeRepository: OutcomeRepository
     val reflectionRepository: ReflectionRepository
     val eventRepository: EventRepository
+    val getTimelineUseCase: GetTimelineUseCase
     val createCommitmentUseCase: CreateCommitmentUseCase
     val editCommitmentUseCase: EditCommitmentUseCase
     val getActiveCommitmentsUseCase: GetActiveCommitmentsUseCase
@@ -81,6 +86,14 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val eventRepository: EventRepository by lazy {
         EventRepositoryImpl(database.ironMindDao())
+    }
+
+    override val goalRepository: GoalRepository by lazy {
+        GoalRepositoryImpl(database.ironMindDao())
+    }
+
+    override val getTimelineUseCase: GetTimelineUseCase by lazy {
+        GetTimelineUseCase(eventRepository, commitmentRepository, reflectionRepository, goalRepository)
     }
 
     override val reminderScheduler: ReminderScheduler by lazy {

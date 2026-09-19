@@ -7,6 +7,7 @@ import androidx.navigation.compose.composable
 import com.sanket_satpute_20.ironmind.ui.IronMindAppState
 import com.sanket_satpute_20.ironmind.ui.screens.goals.GoalsScreen
 import com.sanket_satpute_20.ironmind.ui.screens.settings.SettingsScreen
+import com.sanket_satpute_20.ironmind.ui.screens.history.HistoryScreen
 import com.sanket_satpute_20.ironmind.ui.screens.today.TodayScreen
 
 @Composable
@@ -25,6 +26,9 @@ fun IronMindNavHost(
         }
         composable(Route.Goals.path) {
             GoalsScreen()
+        }
+        composable(Route.History.path) {
+            HistoryScreen()
         }
         composable(Route.Settings.path) {
             SettingsScreen()

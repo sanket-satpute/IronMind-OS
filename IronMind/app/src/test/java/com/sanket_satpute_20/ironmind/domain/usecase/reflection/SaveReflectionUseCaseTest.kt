@@ -23,6 +23,11 @@ class FakeReflectionRepository : ReflectionRepository {
     override suspend fun getReflection(id: String): Result<Reflection?, Exception> {
         return Result.Success(reflections[id])
     }
+
+    override suspend fun getReflectionsForDateRange(userId: String, startTime: Long, endTime: Long): Result<List<Reflection>, Exception> {
+        val list = reflections.values.filter { it.userId == userId && it.createdAt in startTime..endTime }
+        return Result.Success(list)
+    }
 }
 
 class SaveReflectionUseCaseTest {

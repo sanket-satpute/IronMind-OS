@@ -1,11 +1,15 @@
 package com.sanket_satpute_20.ironmind.ui.screens.reflection
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.sanket_satpute_20.ironmind.domain.common.Result
-import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
+import com.sanket_satpute_20.ironmind.domain.model.Commitment
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetCommitmentsForDateRangeUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.reflection.SaveReflectionUseCase
+import com.sanket_satpute_20.ironmind.domain.repository.ReflectionRepository
 import com.sanket_satpute_20.ironmind.domain.common.Clock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,21 +18,25 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 
 data class DaySummary(
-    val totalPlanned: Int = 0,
-    val completed: Int = 0,
-    val missed: Int = 0,
-    val postponed: Int = 0
+    val completed: List<Commitment> = emptyList(),
+    val missed: List<Commitment> = emptyList(),
+    val postponed: List<Commitment> = emptyList()
 )
 
 sealed class NightReflectionUiState {
     object Loading : NightReflectionUiState()
-    data class Success(val summary: DaySummary, val isSaved: Boolean = false) : NightReflectionUiState()
+    data class Success(
+        val summary: DaySummary,
+        val existingReflection: String? = null,
+        val isSaved: Boolean = false
+    ) : NightReflectionUiState()
     data class Error(val message: String) : NightReflectionUiState()
 }
 
 class NightReflectionViewModel(
     private val getCommitmentsForDateRangeUseCase: GetCommitmentsForDateRangeUseCase,
     private val saveReflectionUseCase: SaveReflectionUseCase,
+    private val reflectionRepository: ReflectionRepository,
     private val clock: Clock
 ) : ViewModel() {
 
@@ -59,17 +67,27 @@ class NightReflectionViewModel(
             val endTime = calendar.timeInMillis
 
             val result = getCommitmentsForDateRangeUseCase(userId, startTime, endTime)
+            val reflectionResult = reflectionRepository.getReflectionsForDateRange(userId, startTime, endTime)
+            
+            val existingReflection = if (reflectionResult is Result.Success && reflectionResult.data.isNotEmpty()) {
+                reflectionResult.data.first().content
+            } else {
+                null
+            }
             
             when (result) {
                 is Result.Success -> {
                     val commitments = result.data
                     val summary = DaySummary(
-                        totalPlanned = commitments.size,
-                        completed = commitments.count { it.status == CommitmentStatus.COMPLETED },
-                        missed = commitments.count { it.status == CommitmentStatus.MISSED },
-                        postponed = commitments.count { it.status == CommitmentStatus.POSTPONED }
+                        completed = commitments.filter { it.status == com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus.COMPLETED },
+                        missed = commitments.filter { it.status == com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus.MISSED },
+                        postponed = commitments.filter { it.status == com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus.POSTPONED }
                     )
-                    _uiState.value = NightReflectionUiState.Success(summary)
+                    _uiState.value = NightReflectionUiState.Success(
+                        summary = summary,
+                        existingReflection = existingReflection,
+                        isSaved = existingReflection != null
+                    )
                 }
                 is Result.Failure -> {
                     _uiState.value = NightReflectionUiState.Error(result.error.message ?: "Failed to load summary")
@@ -94,6 +112,25 @@ class NightReflectionViewModel(
                         _uiState.value = NightReflectionUiState.Error(result.error.message ?: "Failed to save reflection")
                     }
                 }
+            }
+        }
+    }
+
+    companion object {
+        val Factory: ViewModelProvider.Factory = viewModelFactory {
+            initializer {
+                val application = (this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as com.sanket_satpute_20.ironmind.IronMindApplication)
+                val getCommitmentsForDateRangeUseCase = application.container.getCommitmentsForDateRangeUseCase
+                val saveReflectionUseCase = application.container.saveReflectionUseCase
+                val reflectionRepository = application.container.reflectionRepository
+                val clock = application.container.clock
+                
+                NightReflectionViewModel(
+                    getCommitmentsForDateRangeUseCase = getCommitmentsForDateRangeUseCase,
+                    saveReflectionUseCase = saveReflectionUseCase,
+                    reflectionRepository = reflectionRepository,
+                    clock = clock
+                )
             }
         }
     }

@@ -53,4 +53,25 @@ class ReflectionRepositoryImpl(
             Result.Failure(e)
         }
     }
+
+    override suspend fun getReflectionsForDateRange(userId: String, startTime: Long, endTime: Long): Result<List<Reflection>, Exception> = withContext(Dispatchers.IO) {
+        try {
+            val entities = dao.getReflectionsForDateRange(userId, startTime, endTime)
+            val domainModels = entities.map { entity ->
+                Reflection(
+                    id = entity.id,
+                    userId = entity.userId,
+                    targetEntityId = entity.targetEntityId,
+                    targetEntityType = entity.targetEntityType,
+                    content = entity.content,
+                    sentiment = entity.sentiment,
+                    createdAt = entity.createdAt,
+                    schemaVersion = entity.schemaVersion
+                )
+            }
+            Result.Success(domainModels)
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
 }

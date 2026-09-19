@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -45,6 +46,7 @@ private fun IronMindBottomBar(
         val destinations = listOf(
             Triple(Route.Today.path, "Today", Icons.Default.DateRange),
             Triple(Route.Goals.path, "Goals", Icons.Default.List),
+            Triple(Route.History.path, "History", Icons.Default.Info),
             Triple(Route.Settings.path, "Settings", Icons.Default.Settings)
         )
 

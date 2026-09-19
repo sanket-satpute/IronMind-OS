@@ -85,6 +85,9 @@ interface IronMindDao {
 
     @Query("SELECT * FROM reflection WHERE id = :id LIMIT 1")
     fun getReflection(id: String): ReflectionEntity?
+
+    @Query("SELECT * FROM reflection WHERE userId = :userId AND createdAt >= :startTime AND createdAt <= :endTime ORDER BY createdAt DESC")
+    fun getReflectionsForDateRange(userId: String, startTime: Long, endTime: Long): List<ReflectionEntity>
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertProtectionRule(rule: ProtectionRuleEntity)
