@@ -3,10 +3,12 @@ package com.sanket_satpute_20.ironmind.domain.usecase.protection
 import com.sanket_satpute_20.ironmind.domain.common.Clock
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.ProtectionSessionStatus
+import com.sanket_satpute_20.ironmind.domain.provider.AppProtectionProvider
 import com.sanket_satpute_20.ironmind.domain.repository.ProtectionRepository
 
 class StopProtectionSessionUseCase(
     private val protectionRepository: ProtectionRepository,
+    private val protectionProvider: AppProtectionProvider,
     private val clock: Clock
 ) {
     suspend operator fun invoke(
@@ -39,6 +41,7 @@ class StopProtectionSessionUseCase(
 
         val saveResult = protectionRepository.saveProtectionSession(updatedSession)
         return if (saveResult is Result.Success) {
+            protectionProvider.removeProtection()
             println("IronMindLifecycle [Protection] [SESSION_ENDED] sessionId=${session.id} status=${finalStatus.name}")
             Result.Success(Unit)
         } else {

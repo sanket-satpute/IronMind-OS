@@ -13,6 +13,8 @@ import com.sanket_satpute_20.ironmind.domain.usecase.commitment.UpdateCommitment
 import com.sanket_satpute_20.ironmind.domain.repository.ProtectionRepository
 import com.sanket_satpute_20.ironmind.domain.usecase.protection.StartProtectionSessionUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.protection.StopProtectionSessionUseCase
+import com.sanket_satpute_20.ironmind.domain.provider.AppProtectionProvider
+import com.sanket_satpute_20.ironmind.data.provider.AndroidAppProtectionProvider
 import java.util.UUID
 
 interface AppContainer {
@@ -23,6 +25,7 @@ interface AppContainer {
     val protectionRepository: ProtectionRepository
     val startProtectionSessionUseCase: StartProtectionSessionUseCase
     val stopProtectionSessionUseCase: StopProtectionSessionUseCase
+    val appProtectionProvider: AppProtectionProvider
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -63,11 +66,24 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         com.sanket_satpute_20.ironmind.data.repository.ProtectionRepositoryImpl(database.ironMindDao())
     }
 
+    override val appProtectionProvider: AppProtectionProvider by lazy {
+        AndroidAppProtectionProvider(context)
+    }
+
     override val startProtectionSessionUseCase: StartProtectionSessionUseCase by lazy {
-        StartProtectionSessionUseCase(protectionRepository, idGenerator, clock)
+        StartProtectionSessionUseCase(
+            protectionRepository, 
+            appProtectionProvider,
+            idGenerator, 
+            clock
+        )
     }
 
     override val stopProtectionSessionUseCase: StopProtectionSessionUseCase by lazy {
-        StopProtectionSessionUseCase(protectionRepository, clock)
+        StopProtectionSessionUseCase(
+            protectionRepository, 
+            appProtectionProvider,
+            clock
+        )
     }
 }

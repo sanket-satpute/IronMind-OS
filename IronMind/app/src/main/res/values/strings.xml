@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">IronMind</string>
+    <string name="accessibility_service_description">IronMind Protection Service blocks distracting apps during active sessions.</string>
 </resources>

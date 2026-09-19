@@ -6,6 +6,8 @@ import com.sanket_satpute_20.ironmind.domain.model.ProtectionSession
 import com.sanket_satpute_20.ironmind.domain.model.ProtectionSessionStatus
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeProtectionRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeAppProtectionProvider
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -15,14 +17,20 @@ import org.junit.Test
 class StopProtectionSessionUseCaseTest {
 
     private lateinit var protectionRepository: FakeProtectionRepository
+    private lateinit var protectionProvider: FakeAppProtectionProvider
     private lateinit var clock: FakeClock
     private lateinit var stopProtectionSessionUseCase: StopProtectionSessionUseCase
 
     @Before
     fun setup() {
         protectionRepository = FakeProtectionRepository()
-        clock = FakeClock()
-        stopProtectionSessionUseCase = StopProtectionSessionUseCase(protectionRepository, clock)
+        protectionProvider = FakeAppProtectionProvider()
+        clock = FakeClock(1000L)
+        stopProtectionSessionUseCase = StopProtectionSessionUseCase(
+            protectionRepository = protectionRepository,
+            protectionProvider = protectionProvider,
+            clock = clock
+        )
     }
 
     @Test
