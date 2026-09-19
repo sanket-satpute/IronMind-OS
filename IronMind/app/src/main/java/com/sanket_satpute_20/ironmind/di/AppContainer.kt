@@ -66,6 +66,11 @@ import com.sanket_satpute_20.ironmind.domain.engine.ContextEngine
 import com.sanket_satpute_20.ironmind.domain.engine.ContextEngineImpl
 import java.util.UUID
 
+import com.sanket_satpute_20.ironmind.domain.engine.PatternEngine
+import com.sanket_satpute_20.ironmind.domain.engine.PatternEngineImpl
+import com.sanket_satpute_20.ironmind.domain.repository.PatternRepository
+import com.sanket_satpute_20.ironmind.data.repository.PatternRepositoryImpl
+
 interface AppContainer {
     val goalRepository: GoalRepository
     val commitmentRepository: CommitmentRepository
@@ -110,6 +115,8 @@ interface AppContainer {
     val syncUseCase: SyncUseCase
     val observationRepository: ObservationRepository
     val contextEngine: ContextEngine
+    val patternRepository: PatternRepository
+    val patternEngine: PatternEngine
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -125,7 +132,9 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             "ironmind_database"
         ).addMigrations(
             IronMindDatabase.MIGRATION_1_2,
-            IronMindDatabase.MIGRATION_2_3
+            IronMindDatabase.MIGRATION_2_3,
+            IronMindDatabase.MIGRATION_3_4,
+            IronMindDatabase.MIGRATION_4_5
         ).build()
     }
     
@@ -324,6 +333,17 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             reflectionRepository = reflectionRepository,
             protectionRepository = protectionRepository,
             goalRepository = goalRepository
+        )
+    }
+
+    override val patternRepository: PatternRepository by lazy {
+        PatternRepositoryImpl(database.patternDao())
+    }
+
+    override val patternEngine: PatternEngine by lazy {
+        PatternEngineImpl(
+            clock = clock,
+            patternRepository = patternRepository
         )
     }
 }

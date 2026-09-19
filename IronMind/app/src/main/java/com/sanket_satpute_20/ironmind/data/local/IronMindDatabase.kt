@@ -23,15 +23,17 @@ import com.sanket_satpute_20.ironmind.data.local.entity.*
         EventEntity::class,
         MemoryEntity::class,
         OutboxEntity::class,
-        ObservationEntity::class
+        ObservationEntity::class,
+        com.sanket_satpute_20.ironmind.data.local.entity.PatternEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class IronMindDatabase : RoomDatabase() {
     abstract fun ironMindDao(): IronMindDao
     abstract fun outboxDao(): OutboxDao
     abstract fun observationDao(): ObservationDao
+    abstract fun patternDao(): com.sanket_satpute_20.ironmind.data.local.dao.PatternDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -108,6 +110,34 @@ abstract class IronMindDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
                 println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=4")
+            }
+        }
+        
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `patterns` (
+                        `id` TEXT NOT NULL, 
+                        `userId` TEXT NOT NULL, 
+                        `type` TEXT NOT NULL, 
+                        `description` TEXT NOT NULL, 
+                        `conditions` TEXT, 
+                        `predictedBehavior` TEXT, 
+                        `confidence` REAL NOT NULL, 
+                        `evidenceCount` INTEGER NOT NULL, 
+                        `evidenceReferences` TEXT, 
+                        `firstObservedAt` INTEGER NOT NULL, 
+                        `lastObservedAt` INTEGER NOT NULL, 
+                        `status` TEXT NOT NULL, 
+                        `confirmationState` TEXT NOT NULL, 
+                        `createdAt` INTEGER NOT NULL, 
+                        `updatedAt` INTEGER NOT NULL, 
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=5")
             }
         }
     }

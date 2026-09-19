@@ -1,0 +1,14 @@
+package com.sanket_satpute_20.ironmind.domain.model.pattern
+
+enum class PatternType {
+    POSTPONEMENT_PATTERN,
+    COMPLETION_PATTERN,
+    DISTRACTION_PATTERN,
+    TIME_PATTERN,
+    CONTEXT_PATTERN,
+    SOCIAL_PATTERN,
+    ENERGY_PATTERN,
+    TASK_SIZE_PATTERN,
+    INTERVENTION_RESPONSE_PATTERN,
+    SUCCESS_CONDITION_PATTERN
+}
