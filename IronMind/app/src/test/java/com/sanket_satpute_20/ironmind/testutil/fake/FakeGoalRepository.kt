@@ -24,6 +24,11 @@ class FakeGoalRepository : GoalRepository {
         return Result.Success(goals.values.filter { it.userId == userId }.sortedByDescending { it.createdAt })
     }
 
+    override suspend fun searchGoals(userId: String, query: String): Result<List<Goal>, Exception> {
+        if (shouldFail) return Result.Failure(Exception("Fake failure"))
+        return Result.Success(goals.values.filter { it.userId == userId && (it.title.contains(query, ignoreCase = true) || it.description?.contains(query, ignoreCase = true) == true) }.sortedByDescending { it.createdAt })
+    }
+
     fun clear() {
         goals.clear()
     }

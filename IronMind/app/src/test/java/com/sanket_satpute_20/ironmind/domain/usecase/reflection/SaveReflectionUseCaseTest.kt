@@ -28,6 +28,11 @@ class FakeReflectionRepository : ReflectionRepository {
         val list = reflections.values.filter { it.userId == userId && it.createdAt in startTime..endTime }
         return Result.Success(list)
     }
+
+    override suspend fun searchReflections(userId: String, query: String): Result<List<Reflection>, Exception> {
+        val list = reflections.values.filter { it.userId == userId && it.content.contains(query, ignoreCase = true) }.sortedByDescending { it.createdAt }
+        return Result.Success(list)
+    }
 }
 
 class SaveReflectionUseCaseTest {

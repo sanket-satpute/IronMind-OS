@@ -14,8 +14,35 @@ class GetTimelineUseCase(
     private val reflectionRepository: ReflectionRepository,
     private val goalRepository: GoalRepository
 ) {
-    suspend operator fun invoke(userId: String): Result<List<TimelineItem>, Exception> {
-        val eventsResult = eventRepository.getEventsForUser(userId)
+    suspend operator fun invoke(
+        userId: String,
+        goalId: String? = null,
+        commitmentId: String? = null,
+        reflectionId: String? = null,
+        memoryId: String? = null,
+        eventId: String? = null,
+        startTime: Long? = null,
+        endTime: Long? = null
+    ): Result<List<TimelineItem>, Exception> {
+        val eventsResult = if (startTime != null && endTime != null) {
+            eventRepository.getEventsForDateRange(userId, startTime, endTime)
+        } else if (eventId != null) {
+            when (val res = eventRepository.getEvent(eventId)) {
+                is Result.Success -> Result.Success(res.data?.let { listOf(it) } ?: emptyList())
+                is Result.Failure -> Result.Failure(res.error)
+            }
+        } else if (goalId != null) {
+            eventRepository.getEventsForEntity(goalId)
+        } else if (commitmentId != null) {
+            eventRepository.getEventsForEntity(commitmentId)
+        } else if (reflectionId != null) {
+            eventRepository.getEventsForEntity(reflectionId)
+        } else if (memoryId != null) {
+            eventRepository.getEventsForEntity(memoryId)
+        } else {
+            eventRepository.getEventsForUser(userId)
+        }
+
         if (eventsResult is Result.Failure) {
             return Result.Failure(eventsResult.error)
         }

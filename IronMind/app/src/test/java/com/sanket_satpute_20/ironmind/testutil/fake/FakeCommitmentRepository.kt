@@ -64,6 +64,11 @@ class FakeCommitmentRepository : CommitmentRepository {
         return Result.Success(commitments.values.filter { it.taskId == taskId }.sortedBy { it.createdAt })
     }
 
+    override suspend fun searchCommitments(userId: String, query: String): Result<List<Commitment>, Exception> {
+        if (shouldFail) return Result.Failure(Exception("Fake failure"))
+        return Result.Success(commitments.values.filter { it.userId == userId && (it.title.contains(query, ignoreCase = true) || it.description?.contains(query, ignoreCase = true) == true) }.sortedByDescending { it.createdAt })
+    }
+
     fun clear() {
         commitments.clear()
     }

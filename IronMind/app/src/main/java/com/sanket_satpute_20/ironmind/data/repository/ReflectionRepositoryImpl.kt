@@ -74,4 +74,25 @@ class ReflectionRepositoryImpl(
             Result.Failure(e)
         }
     }
+
+    override suspend fun searchReflections(userId: String, query: String): Result<List<Reflection>, Exception> = withContext(Dispatchers.IO) {
+        try {
+            val entities = dao.searchReflections(userId, query)
+            val domainModels = entities.map { entity ->
+                Reflection(
+                    id = entity.id,
+                    userId = entity.userId,
+                    targetEntityId = entity.targetEntityId,
+                    targetEntityType = entity.targetEntityType,
+                    content = entity.content,
+                    sentiment = entity.sentiment,
+                    createdAt = entity.createdAt,
+                    schemaVersion = entity.schemaVersion
+                )
+            }
+            Result.Success(domainModels)
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
 }

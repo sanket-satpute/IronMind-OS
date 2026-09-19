@@ -44,4 +44,20 @@ class MemoryRepositoryImpl(
             Result.Failure(e)
         }
     }
+
+    override suspend fun getMemoriesForDateRange(userId: String, startTime: Long, endTime: Long): Result<List<Memory>, Exception> = withContext(Dispatchers.IO) {
+        try {
+            Result.Success(dao.getMemoriesForDateRange(userId, startTime, endTime).map { it.toDomain() })
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
+
+    override suspend fun searchMemories(userId: String, query: String): Result<List<Memory>, Exception> = withContext(Dispatchers.IO) {
+        try {
+            Result.Success(dao.searchMemories(userId, query).map { it.toDomain() })
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
 }

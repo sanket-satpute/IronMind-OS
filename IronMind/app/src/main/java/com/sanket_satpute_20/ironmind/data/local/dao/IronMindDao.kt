@@ -127,4 +127,30 @@ interface IronMindDao {
 
     @Query("SELECT * FROM memory WHERE userId = :userId AND status NOT IN ('EXPIRED', 'DELETED') ORDER BY confidence DESC")
     fun getActiveMemoriesForUser(userId: String): List<MemoryEntity>
+
+    // Search and Retrieval (V1.8)
+
+    @Query("SELECT * FROM goal WHERE userId = :userId AND (title LIKE '%' || :query || '%' OR description LIKE '%' || :query || '%') ORDER BY createdAt DESC")
+    fun searchGoals(userId: String, query: String): List<GoalEntity>
+
+    @Query("SELECT * FROM commitment WHERE userId = :userId AND (title LIKE '%' || :query || '%' OR description LIKE '%' || :query || '%') ORDER BY createdAt DESC")
+    fun searchCommitments(userId: String, query: String): List<CommitmentEntity>
+
+    @Query("SELECT * FROM reflection WHERE userId = :userId AND content LIKE '%' || :query || '%' ORDER BY createdAt DESC")
+    fun searchReflections(userId: String, query: String): List<ReflectionEntity>
+
+    @Query("SELECT * FROM memory WHERE userId = :userId AND content LIKE '%' || :query || '%' ORDER BY createdAt DESC")
+    fun searchMemories(userId: String, query: String): List<MemoryEntity>
+
+    @Query("SELECT * FROM events WHERE userId = :userId AND (type LIKE '%' || :query || '%' OR metadata LIKE '%' || :query || '%') ORDER BY occurredAt DESC")
+    fun searchEvents(userId: String, query: String): List<EventEntity>
+
+    @Query("SELECT * FROM events WHERE id = :id LIMIT 1")
+    fun getEvent(id: String): EventEntity?
+
+    @Query("SELECT * FROM events WHERE userId = :userId AND occurredAt >= :startTime AND occurredAt <= :endTime ORDER BY occurredAt DESC")
+    fun getEventsForDateRange(userId: String, startTime: Long, endTime: Long): List<EventEntity>
+
+    @Query("SELECT * FROM memory WHERE userId = :userId AND createdAt >= :startTime AND createdAt <= :endTime ORDER BY createdAt DESC")
+    fun getMemoriesForDateRange(userId: String, startTime: Long, endTime: Long): List<MemoryEntity>
 }

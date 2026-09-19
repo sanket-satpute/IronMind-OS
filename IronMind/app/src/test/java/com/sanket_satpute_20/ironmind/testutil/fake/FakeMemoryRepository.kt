@@ -28,4 +28,12 @@ class FakeMemoryRepository : MemoryRepository {
         }
         return Result.Success(active)
     }
+
+    override suspend fun getMemoriesForDateRange(userId: String, startTime: Long, endTime: Long): Result<List<Memory>, Exception> {
+        return Result.Success(memories.values.filter { it.userId == userId && it.createdAt in startTime..endTime })
+    }
+
+    override suspend fun searchMemories(userId: String, query: String): Result<List<Memory>, Exception> {
+        return Result.Success(memories.values.filter { it.userId == userId && it.content.contains(query, ignoreCase = true) })
+    }
 }

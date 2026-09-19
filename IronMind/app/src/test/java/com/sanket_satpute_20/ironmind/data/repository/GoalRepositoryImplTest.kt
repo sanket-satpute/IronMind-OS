@@ -67,6 +67,14 @@ class GoalRepositoryImplTest {
         override fun getMemoryById(id: String): MemoryEntity? = null
         override fun getMemoriesForUser(userId: String): List<MemoryEntity> = emptyList()
         override fun getActiveMemoriesForUser(userId: String): List<MemoryEntity> = emptyList()
+        override fun searchGoals(userId: String, query: String): List<GoalEntity> = emptyList()
+        override fun searchCommitments(userId: String, query: String): List<CommitmentEntity> = emptyList()
+        override fun searchReflections(userId: String, query: String): List<ReflectionEntity> = emptyList()
+        override fun searchMemories(userId: String, query: String): List<MemoryEntity> = emptyList()
+        override fun searchEvents(userId: String, query: String): List<EventEntity> = emptyList()
+        override fun getEvent(id: String): EventEntity? = null
+        override fun getEventsForDateRange(userId: String, startTime: Long, endTime: Long): List<EventEntity> = emptyList()
+        override fun getMemoriesForDateRange(userId: String, startTime: Long, endTime: Long): List<MemoryEntity> = emptyList()
     }
 
     @Before

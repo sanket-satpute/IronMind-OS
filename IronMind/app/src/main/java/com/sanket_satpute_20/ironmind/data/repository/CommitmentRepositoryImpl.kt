@@ -105,6 +105,17 @@ class CommitmentRepositoryImpl(
         }
     }
 
+    override suspend fun searchCommitments(userId: String, query: String): Result<List<Commitment>, Exception> {
+        return try {
+            val entities = withContext(Dispatchers.IO) {
+                dao.searchCommitments(userId, query)
+            }
+            Result.Success(entities.map { it.toDomain() })
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
+
     private fun Commitment.toEntity(): CommitmentEntity {
         return CommitmentEntity(
             id = id,

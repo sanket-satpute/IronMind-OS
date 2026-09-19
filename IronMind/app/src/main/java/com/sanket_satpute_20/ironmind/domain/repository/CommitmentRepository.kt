@@ -13,4 +13,5 @@ interface CommitmentRepository : Repository {
     suspend fun getCommitmentsForGoal(goalId: String): Result<List<Commitment>, Exception>
     suspend fun getCommitmentsForPlan(planId: String): Result<List<Commitment>, Exception>
     suspend fun getCommitmentsForTask(taskId: String): Result<List<Commitment>, Exception>
+    suspend fun searchCommitments(userId: String, query: String): Result<List<Commitment>, Exception>
 }

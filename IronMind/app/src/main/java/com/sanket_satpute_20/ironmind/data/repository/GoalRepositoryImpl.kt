@@ -46,6 +46,17 @@ class GoalRepositoryImpl(
         }
     }
 
+    override suspend fun searchGoals(userId: String, query: String): Result<List<Goal>, Exception> {
+        return try {
+            val entities = withContext(Dispatchers.IO) {
+                dao.searchGoals(userId, query)
+            }
+            Result.Success(entities.map { it.toDomain() })
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
+
     private fun Goal.toEntity(): GoalEntity {
         return GoalEntity(
             id = id,

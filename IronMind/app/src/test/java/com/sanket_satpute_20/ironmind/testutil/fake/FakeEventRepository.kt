@@ -24,4 +24,19 @@ class FakeEventRepository : EventRepository {
         if (shouldFail) return Result.Failure(Exception("Fake failure"))
         return Result.Success(events.values.filter { it.userId == userId }.sortedBy { it.occurredAt })
     }
+
+    override suspend fun getEvent(id: String): Result<Event?, Exception> {
+        if (shouldFail) return Result.Failure(Exception("Fake failure"))
+        return Result.Success(events[id])
+    }
+
+    override suspend fun getEventsForDateRange(userId: String, startTime: Long, endTime: Long): Result<List<Event>, Exception> {
+        if (shouldFail) return Result.Failure(Exception("Fake failure"))
+        return Result.Success(events.values.filter { it.userId == userId && it.occurredAt in startTime..endTime }.sortedBy { it.occurredAt })
+    }
+
+    override suspend fun searchEvents(userId: String, query: String): Result<List<Event>, Exception> {
+        if (shouldFail) return Result.Failure(Exception("Fake failure"))
+        return Result.Success(events.values.filter { it.userId == userId && (it.type.name.contains(query, ignoreCase = true) || it.metadata?.contains(query, ignoreCase = true) == true) }.sortedByDescending { it.occurredAt })
+    }
 }

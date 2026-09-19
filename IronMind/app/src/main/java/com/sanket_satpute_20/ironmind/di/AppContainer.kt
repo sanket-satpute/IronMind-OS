@@ -42,6 +42,11 @@ import com.sanket_satpute_20.ironmind.domain.usecase.memory.CorrectMemoryUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.memory.WeakenMemoryUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.memory.ExpireMemoryUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.goal.EditGoalUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetCommitmentUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.reflection.GetReflectionUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.memory.GetMemoryUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.history.GetEventUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.search.LocalSearchUseCase
 import java.util.UUID
 
 interface AppContainer {
@@ -56,6 +61,11 @@ interface AppContainer {
     val editGoalUseCase: EditGoalUseCase
     val getActiveCommitmentsUseCase: GetActiveCommitmentsUseCase
     val getCommitmentsForDateRangeUseCase: GetCommitmentsForDateRangeUseCase
+    val getCommitmentUseCase: GetCommitmentUseCase
+    val getReflectionUseCase: GetReflectionUseCase
+    val getMemoryUseCase: GetMemoryUseCase
+    val getEventUseCase: GetEventUseCase
+    val localSearchUseCase: LocalSearchUseCase
     val updateCommitmentStatusUseCase: UpdateCommitmentStatusUseCase
     val saveReflectionUseCase: SaveReflectionUseCase
     val protectionRepository: ProtectionRepository
@@ -151,6 +161,26 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val getCommitmentsForDateRangeUseCase: GetCommitmentsForDateRangeUseCase by lazy {
         GetCommitmentsForDateRangeUseCase(commitmentRepository)
+    }
+
+    override val getCommitmentUseCase: GetCommitmentUseCase by lazy {
+        GetCommitmentUseCase(commitmentRepository)
+    }
+
+    override val getReflectionUseCase: GetReflectionUseCase by lazy {
+        GetReflectionUseCase(reflectionRepository)
+    }
+
+    override val getMemoryUseCase: GetMemoryUseCase by lazy {
+        GetMemoryUseCase(memoryRepository)
+    }
+
+    override val getEventUseCase: GetEventUseCase by lazy {
+        GetEventUseCase(eventRepository)
+    }
+
+    override val localSearchUseCase: LocalSearchUseCase by lazy {
+        LocalSearchUseCase(goalRepository, commitmentRepository, reflectionRepository, memoryRepository, eventRepository)
     }
 
     override val updateCommitmentStatusUseCase: UpdateCommitmentStatusUseCase by lazy {
