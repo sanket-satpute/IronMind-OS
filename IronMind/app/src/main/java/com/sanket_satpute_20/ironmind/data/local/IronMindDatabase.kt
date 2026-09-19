@@ -5,6 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.sanket_satpute_20.ironmind.data.local.dao.IronMindDao
+import com.sanket_satpute_20.ironmind.data.local.dao.ObservationDao
 import com.sanket_satpute_20.ironmind.data.local.dao.OutboxDao
 import com.sanket_satpute_20.ironmind.data.local.entity.*
 
@@ -21,14 +22,16 @@ import com.sanket_satpute_20.ironmind.data.local.entity.*
         ProtectionSessionEntity::class,
         EventEntity::class,
         MemoryEntity::class,
-        OutboxEntity::class
+        OutboxEntity::class,
+        ObservationEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class IronMindDatabase : RoomDatabase() {
     abstract fun ironMindDao(): IronMindDao
     abstract fun outboxDao(): OutboxDao
+    abstract fun observationDao(): ObservationDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -78,6 +81,33 @@ abstract class IronMindDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
                 println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=3")
+            }
+        }
+
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `observations` (
+                        `id` TEXT NOT NULL,
+                        `userId` TEXT NOT NULL,
+                        `type` TEXT NOT NULL,
+                        `source` TEXT NOT NULL,
+                        `occurredAt` INTEGER NOT NULL,
+                        `recordedAt` INTEGER NOT NULL,
+                        `subjectId` TEXT,
+                        `value` TEXT NOT NULL,
+                        `context` TEXT NOT NULL,
+                        `confidence` REAL,
+                        `provenanceSource` TEXT NOT NULL,
+                        `provenanceSourceReference` TEXT,
+                        `provenanceCapturedAt` INTEGER NOT NULL,
+                        `schemaVersion` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=4")
             }
         }
     }

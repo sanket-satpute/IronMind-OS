@@ -60,6 +60,8 @@ import com.sanket_satpute_20.ironmind.domain.repository.SyncRepository
 import com.sanket_satpute_20.ironmind.data.repository.FirestoreSyncRepository
 import com.sanket_satpute_20.ironmind.data.sync.SyncOrchestrator
 import com.sanket_satpute_20.ironmind.domain.usecase.sync.SyncUseCase
+import com.sanket_satpute_20.ironmind.domain.repository.ObservationRepository
+import com.sanket_satpute_20.ironmind.data.repository.ObservationRepositoryImpl
 import java.util.UUID
 
 interface AppContainer {
@@ -104,6 +106,7 @@ interface AppContainer {
     val syncRepository: SyncRepository
     val syncOrchestrator: SyncOrchestrator
     val syncUseCase: SyncUseCase
+    val observationRepository: ObservationRepository
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -303,6 +306,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val syncUseCase: SyncUseCase by lazy {
         SyncUseCase(syncOrchestrator)
+    }
+
+    override val observationRepository: ObservationRepository by lazy {
+        ObservationRepositoryImpl(database.observationDao())
     }
 }
 
