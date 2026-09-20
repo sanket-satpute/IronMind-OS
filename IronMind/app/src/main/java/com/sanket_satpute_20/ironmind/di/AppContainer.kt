@@ -46,6 +46,7 @@ import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetCommitmentUse
 import com.sanket_satpute_20.ironmind.domain.usecase.reflection.GetReflectionUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.memory.GetMemoryUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.pattern.LearnInterventionResponsePatternUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.pattern.LearnInterventionTimingPatternUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.history.GetEventUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.search.LocalSearchUseCase
 import com.sanket_satpute_20.ironmind.domain.repository.AuthRepository
@@ -123,6 +124,7 @@ interface AppContainer {
     val signOutUseCase: SignOutUseCase
     val updateCommitmentStatusUseCase: UpdateCommitmentStatusUseCase
     val learnInterventionResponsePatternUseCase: LearnInterventionResponsePatternUseCase
+    val learnInterventionTimingPatternUseCase: LearnInterventionTimingPatternUseCase
     val saveReflectionUseCase: SaveReflectionUseCase
     val protectionRepository: ProtectionRepository
     val startProtectionSessionUseCase: StartProtectionSessionUseCase
@@ -665,6 +667,16 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val learnInterventionResponsePatternUseCase: LearnInterventionResponsePatternUseCase by lazy {
         LearnInterventionResponsePatternUseCase(
+            interventionRepository = interventionRepository,
+            patternRepository = patternRepository,
+            ironMindAI = ironMindAI,
+            clock = clock,
+            idGenerator = idGenerator
+        )
+    }
+
+    override val learnInterventionTimingPatternUseCase: LearnInterventionTimingPatternUseCase by lazy {
+        LearnInterventionTimingPatternUseCase(
             interventionRepository = interventionRepository,
             patternRepository = patternRepository,
             ironMindAI = ironMindAI,
