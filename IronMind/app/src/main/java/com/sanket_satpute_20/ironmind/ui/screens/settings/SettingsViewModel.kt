@@ -12,6 +12,9 @@ import com.sanket_satpute_20.ironmind.domain.usecase.autonomy.ToggleGlobalPauseU
 import com.sanket_satpute_20.ironmind.domain.usecase.observation.GetAppUsageObservationSettingsUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.observation.SetAppUsageObservationEnabledUseCase
 import com.sanket_satpute_20.ironmind.domain.provider.AppUsageObservationProvider
+import com.sanket_satpute_20.ironmind.domain.usecase.observation.GetNotificationObservationSettingsUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.observation.SetNotificationObservationEnabledUseCase
+import com.sanket_satpute_20.ironmind.domain.provider.NotificationObservationProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +24,8 @@ data class SettingsUiState(
     val isGlobalPauseActive: Boolean = false,
     val isAppUsageObservationEnabled: Boolean = false,
     val isAppUsagePermissionGranted: Boolean = false,
+    val isNotificationObservationEnabled: Boolean = false,
+    val isNotificationPermissionGranted: Boolean = false,
     val isLoading: Boolean = true,
     val errorMessage: String? = null
 )
@@ -30,7 +35,10 @@ class SettingsViewModel(
     private val toggleGlobalPauseUseCase: ToggleGlobalPauseUseCase,
     private val getAppUsageObservationSettingsUseCase: GetAppUsageObservationSettingsUseCase,
     private val setAppUsageObservationEnabledUseCase: SetAppUsageObservationEnabledUseCase,
-    private val appUsageObservationProvider: AppUsageObservationProvider
+    private val appUsageObservationProvider: AppUsageObservationProvider,
+    private val getNotificationObservationSettingsUseCase: GetNotificationObservationSettingsUseCase,
+    private val setNotificationObservationEnabledUseCase: SetNotificationObservationEnabledUseCase,
+    private val notificationObservationProvider: NotificationObservationProvider
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -48,14 +56,22 @@ class SettingsViewModel(
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
             val autonomyResult = getAutonomySettingsUseCase(currentUserId)
             val appUsageResult = getAppUsageObservationSettingsUseCase(currentUserId)
+            val notificationResult = getNotificationObservationSettingsUseCase(currentUserId)
+            
             val isGlobalPaused = if (autonomyResult is Result.Success) autonomyResult.data.isGlobalPauseActive else false
             val isAppUsageEnabled = if (appUsageResult is Result.Success) appUsageResult.data.isEnabled else false
-            val isPermissionGranted = appUsageObservationProvider.isPermissionGranted()
-            println("IronMindLifecycle [Settings] [LOADED] userId=$currentUserId isGlobalPauseActive=$isGlobalPaused isAppUsageEnabled=$isAppUsageEnabled permissionGranted=$isPermissionGranted")
+            val isAppUsagePermissionGranted = appUsageObservationProvider.isPermissionGranted()
+            
+            val isNotificationEnabled = if (notificationResult is Result.Success) notificationResult.data.isEnabled else false
+            val isNotificationPermissionGranted = notificationObservationProvider.isPermissionGranted()
+            
+            println("IronMindLifecycle [Settings] [LOADED] userId=$currentUserId isGlobalPauseActive=$isGlobalPaused isAppUsageEnabled=$isAppUsageEnabled isNotificationEnabled=$isNotificationEnabled")
             _uiState.value = SettingsUiState(
                 isGlobalPauseActive = isGlobalPaused,
                 isAppUsageObservationEnabled = isAppUsageEnabled,
-                isAppUsagePermissionGranted = isPermissionGranted,
+                isAppUsagePermissionGranted = isAppUsagePermissionGranted,
+                isNotificationObservationEnabled = isNotificationEnabled,
+                isNotificationPermissionGranted = isNotificationPermissionGranted,
                 isLoading = false
             )
         }
@@ -92,6 +108,21 @@ class SettingsViewModel(
         }
     }
 
+    fun setNotificationObservationEnabled(isEnabled: Boolean) {
+        viewModelScope.launch {
+            when (val result = setNotificationObservationEnabledUseCase(currentUserId, isEnabled)) {
+                is Result.Success -> {
+                    _uiState.value = _uiState.value.copy(isNotificationObservationEnabled = isEnabled, errorMessage = null)
+                }
+                is Result.Failure -> {
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = result.error.message ?: "Failed to update notification observation setting"
+                    )
+                }
+            }
+        }
+    }
+
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -102,7 +133,10 @@ class SettingsViewModel(
                     toggleGlobalPauseUseCase = container.toggleGlobalPauseUseCase,
                     getAppUsageObservationSettingsUseCase = container.getAppUsageObservationSettingsUseCase,
                     setAppUsageObservationEnabledUseCase = container.setAppUsageObservationEnabledUseCase,
-                    appUsageObservationProvider = container.appUsageObservationProvider
+                    appUsageObservationProvider = container.appUsageObservationProvider,
+                    getNotificationObservationSettingsUseCase = container.getNotificationObservationSettingsUseCase,
+                    setNotificationObservationEnabledUseCase = container.setNotificationObservationEnabledUseCase,
+                    notificationObservationProvider = container.notificationObservationProvider
                 )
             }
         }

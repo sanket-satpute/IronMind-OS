@@ -86,6 +86,13 @@ import com.sanket_satpute_20.ironmind.domain.engine.DecisionEngineImpl
 import com.sanket_satpute_20.ironmind.domain.repository.AppUsageObservationSettingsRepository
 import com.sanket_satpute_20.ironmind.data.repository.AppUsageObservationSettingsRepositoryImpl
 import com.sanket_satpute_20.ironmind.domain.provider.AppUsageObservationProvider
+import com.sanket_satpute_20.ironmind.domain.provider.NotificationObservationProvider
+import com.sanket_satpute_20.ironmind.data.provider.AndroidNotificationObservationProvider
+import com.sanket_satpute_20.ironmind.domain.repository.NotificationObservationSettingsRepository
+import com.sanket_satpute_20.ironmind.data.repository.NotificationObservationSettingsRepositoryImpl
+import com.sanket_satpute_20.ironmind.domain.usecase.observation.GetNotificationObservationSettingsUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.observation.SetNotificationObservationEnabledUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.observation.HandleIncomingNotificationUseCase
 import com.sanket_satpute_20.ironmind.data.provider.AndroidAppUsageObservationProvider
 import com.sanket_satpute_20.ironmind.domain.usecase.observation.GetAppUsageObservationSettingsUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.observation.SetAppUsageObservationEnabledUseCase
@@ -164,6 +171,13 @@ interface AppContainer {
     val setAppUsageObservationEnabledUseCase: SetAppUsageObservationEnabledUseCase
     val collectAppUsageObservationsUseCase: CollectAppUsageObservationsUseCase
 
+    // V4.2 Notification Observation
+    val notificationObservationSettingsRepository: NotificationObservationSettingsRepository
+    val notificationObservationProvider: NotificationObservationProvider
+    val getNotificationObservationSettingsUseCase: GetNotificationObservationSettingsUseCase
+    val setNotificationObservationEnabledUseCase: SetNotificationObservationEnabledUseCase
+    val handleIncomingNotificationUseCase: HandleIncomingNotificationUseCase
+
     // Services
 }
 
@@ -188,7 +202,8 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             IronMindDatabase.MIGRATION_7_8,
             IronMindDatabase.MIGRATION_8_9,
             IronMindDatabase.MIGRATION_9_10,
-            IronMindDatabase.MIGRATION_10_11
+            IronMindDatabase.MIGRATION_10_11,
+            IronMindDatabase.MIGRATION_11_12
         ).build()
     }
     
@@ -198,6 +213,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     private val appUsageObservationSettingsDao: com.sanket_satpute_20.ironmind.data.local.dao.AppUsageObservationSettingsDao by lazy {
         database.appUsageObservationSettingsDao()
+    }
+
+    private val notificationObservationSettingsDao: com.sanket_satpute_20.ironmind.data.local.dao.NotificationObservationSettingsDao by lazy {
+        database.notificationObservationSettingsDao()
     }
     
     override val clock: Clock = object : Clock {
@@ -566,6 +585,32 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             settingsRepository = appUsageObservationSettingsRepository,
             observationRepository = observationRepository,
             appUsageObservationProvider = appUsageObservationProvider,
+            idGenerator = idGenerator,
+            clock = clock
+        )
+    }
+
+    // V4.2 — Notification Observation
+    override val notificationObservationSettingsRepository: NotificationObservationSettingsRepository by lazy {
+        NotificationObservationSettingsRepositoryImpl(notificationObservationSettingsDao, clock)
+    }
+
+    override val notificationObservationProvider: NotificationObservationProvider by lazy {
+        AndroidNotificationObservationProvider(context)
+    }
+
+    override val getNotificationObservationSettingsUseCase: GetNotificationObservationSettingsUseCase by lazy {
+        GetNotificationObservationSettingsUseCase(notificationObservationSettingsRepository)
+    }
+
+    override val setNotificationObservationEnabledUseCase: SetNotificationObservationEnabledUseCase by lazy {
+        SetNotificationObservationEnabledUseCase(notificationObservationSettingsRepository)
+    }
+
+    override val handleIncomingNotificationUseCase: HandleIncomingNotificationUseCase by lazy {
+        HandleIncomingNotificationUseCase(
+            notificationObservationSettingsRepository = notificationObservationSettingsRepository,
+            observationRepository = observationRepository,
             idGenerator = idGenerator,
             clock = clock
         )

@@ -21,7 +21,8 @@ fun SettingsScreen(
         modifier = modifier,
         uiState = uiState,
         onGlobalPauseToggle = { isPaused -> viewModel.setGlobalPause(isPaused) },
-        onAppUsageObservationToggle = { isEnabled -> viewModel.setAppUsageObservationEnabled(isEnabled) }
+        onAppUsageObservationToggle = { isEnabled -> viewModel.setAppUsageObservationEnabled(isEnabled) },
+        onNotificationObservationToggle = { isEnabled -> viewModel.setNotificationObservationEnabled(isEnabled) }
     )
 }
 
@@ -30,7 +31,8 @@ fun SettingsScreenContent(
     modifier: Modifier = Modifier,
     uiState: SettingsUiState,
     onGlobalPauseToggle: (Boolean) -> Unit,
-    onAppUsageObservationToggle: (Boolean) -> Unit = {}
+    onAppUsageObservationToggle: (Boolean) -> Unit = {},
+    onNotificationObservationToggle: (Boolean) -> Unit = {}
 ) {
     Column(
         modifier = modifier
@@ -144,6 +146,56 @@ fun SettingsScreenContent(
                     Switch(
                         checked = uiState.isAppUsageObservationEnabled,
                         onCheckedChange = { onAppUsageObservationToggle(it) }
+                    )
+                }
+            }
+        }
+
+        // ── Notification Observation card ───────────────────────────────────────
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "🔔 Notification Observation",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                Text(
+                    text = "Allow IronMind to observe incoming notifications to understand interruption conditions. " +
+                            "Only metadata is recorded (app name, timing) to avoid noisy notifications. " +
+                            "This is not used for surveillance.",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                if (!uiState.isNotificationPermissionGranted) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    ) {
+                        Text(
+                            text = "⚠ Permission required: Go to Settings → Apps → Special app access → Device & app notifications and grant access to IronMind.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (uiState.isNotificationObservationEnabled) "Observation ON" else "Observation OFF",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (uiState.isNotificationObservationEnabled)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Switch(
+                        checked = uiState.isNotificationObservationEnabled,
+                        onCheckedChange = { onNotificationObservationToggle(it) }
                     )
                 }
             }
