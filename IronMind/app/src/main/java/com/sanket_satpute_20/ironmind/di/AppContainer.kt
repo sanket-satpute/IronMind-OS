@@ -142,6 +142,7 @@ interface AppContainer {
     val notificationEngine: com.sanket_satpute_20.ironmind.domain.engine.NotificationEngine
     val decisionEngine: DecisionEngine
     val autoSchedulingEngine: com.sanket_satpute_20.ironmind.domain.engine.AutoSchedulingEngine
+    val autoProtectionEngine: com.sanket_satpute_20.ironmind.domain.engine.AutoProtectionEngine
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -405,6 +406,15 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         com.sanket_satpute_20.ironmind.domain.engine.AutoSchedulingEngineImpl(
             decisionEngine = decisionEngine,
             commitmentRepository = commitmentRepository,
+            logger = logger
+        )
+    }
+
+    override val autoProtectionEngine: com.sanket_satpute_20.ironmind.domain.engine.AutoProtectionEngine by lazy {
+        com.sanket_satpute_20.ironmind.domain.engine.AutoProtectionEngineImpl(
+            decisionEngine = decisionEngine,
+            startProtectionSessionUseCase = startProtectionSessionUseCase,
+            clock = com.sanket_satpute_20.ironmind.infrastructure.common.SystemClock(),
             logger = logger
         )
     }

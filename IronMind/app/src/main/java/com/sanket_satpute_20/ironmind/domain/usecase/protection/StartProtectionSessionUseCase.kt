@@ -26,7 +26,8 @@ class StartProtectionSessionUseCase(
         taskId: String? = null,
         scheduledEndAt: Long? = null,
         overrideAllowed: Boolean = true,
-        targetPackages: List<String> = emptyList()
+        targetPackages: List<String> = emptyList(),
+        source: EntitySource = EntitySource.USER
     ): Result<ProtectionSession, Exception> {
         
         if (!protectionProvider.hasRequiredPermissions()) {
@@ -44,7 +45,7 @@ class StartProtectionSessionUseCase(
             scheduledEndAt = scheduledEndAt,
             endedAt = null,
             status = ProtectionSessionStatus.ACTIVE,
-            source = EntitySource.USER,
+            source = source,
             overrideAllowed = overrideAllowed,
             createdAt = now,
             updatedAt = now
@@ -65,7 +66,7 @@ class StartProtectionSessionUseCase(
                 entityId = session.id,
                 occurredAt = now,
                 recordedAt = now,
-                source = EntitySource.USER,
+                source = source,
                 metadata = null
             )
             eventRepository.saveEvent(event)
