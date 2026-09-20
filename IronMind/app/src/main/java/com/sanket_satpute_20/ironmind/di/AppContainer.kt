@@ -77,6 +77,10 @@ import com.sanket_satpute_20.ironmind.domain.usecase.ai.GeneratePlanUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.HandleInterventionResultUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.RecommendInterventionUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.UnderstandBarriersUseCase
+import com.sanket_satpute_20.ironmind.domain.repository.AutonomySettingsRepository
+import com.sanket_satpute_20.ironmind.data.repository.AutonomySettingsRepositoryImpl
+import com.sanket_satpute_20.ironmind.domain.engine.DecisionEngine
+import com.sanket_satpute_20.ironmind.domain.engine.DecisionEngineImpl
 
 interface AppContainer {
     val goalRepository: GoalRepository
@@ -130,6 +134,8 @@ interface AppContainer {
     val recommendInterventionUseCase: RecommendInterventionUseCase
     val handleInterventionResultUseCase: HandleInterventionResultUseCase
     val ironMindAI: IronMindAI
+    val autonomySettingsRepository: AutonomySettingsRepository
+    val decisionEngine: DecisionEngine
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -182,6 +188,11 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     override val memoryRepository: MemoryRepository by lazy {
         MemoryRepositoryImpl(database.ironMindDao())
     }
+
+    override val autonomySettingsRepository: AutonomySettingsRepository by lazy {
+        AutonomySettingsRepositoryImpl(database.autonomySettingsDao(), clock)
+    }
+
 
     override val getTimelineUseCase: GetTimelineUseCase by lazy {
         GetTimelineUseCase(eventRepository, commitmentRepository, reflectionRepository, goalRepository)
@@ -357,6 +368,13 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         PatternEngineImpl(
             clock = clock,
             patternRepository = patternRepository
+        )
+    }
+
+    override val decisionEngine: DecisionEngine by lazy {
+        DecisionEngineImpl(
+            autonomySettingsRepository = autonomySettingsRepository,
+            logger = logger
         )
     }
 

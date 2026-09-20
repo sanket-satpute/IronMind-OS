@@ -7,6 +7,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.sanket_satpute_20.ironmind.data.local.dao.IronMindDao
 import com.sanket_satpute_20.ironmind.data.local.dao.ObservationDao
 import com.sanket_satpute_20.ironmind.data.local.dao.OutboxDao
+import com.sanket_satpute_20.ironmind.data.local.dao.AutonomySettingsDao
 import com.sanket_satpute_20.ironmind.data.local.entity.*
 
 @Database(
@@ -24,9 +25,10 @@ import com.sanket_satpute_20.ironmind.data.local.entity.*
         MemoryEntity::class,
         OutboxEntity::class,
         ObservationEntity::class,
-        com.sanket_satpute_20.ironmind.data.local.entity.PatternEntity::class
+        com.sanket_satpute_20.ironmind.data.local.entity.PatternEntity::class,
+        AutonomySettingsEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class IronMindDatabase : RoomDatabase() {
@@ -34,6 +36,7 @@ abstract class IronMindDatabase : RoomDatabase() {
     abstract fun outboxDao(): OutboxDao
     abstract fun observationDao(): ObservationDao
     abstract fun patternDao(): com.sanket_satpute_20.ironmind.data.local.dao.PatternDao
+    abstract fun autonomySettingsDao(): AutonomySettingsDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -138,6 +141,22 @@ abstract class IronMindDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
                 println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=5")
+            }
+        }
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `autonomy_settings` (
+                        `userId` TEXT NOT NULL,
+                        `capability` TEXT NOT NULL,
+                        `level` TEXT NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`userId`, `capability`)
+                    )
+                    """.trimIndent()
+                )
+                println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=6")
             }
         }
     }
