@@ -49,6 +49,7 @@ import com.sanket_satpute_20.ironmind.domain.usecase.pattern.LearnInterventionRe
 import com.sanket_satpute_20.ironmind.domain.usecase.pattern.LearnInterventionTimingPatternUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.intervention.SelectInterventionChannelUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.experiment.ProposeExperimentUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.model.EvolvePersonalModelUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.history.GetEventUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.search.LocalSearchUseCase
 import com.sanket_satpute_20.ironmind.domain.repository.AuthRepository
@@ -130,6 +131,7 @@ interface AppContainer {
     val learnInterventionTimingPatternUseCase: LearnInterventionTimingPatternUseCase
     val selectInterventionChannelUseCase: SelectInterventionChannelUseCase
     val proposeExperimentUseCase: ProposeExperimentUseCase
+    val evolvePersonalModelUseCase: EvolvePersonalModelUseCase
     val saveReflectionUseCase: SaveReflectionUseCase
     val protectionRepository: ProtectionRepository
     val startProtectionSessionUseCase: StartProtectionSessionUseCase
@@ -712,6 +714,14 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             ironMindAI = ironMindAI,
             idGenerator = idGenerator,
             clock = clock
+        )
+    }
+
+    override val evolvePersonalModelUseCase: EvolvePersonalModelUseCase by lazy {
+        EvolvePersonalModelUseCase(
+            ironMindAI = ironMindAI,
+            contextEngine = contextEngine,
+            patternRepository = patternRepository
         )
     }
 

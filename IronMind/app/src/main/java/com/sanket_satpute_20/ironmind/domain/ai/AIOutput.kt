@@ -1,6 +1,7 @@
 package com.sanket_satpute_20.ironmind.domain.ai
 
 import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionChannel
+import com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern
 
 /**
  * Structured output from the IronMindAI reasoning layer.
@@ -217,6 +218,20 @@ sealed class AIOutput {
         override val schemaVersion: Int = 1
     ) : AIOutput() {
         override val type: AIOutputType = AIOutputType.EXPERIMENT_PROPOSAL
+    }
+
+    /**
+     * AI evolves the personal model by generating new patterns and invalidating obsolete ones.
+     * Per Sprint V4.11.
+     */
+    data class ModelEvolution(
+        val evolvedPatterns: List<Pattern>,
+        val obsoletePatternIds: List<String>,
+        override val confidence: Float,
+        override val reasoning: String? = null,
+        override val schemaVersion: Int = 1
+    ) : AIOutput() {
+        override val type: AIOutputType = AIOutputType.MODEL_EVOLUTION
     }
 }
 
