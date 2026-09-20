@@ -10,3 +10,4 @@ IronMind is a structured Android application designed to help users move from in
 ## Development Rules
 
 All implementation must strictly follow the rules defined in `Docs/DEVELOPMENT_RULES.md` and the `Docs/IRONMIND_IMPLEMENTATION_ROADMAP.md`.
+# IronMind-OS
