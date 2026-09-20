@@ -7,9 +7,13 @@ import com.sanket_satpute_20.ironmind.domain.model.decision.CandidateAction
 import com.sanket_satpute_20.ironmind.domain.model.decision.DecisionResult
 import com.sanket_satpute_20.ironmind.domain.model.decision.EvaluationContext
 import com.sanket_satpute_20.ironmind.domain.repository.AutonomySettingsRepository
+import com.sanket_satpute_20.ironmind.domain.repository.DecisionRecordRepository
+import com.sanket_satpute_20.ironmind.domain.model.decision.DecisionRecord
+import java.util.UUID
 
 class DecisionEngineImpl(
     private val autonomySettingsRepository: AutonomySettingsRepository,
+    private val decisionRecordRepository: DecisionRecordRepository,
     private val logger: IronLogger
 ) : DecisionEngine {
 
@@ -20,18 +24,15 @@ class DecisionEngineImpl(
     ): DecisionResult {
         // 1. Hard blocks: Overrides, Cooldowns, Duplicates
         if (context.isUserOverrideActive) {
-            logDecision(candidate, DecisionResult.STAY_SILENT, "USER_OVERRIDE_ACTIVE")
-            return DecisionResult.STAY_SILENT
+            return recordAndReturnEarly(candidate, DecisionResult.STAY_SILENT, "USER_OVERRIDE_ACTIVE")
         }
         
         if (context.isCooldownActive) {
-            logDecision(candidate, DecisionResult.STAY_SILENT, "COOLDOWN_ACTIVE")
-            return DecisionResult.STAY_SILENT
+            return recordAndReturnEarly(candidate, DecisionResult.STAY_SILENT, "COOLDOWN_ACTIVE")
         }
         
         if (context.isDuplicate) {
-            logDecision(candidate, DecisionResult.STAY_SILENT, "DUPLICATE_ACTION")
-            return DecisionResult.STAY_SILENT
+            return recordAndReturnEarly(candidate, DecisionResult.STAY_SILENT, "DUPLICATE_ACTION")
         }
 
         // 2. Autonomy Settings Evaluation
@@ -55,8 +56,43 @@ class DecisionEngineImpl(
             }
         }
 
-        logDecision(candidate, finalResult, "POLICY_EVALUATED_LEVEL_${level.name}")
-        return finalResult
+        val resultToLogAndSave = finalResult
+
+        // 3. Persist Decision Record
+        val record = DecisionRecord(
+            id = UUID.randomUUID().toString(),
+            timestamp = System.currentTimeMillis(),
+            capability = candidate.capability,
+            action = "Evaluated Action", // Or candidate.action if we had one
+            autonomyLevel = level,
+            reasoning = "POLICY_EVALUATED_LEVEL_${level.name}",
+            result = resultToLogAndSave
+        )
+        
+        // This runs in place, assuming it returns fast or in CoroutineScope
+        decisionRecordRepository.saveDecision(record)
+
+        logDecision(candidate, resultToLogAndSave, "POLICY_EVALUATED_LEVEL_${level.name}")
+        return resultToLogAndSave
+    }
+
+    private suspend fun recordAndReturnEarly(
+        candidate: CandidateAction, 
+        result: DecisionResult, 
+        reason: String
+    ): DecisionResult {
+        val record = DecisionRecord(
+            id = UUID.randomUUID().toString(),
+            timestamp = System.currentTimeMillis(),
+            capability = candidate.capability,
+            action = "Evaluated Action",
+            autonomyLevel = AutonomyLevel.OFF, // Default when failing early
+            reasoning = reason,
+            result = result
+        )
+        decisionRecordRepository.saveDecision(record)
+        logDecision(candidate, result, reason)
+        return result
     }
 
     private fun logDecision(candidate: CandidateAction, result: DecisionResult, reason: String) {

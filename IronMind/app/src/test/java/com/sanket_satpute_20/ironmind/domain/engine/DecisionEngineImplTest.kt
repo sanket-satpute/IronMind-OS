@@ -6,6 +6,7 @@ import com.sanket_satpute_20.ironmind.domain.model.decision.CandidateAction
 import com.sanket_satpute_20.ironmind.domain.model.decision.DecisionResult
 import com.sanket_satpute_20.ironmind.domain.model.decision.EvaluationContext
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeAutonomySettingsRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeDecisionRecordRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeIronLogger
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -15,14 +16,16 @@ import org.junit.Test
 class DecisionEngineImplTest {
 
     private lateinit var settingsRepository: FakeAutonomySettingsRepository
+    private lateinit var recordRepository: FakeDecisionRecordRepository
     private lateinit var logger: FakeIronLogger
     private lateinit var engine: DecisionEngineImpl
 
     @Before
     fun setup() {
         settingsRepository = FakeAutonomySettingsRepository()
+        recordRepository = FakeDecisionRecordRepository()
         logger = FakeIronLogger()
-        engine = DecisionEngineImpl(settingsRepository, logger)
+        engine = DecisionEngineImpl(settingsRepository, recordRepository, logger)
     }
 
     @Test
@@ -134,5 +137,20 @@ class DecisionEngineImplTest {
         val result = engine.evaluate("user-1", candidate, context)
         
         assertEquals(DecisionResult.ASK_USER, result)
+    }
+
+    @Test
+    fun `evaluate persists DecisionRecord`() = runTest {
+        settingsRepository.updateLevel("user-1", AutonomyCapability.PLANNING, AutonomyLevel.FULL_AUTO)
+        val candidate = CandidateAction(AutonomyCapability.PLANNING, isSafe = true, isReversible = true)
+        val context = EvaluationContext(hasRequiredPermissions = true)
+
+        engine.evaluate("user-1", candidate, context)
+
+        assertEquals(1, recordRepository.savedRecords.size)
+        val record = recordRepository.savedRecords.first()
+        assertEquals(AutonomyCapability.PLANNING, record.capability)
+        assertEquals(AutonomyLevel.FULL_AUTO, record.autonomyLevel)
+        assertEquals(DecisionResult.EXECUTE, record.result)
     }
 }

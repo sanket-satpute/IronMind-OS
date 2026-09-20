@@ -79,6 +79,8 @@ import com.sanket_satpute_20.ironmind.domain.usecase.ai.RecommendInterventionUse
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.UnderstandBarriersUseCase
 import com.sanket_satpute_20.ironmind.domain.repository.AutonomySettingsRepository
 import com.sanket_satpute_20.ironmind.data.repository.AutonomySettingsRepositoryImpl
+import com.sanket_satpute_20.ironmind.domain.repository.DecisionRecordRepository
+import com.sanket_satpute_20.ironmind.data.repository.DecisionRecordRepositoryImpl
 import com.sanket_satpute_20.ironmind.domain.engine.DecisionEngine
 import com.sanket_satpute_20.ironmind.domain.engine.DecisionEngineImpl
 
@@ -135,6 +137,7 @@ interface AppContainer {
     val handleInterventionResultUseCase: HandleInterventionResultUseCase
     val ironMindAI: IronMindAI
     val autonomySettingsRepository: AutonomySettingsRepository
+    val decisionRecordRepository: DecisionRecordRepository
     val decisionEngine: DecisionEngine
 }
 
@@ -191,6 +194,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val autonomySettingsRepository: AutonomySettingsRepository by lazy {
         AutonomySettingsRepositoryImpl(database.autonomySettingsDao(), clock)
+    }
+
+    override val decisionRecordRepository: DecisionRecordRepository by lazy {
+        DecisionRecordRepositoryImpl(database.decisionRecordDao())
     }
 
 
@@ -374,6 +381,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     override val decisionEngine: DecisionEngine by lazy {
         DecisionEngineImpl(
             autonomySettingsRepository = autonomySettingsRepository,
+            decisionRecordRepository = decisionRecordRepository,
             logger = logger
         )
     }

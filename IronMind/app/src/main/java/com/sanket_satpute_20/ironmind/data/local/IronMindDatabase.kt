@@ -8,6 +8,7 @@ import com.sanket_satpute_20.ironmind.data.local.dao.IronMindDao
 import com.sanket_satpute_20.ironmind.data.local.dao.ObservationDao
 import com.sanket_satpute_20.ironmind.data.local.dao.OutboxDao
 import com.sanket_satpute_20.ironmind.data.local.dao.AutonomySettingsDao
+import com.sanket_satpute_20.ironmind.data.local.dao.DecisionRecordDao
 import com.sanket_satpute_20.ironmind.data.local.entity.*
 
 @Database(
@@ -26,9 +27,10 @@ import com.sanket_satpute_20.ironmind.data.local.entity.*
         OutboxEntity::class,
         ObservationEntity::class,
         com.sanket_satpute_20.ironmind.data.local.entity.PatternEntity::class,
-        AutonomySettingsEntity::class
+        AutonomySettingsEntity::class,
+        DecisionRecordEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class IronMindDatabase : RoomDatabase() {
@@ -37,6 +39,7 @@ abstract class IronMindDatabase : RoomDatabase() {
     abstract fun observationDao(): ObservationDao
     abstract fun patternDao(): com.sanket_satpute_20.ironmind.data.local.dao.PatternDao
     abstract fun autonomySettingsDao(): AutonomySettingsDao
+    abstract fun decisionRecordDao(): DecisionRecordDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -157,6 +160,32 @@ abstract class IronMindDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
                 println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=6")
+            }
+        }
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `decision_records` (
+                        `id` TEXT NOT NULL,
+                        `timestamp` INTEGER NOT NULL,
+                        `capability` TEXT NOT NULL,
+                        `action` TEXT NOT NULL,
+                        `trigger` TEXT,
+                        `source` TEXT,
+                        `contextSummary` TEXT,
+                        `policy` TEXT,
+                        `autonomyLevel` TEXT NOT NULL,
+                        `reasoning` TEXT,
+                        `confidence` REAL,
+                        `result` TEXT NOT NULL,
+                        `failureReason` TEXT,
+                        `userResponse` TEXT,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=7")
             }
         }
     }
