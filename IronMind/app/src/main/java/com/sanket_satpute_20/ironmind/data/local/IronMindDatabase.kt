@@ -35,9 +35,10 @@ import com.sanket_satpute_20.ironmind.data.local.entity.*
         NotificationRecordEntity::class,
         com.sanket_satpute_20.ironmind.data.local.entity.InterventionRecordEntity::class,
         NotificationObservationSettingsEntity::class,
-        CalendarObservationSettingsEntity::class
+        CalendarObservationSettingsEntity::class,
+        LocationObservationSettingsEntity::class
     ],
-    version = 13,
+    version = 14,
     exportSchema = false
 )
 abstract class IronMindDatabase : RoomDatabase() {
@@ -53,6 +54,7 @@ abstract class IronMindDatabase : RoomDatabase() {
     abstract fun interventionDao(): com.sanket_satpute_20.ironmind.data.local.dao.InterventionDao
     abstract fun notificationObservationSettingsDao(): com.sanket_satpute_20.ironmind.data.local.dao.NotificationObservationSettingsDao
     abstract fun calendarObservationSettingsDao(): com.sanket_satpute_20.ironmind.data.local.dao.CalendarObservationSettingsDao
+    abstract fun locationObservationSettingsDao(): com.sanket_satpute_20.ironmind.data.local.dao.LocationObservationSettingsDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -302,6 +304,22 @@ abstract class IronMindDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
                 println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=13")
+            }
+        }
+
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `location_observation_settings` (
+                        `userId` TEXT NOT NULL,
+                        `isEnabled` INTEGER NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`userId`)
+                    )
+                    """.trimIndent()
+                )
+                println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=14")
             }
         }
     }

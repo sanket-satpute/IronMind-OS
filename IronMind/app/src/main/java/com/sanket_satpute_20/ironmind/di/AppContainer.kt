@@ -185,6 +185,13 @@ interface AppContainer {
     val setCalendarObservationEnabledUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.SetCalendarObservationEnabledUseCase
     val collectCalendarObservationsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectCalendarObservationsUseCase
 
+    // V4.4 Location / Environment Context
+    val locationObservationSettingsRepository: com.sanket_satpute_20.ironmind.domain.repository.LocationObservationSettingsRepository
+    val locationObservationProvider: com.sanket_satpute_20.ironmind.domain.provider.LocationObservationProvider
+    val getLocationObservationSettingsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.GetLocationObservationSettingsUseCase
+    val setLocationObservationEnabledUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.SetLocationObservationEnabledUseCase
+    val collectLocationObservationUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectLocationObservationUseCase
+
     // Services
 }
 
@@ -211,7 +218,8 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             IronMindDatabase.MIGRATION_9_10,
             IronMindDatabase.MIGRATION_10_11,
             IronMindDatabase.MIGRATION_11_12,
-            IronMindDatabase.MIGRATION_12_13
+            IronMindDatabase.MIGRATION_12_13,
+            IronMindDatabase.MIGRATION_13_14
         ).build()
     }
     
@@ -229,6 +237,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     private val calendarObservationSettingsDao: com.sanket_satpute_20.ironmind.data.local.dao.CalendarObservationSettingsDao by lazy {
         database.calendarObservationSettingsDao()
+    }
+
+    private val locationObservationSettingsDao: com.sanket_satpute_20.ironmind.data.local.dao.LocationObservationSettingsDao by lazy {
+        database.locationObservationSettingsDao()
     }
     
     override val clock: Clock = object : Clock {
@@ -650,6 +662,33 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             settingsRepository = calendarObservationSettingsRepository,
             observationRepository = observationRepository,
             calendarObservationProvider = calendarObservationProvider,
+            idGenerator = idGenerator,
+            clock = clock
+        )
+    }
+
+    // V4.4 — Location / Environment Context
+    override val locationObservationSettingsRepository: com.sanket_satpute_20.ironmind.domain.repository.LocationObservationSettingsRepository by lazy {
+        com.sanket_satpute_20.ironmind.data.repository.LocationObservationSettingsRepositoryImpl(locationObservationSettingsDao, clock)
+    }
+
+    override val locationObservationProvider: com.sanket_satpute_20.ironmind.domain.provider.LocationObservationProvider by lazy {
+        com.sanket_satpute_20.ironmind.data.provider.AndroidLocationObservationProvider(context)
+    }
+
+    override val getLocationObservationSettingsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.GetLocationObservationSettingsUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.observation.GetLocationObservationSettingsUseCase(locationObservationSettingsRepository)
+    }
+
+    override val setLocationObservationEnabledUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.SetLocationObservationEnabledUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.observation.SetLocationObservationEnabledUseCase(locationObservationSettingsRepository, getLocationObservationSettingsUseCase)
+    }
+
+    override val collectLocationObservationUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectLocationObservationUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectLocationObservationUseCase(
+            settingsRepository = locationObservationSettingsRepository,
+            observationRepository = observationRepository,
+            locationObservationProvider = locationObservationProvider,
             idGenerator = idGenerator,
             clock = clock
         )

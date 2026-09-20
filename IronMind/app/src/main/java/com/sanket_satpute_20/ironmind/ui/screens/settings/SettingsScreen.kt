@@ -23,7 +23,8 @@ fun SettingsScreen(
         onGlobalPauseToggle = { isPaused -> viewModel.setGlobalPause(isPaused) },
         onAppUsageObservationToggle = { isEnabled -> viewModel.setAppUsageObservationEnabled(isEnabled) },
         onNotificationObservationToggle = { isEnabled -> viewModel.setNotificationObservationEnabled(isEnabled) },
-        onCalendarObservationToggle = { isEnabled -> viewModel.setCalendarObservationEnabled(isEnabled) }
+        onCalendarObservationToggle = { isEnabled -> viewModel.setCalendarObservationEnabled(isEnabled) },
+        onLocationObservationToggle = { isEnabled -> viewModel.setLocationObservationEnabled(isEnabled) }
     )
 }
 
@@ -34,7 +35,8 @@ fun SettingsScreenContent(
     onGlobalPauseToggle: (Boolean) -> Unit,
     onAppUsageObservationToggle: (Boolean) -> Unit = {},
     onNotificationObservationToggle: (Boolean) -> Unit = {},
-    onCalendarObservationToggle: (Boolean) -> Unit = {}
+    onCalendarObservationToggle: (Boolean) -> Unit = {},
+    onLocationObservationToggle: (Boolean) -> Unit = {}
 ) {
     Column(
         modifier = modifier
@@ -247,6 +249,55 @@ fun SettingsScreenContent(
                     Switch(
                         checked = uiState.isCalendarObservationEnabled,
                         onCheckedChange = { onCalendarObservationToggle(it) }
+                    )
+                }
+            }
+        }
+
+        // ── Location Observation card ───────────────────────────────────────────
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "📍 Location Context",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                Text(
+                    text = "Allow IronMind to observe your coarse location. " +
+                            "This is a single approximate snapshot (not continuous GPS tracking) to provide environment awareness.",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                if (!uiState.isLocationPermissionGranted) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    ) {
+                        Text(
+                            text = "⚠ Permission required: Go to App Info → Permissions and grant Location access.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (uiState.isLocationObservationEnabled) "Observation ON" else "Observation OFF",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (uiState.isLocationObservationEnabled)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Switch(
+                        checked = uiState.isLocationObservationEnabled,
+                        onCheckedChange = { onLocationObservationToggle(it) }
                     )
                 }
             }
