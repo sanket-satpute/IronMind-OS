@@ -9,6 +9,7 @@ import com.sanket_satpute_20.ironmind.data.local.dao.ObservationDao
 import com.sanket_satpute_20.ironmind.data.local.dao.OutboxDao
 import com.sanket_satpute_20.ironmind.data.local.dao.AutonomySettingsDao
 import com.sanket_satpute_20.ironmind.data.local.dao.DecisionRecordDao
+import com.sanket_satpute_20.ironmind.data.local.dao.NotificationRecordDao
 import com.sanket_satpute_20.ironmind.data.local.entity.*
 
 @Database(
@@ -28,9 +29,10 @@ import com.sanket_satpute_20.ironmind.data.local.entity.*
         ObservationEntity::class,
         com.sanket_satpute_20.ironmind.data.local.entity.PatternEntity::class,
         AutonomySettingsEntity::class,
-        DecisionRecordEntity::class
+        DecisionRecordEntity::class,
+        NotificationRecordEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class IronMindDatabase : RoomDatabase() {
@@ -40,6 +42,7 @@ abstract class IronMindDatabase : RoomDatabase() {
     abstract fun patternDao(): com.sanket_satpute_20.ironmind.data.local.dao.PatternDao
     abstract fun autonomySettingsDao(): AutonomySettingsDao
     abstract fun decisionRecordDao(): DecisionRecordDao
+    abstract fun notificationRecordDao(): NotificationRecordDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -186,6 +189,23 @@ abstract class IronMindDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
                 println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=7")
+            }
+        }
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `notification_records` (
+                        `id` TEXT NOT NULL,
+                        `timestamp` INTEGER NOT NULL,
+                        `deduplicationKey` TEXT,
+                        `deliveryStatus` TEXT NOT NULL,
+                        `suppressionReason` TEXT,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=8")
             }
         }
     }
