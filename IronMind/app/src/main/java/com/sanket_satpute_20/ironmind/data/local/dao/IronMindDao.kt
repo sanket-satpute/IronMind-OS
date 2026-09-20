@@ -98,6 +98,9 @@ interface IronMindDao {
     @Query("SELECT * FROM protection_rules WHERE userId = :userId ORDER BY priority DESC")
     fun getProtectionRulesForUser(userId: String): List<ProtectionRuleEntity>
 
+    @Query("SELECT COUNT(*) FROM protection_rules")
+    fun getProtectionRuleCount(): kotlinx.coroutines.flow.Flow<Int>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertProtectionSession(session: ProtectionSessionEntity)
 
@@ -116,6 +119,9 @@ interface IronMindDao {
     @Query("SELECT * FROM events WHERE userId = :userId ORDER BY occurredAt ASC")
     fun getEventsForUser(userId: String): List<EventEntity>
 
+    @Query("SELECT COUNT(*) FROM events")
+    fun getEventCount(): kotlinx.coroutines.flow.Flow<Int>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertMemory(memory: MemoryEntity)
 
@@ -127,6 +133,9 @@ interface IronMindDao {
 
     @Query("SELECT * FROM memory WHERE userId = :userId AND status NOT IN ('EXPIRED', 'DELETED') ORDER BY confidence DESC")
     fun getActiveMemoriesForUser(userId: String): List<MemoryEntity>
+
+    @Query("SELECT COUNT(*) FROM memory")
+    fun getMemoryCount(): kotlinx.coroutines.flow.Flow<Int>
 
     // Search and Retrieval (V1.8)
 
@@ -153,4 +162,38 @@ interface IronMindDao {
 
     @Query("SELECT * FROM memory WHERE userId = :userId AND createdAt >= :startTime AND createdAt <= :endTime ORDER BY createdAt DESC")
     fun getMemoriesForDateRange(userId: String, startTime: Long, endTime: Long): List<MemoryEntity>
+
+    // Sprint V4.13: Data Deletion & Lifecycle Foundation
+    @Query("DELETE FROM user_profile WHERE id = :userId")
+    fun deleteUserProfile(userId: String)
+
+    @Query("DELETE FROM goal WHERE userId = :userId")
+    fun deleteGoalsForUser(userId: String)
+
+    @Query("DELETE FROM plan WHERE userId = :userId")
+    fun deletePlansForUser(userId: String)
+
+    @Query("DELETE FROM task WHERE userId = :userId")
+    fun deleteTasksForUser(userId: String)
+
+    @Query("DELETE FROM commitment WHERE userId = :userId")
+    fun deleteCommitmentsForUser(userId: String)
+
+    @Query("DELETE FROM reflection WHERE userId = :userId")
+    fun deleteReflectionsForUser(userId: String)
+
+    @Query("DELETE FROM protection_rules WHERE userId = :userId")
+    fun deleteProtectionRulesForUser(userId: String)
+
+    @Query("DELETE FROM protection_sessions WHERE userId = :userId")
+    fun deleteProtectionSessionsForUser(userId: String)
+
+    @Query("DELETE FROM events WHERE userId = :userId")
+    fun deleteEventsForUser(userId: String)
+
+    @Query("DELETE FROM memory WHERE userId = :userId")
+    fun deleteMemoriesForUser(userId: String)
+
+    @Query("DELETE FROM memory WHERE userId = :userId AND status = 'FORGOTTEN' AND updatedAt < :thresholdTime")
+    fun deleteForgottenMemoriesOlderThan(userId: String, thresholdTime: Long)
 }

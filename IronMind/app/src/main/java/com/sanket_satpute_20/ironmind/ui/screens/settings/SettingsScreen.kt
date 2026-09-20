@@ -13,7 +13,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 @Composable
 fun SettingsScreen(
     modifier: Modifier = Modifier,
-    viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)
+    viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory),
+    onNavigateToDevControlCenter: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -25,7 +26,8 @@ fun SettingsScreen(
         onNotificationObservationToggle = { isEnabled -> viewModel.setNotificationObservationEnabled(isEnabled) },
         onCalendarObservationToggle = { isEnabled -> viewModel.setCalendarObservationEnabled(isEnabled) },
         onLocationObservationToggle = { isEnabled -> viewModel.setLocationObservationEnabled(isEnabled) },
-        onActivityObservationToggle = { isEnabled -> viewModel.setActivityObservationEnabled(isEnabled) }
+        onActivityObservationToggle = { isEnabled -> viewModel.setActivityObservationEnabled(isEnabled) },
+        onNavigateToDevControlCenter = onNavigateToDevControlCenter
     )
 }
 
@@ -38,7 +40,8 @@ fun SettingsScreenContent(
     onNotificationObservationToggle: (Boolean) -> Unit = {},
     onCalendarObservationToggle: (Boolean) -> Unit = {},
     onLocationObservationToggle: (Boolean) -> Unit = {},
-    onActivityObservationToggle: (Boolean) -> Unit = {}
+    onActivityObservationToggle: (Boolean) -> Unit = {},
+    onNavigateToDevControlCenter: () -> Unit = {}
 ) {
     Column(
         modifier = modifier
@@ -351,6 +354,19 @@ fun SettingsScreenContent(
                         onCheckedChange = { onActivityObservationToggle(it) }
                     )
                 }
+            }
+        }
+
+        // ── Development Control Center ─────────────────────────────────────────
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (isDebuggable) {
+            Button(
+                onClick = onNavigateToDevControlCenter,
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+            ) {
+                Text("🛠 Development Control Center")
             }
         }
     }

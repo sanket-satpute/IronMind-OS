@@ -17,6 +17,8 @@ interface DecisionRecordDao {
 
     @Query("SELECT * FROM decision_records WHERE capability = :capability ORDER BY timestamp DESC")
     fun getByCapability(capability: String): Flow<List<DecisionRecordEntity>>
+    @Query("SELECT COUNT(*) FROM decision_records")
+    fun getDecisionCount(): kotlinx.coroutines.flow.Flow<Int>
     
     @Query("DELETE FROM decision_records")
     fun clearAll()

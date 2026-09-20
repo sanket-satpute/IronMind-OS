@@ -24,6 +24,9 @@ interface OutboxDao {
     @Query("SELECT COUNT(*) FROM outbox WHERE status IN ('PENDING', 'FAILED')")
     fun countPendingEntries(): Int
 
+    @Query("SELECT COUNT(*) FROM outbox")
+    fun getOutboxCount(): kotlinx.coroutines.flow.Flow<Int>
+
     @Query("SELECT COUNT(*) > 0 FROM outbox WHERE operationId = :operationId")
     fun entryExists(operationId: String): Boolean
 }

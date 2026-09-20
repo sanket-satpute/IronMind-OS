@@ -76,6 +76,8 @@ import com.sanket_satpute_20.ironmind.domain.engine.PatternEngine
 import com.sanket_satpute_20.ironmind.domain.engine.PatternEngineImpl
 import com.sanket_satpute_20.ironmind.execution.background.BackgroundExecutor
 import com.sanket_satpute_20.ironmind.execution.background.BackgroundExecutorImpl
+import com.sanket_satpute_20.ironmind.domain.repository.DataManagementRepository
+import com.sanket_satpute_20.ironmind.data.repository.DataManagementRepositoryImpl
 import com.sanket_satpute_20.ironmind.domain.repository.PatternRepository
 import com.sanket_satpute_20.ironmind.data.repository.PatternRepositoryImpl
 import com.sanket_satpute_20.ironmind.domain.ai.IronMindAI
@@ -108,9 +110,11 @@ import com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectAppUsage
 import com.sanket_satpute_20.ironmind.domain.repository.ExperimentRepository
 
 interface AppContainer {
+    val userProfileRepository: com.sanket_satpute_20.ironmind.domain.repository.UserProfileRepository
     val goalRepository: GoalRepository
     val commitmentRepository: CommitmentRepository
     val outcomeRepository: OutcomeRepository
+    val devControlRepository: com.sanket_satpute_20.ironmind.domain.repository.DevControlRepository
     val reflectionRepository: ReflectionRepository
     val eventRepository: EventRepository
     val getTimelineUseCase: GetTimelineUseCase
@@ -139,6 +143,10 @@ interface AppContainer {
     val protectionRepository: ProtectionRepository
     val startProtectionSessionUseCase: StartProtectionSessionUseCase
     val stopProtectionSessionUseCase: StopProtectionSessionUseCase
+    val dataManagementRepository: DataManagementRepository
+    val dataLifecycleEngine: com.sanket_satpute_20.ironmind.domain.engine.DataLifecycleEngine
+    val exportUserDataUseCase: com.sanket_satpute_20.ironmind.domain.usecase.data.ExportUserDataUseCase
+    val deleteUserDataUseCase: com.sanket_satpute_20.ironmind.domain.usecase.data.DeleteUserDataUseCase
     val appProtectionProvider: AppProtectionProvider
     val reminderScheduler: ReminderScheduler
     val notificationProvider: NotificationProvider
@@ -285,12 +293,28 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         override fun generateId(): String = UUID.randomUUID().toString()
     }
     
+    override val userProfileRepository: com.sanket_satpute_20.ironmind.domain.repository.UserProfileRepository by lazy {
+        com.sanket_satpute_20.ironmind.data.repository.UserProfileRepositoryImpl(database.ironMindDao())
+    }
+
     override val commitmentRepository: CommitmentRepository by lazy {
         CommitmentRepositoryImpl(database.ironMindDao())
     }
 
     override val outcomeRepository: OutcomeRepository by lazy {
         com.sanket_satpute_20.ironmind.data.repository.OutcomeRepositoryImpl(database.ironMindDao())
+    }
+    
+    override val devControlRepository: com.sanket_satpute_20.ironmind.domain.repository.DevControlRepository by lazy {
+        com.sanket_satpute_20.ironmind.data.repository.DevControlRepositoryImpl(
+            ironMindDao = database.ironMindDao(),
+            observationDao = database.observationDao(),
+            patternDao = database.patternDao(),
+            decisionRecordDao = database.decisionRecordDao(),
+            interventionDao = database.interventionDao(),
+            experimentDao = experimentDao,
+            outboxDao = database.outboxDao()
+        )
     }
 
     override val reflectionRepository: ReflectionRepository by lazy {
@@ -813,6 +837,47 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             activityObservationProvider = activityObservationProvider,
             idGenerator = idGenerator,
             clock = clock
+        )
+    }
+
+    override val dataManagementRepository: DataManagementRepository by lazy {
+        DataManagementRepositoryImpl(
+            ironMindDao = database.ironMindDao(),
+            patternDao = database.patternDao(),
+            observationDao = database.observationDao(),
+            interventionDao = database.interventionDao(),
+            experimentDao = experimentDao,
+            autonomySettingsDao = database.autonomySettingsDao(),
+            globalAutonomyStateDao = globalAutonomyStateDao
+        )
+    }
+
+    override val dataLifecycleEngine: com.sanket_satpute_20.ironmind.domain.engine.DataLifecycleEngine by lazy {
+        com.sanket_satpute_20.ironmind.domain.engine.DataLifecycleEngineImpl(
+            dataManagementRepository = dataManagementRepository,
+            clock = clock,
+            logger = logger
+        )
+    }
+
+    override val exportUserDataUseCase: com.sanket_satpute_20.ironmind.domain.usecase.data.ExportUserDataUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.data.ExportUserDataUseCase(
+            userProfileRepository = userProfileRepository,
+            goalRepository = goalRepository,
+            taskRepository = taskRepository,
+            commitmentRepository = commitmentRepository,
+            patternRepository = patternRepository,
+            memoryRepository = memoryRepository,
+            observationRepository = observationRepository,
+            eventRepository = eventRepository,
+            interventionRepository = interventionRepository,
+            clock = clock
+        )
+    }
+
+    override val deleteUserDataUseCase: com.sanket_satpute_20.ironmind.domain.usecase.data.DeleteUserDataUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.data.DeleteUserDataUseCase(
+            dataManagementRepository = dataManagementRepository
         )
     }
 }

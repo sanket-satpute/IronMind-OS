@@ -24,6 +24,17 @@ interface PatternDao {
     @Query("UPDATE patterns SET confidence = :confidence, lastObservedAt = :lastObservedAt, updatedAt = :updatedAt WHERE id = :id")
     fun updatePatternConfidence(id: String, confidence: Float, lastObservedAt: Long, updatedAt: Long)
 
+
+    @Query("SELECT COUNT(*) FROM patterns")
+    fun getPatternCount(): kotlinx.coroutines.flow.Flow<Int>
+
     @Query("DELETE FROM patterns WHERE id = :id")
     fun deletePattern(id: String)
+
+    // Sprint V4.13: Data Deletion & Lifecycle Foundation
+    @Query("DELETE FROM patterns WHERE userId = :userId")
+    fun deletePatternsForUser(userId: String)
+
+    @Query("DELETE FROM patterns WHERE userId = :userId AND status = 'EXPIRED' AND lastObservedAt < :thresholdTime")
+    fun deleteExpiredPatternsOlderThan(userId: String, thresholdTime: Long)
 }

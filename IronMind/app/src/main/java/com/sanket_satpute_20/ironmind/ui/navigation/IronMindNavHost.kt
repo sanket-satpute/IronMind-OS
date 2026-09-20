@@ -9,6 +9,7 @@ import com.sanket_satpute_20.ironmind.ui.screens.goals.GoalsScreen
 import com.sanket_satpute_20.ironmind.ui.screens.settings.SettingsScreen
 import com.sanket_satpute_20.ironmind.ui.screens.history.HistoryScreen
 import com.sanket_satpute_20.ironmind.ui.screens.today.TodayScreen
+import com.sanket_satpute_20.ironmind.ui.screens.dev.DevelopmentControlCenterScreen
 
 @Composable
 fun IronMindNavHost(
@@ -31,7 +32,14 @@ fun IronMindNavHost(
             HistoryScreen()
         }
         composable(Route.Settings.path) {
-            SettingsScreen()
+            SettingsScreen(
+                onNavigateToDevControlCenter = {
+                    appState.navController.navigate(Route.DevControlCenter.path)
+                }
+            )
+        }
+        composable(Route.DevControlCenter.path) {
+            DevelopmentControlCenterScreen()
         }
     }
 }

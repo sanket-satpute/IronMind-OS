@@ -18,6 +18,19 @@ interface InterventionDao {
     @Query("SELECT * FROM intervention_records WHERE id = :id")
     fun getById(id: String): InterventionRecordEntity?
 
+    @Query("SELECT * FROM intervention_records WHERE userId = :userId AND type = :type ORDER BY createdAt DESC")
+    fun getInterventionsByType(userId: String, type: String): List<InterventionRecordEntity>
+
+    @Query("SELECT COUNT(*) FROM intervention_records")
+    fun getInterventionCount(): kotlinx.coroutines.flow.Flow<Int>
+
+    // Sprint V4.13: Data Deletion & Lifecycle Foundation
+    @Query("DELETE FROM intervention_records WHERE userId = :userId")
+    fun deleteInterventionsForUser(userId: String)
+
+    @Query("DELETE FROM intervention_records")
+    fun deleteAll()
+
     @Query("SELECT * FROM intervention_records WHERE userId = :userId AND createdAt >= :since ORDER BY createdAt DESC")
     fun getRecentInterventions(userId: String, since: Long): List<InterventionRecordEntity>
 

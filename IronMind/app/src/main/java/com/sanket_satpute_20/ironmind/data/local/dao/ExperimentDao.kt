@@ -24,4 +24,11 @@ interface ExperimentDao {
 
     @Query("SELECT * FROM experiment_records WHERE userId = :userId AND state = 'ACTIVE'")
     fun getActiveExperiments(userId: String): List<ExperimentRecordEntity>
+
+    @Query("SELECT COUNT(*) FROM experiment_records")
+    fun getExperimentCount(): kotlinx.coroutines.flow.Flow<Int>
+
+    // Sprint V4.13: Data Deletion & Lifecycle Foundation
+    @Query("DELETE FROM experiment_records WHERE userId = :userId")
+    fun deleteExperimentsForUser(userId: String)
 }

@@ -13,4 +13,8 @@ interface GlobalAutonomyStateDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertState(state: GlobalAutonomyStateEntity)
+
+    // Sprint V4.13: Data Deletion & Lifecycle Foundation
+    @Query("DELETE FROM global_autonomy_state WHERE userId = :userId")
+    suspend fun deleteGlobalAutonomyStateForUser(userId: String)
 }

@@ -13,4 +13,8 @@ interface AutonomySettingsDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun upsertSetting(setting: AutonomySettingsEntity)
+
+    // Sprint V4.13: Data Deletion & Lifecycle Foundation
+    @Query("DELETE FROM autonomy_settings WHERE userId = :userId")
+    fun deleteAutonomySettingsForUser(userId: String)
 }
