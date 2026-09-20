@@ -17,4 +17,10 @@ interface InterventionDao {
 
     @Query("SELECT * FROM intervention_records WHERE id = :id")
     fun getById(id: String): InterventionRecordEntity?
+
+    @Query("SELECT * FROM intervention_records WHERE userId = :userId AND createdAt >= :since ORDER BY createdAt DESC")
+    fun getRecentInterventions(userId: String, since: Long): List<InterventionRecordEntity>
+
+    @Query("SELECT * FROM intervention_records WHERE userId = :userId AND state IN ('PROPOSED', 'APPROVED', 'TRIGGERED')")
+    fun getActiveInterventions(userId: String): List<InterventionRecordEntity>
 }

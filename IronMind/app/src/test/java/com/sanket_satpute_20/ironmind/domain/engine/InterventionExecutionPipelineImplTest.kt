@@ -21,6 +21,7 @@ class InterventionExecutionPipelineImplTest {
 
     private lateinit var decisionEngine: FakeDecisionEngine
     private lateinit var interventionRepository: FakeInterventionRepository
+    private lateinit var policyEngine: FakeInterventionPolicyEngine
     private lateinit var pipeline: InterventionExecutionPipelineImpl
     private lateinit var logger: FakeIronLogger
 
@@ -28,11 +29,13 @@ class InterventionExecutionPipelineImplTest {
     fun setup() {
         decisionEngine = FakeDecisionEngine()
         interventionRepository = FakeInterventionRepository()
+        policyEngine = FakeInterventionPolicyEngine()
         logger = FakeIronLogger()
 
         pipeline = InterventionExecutionPipelineImpl(
             decisionEngine = decisionEngine,
             interventionRepository = interventionRepository,
+            interventionPolicyEngine = policyEngine,
             idGenerator = object : IdGenerator {
                 override fun generateId() = "int-123"
             },
@@ -191,5 +194,27 @@ class FakeInterventionRepository : InterventionRepository {
 
     override suspend fun getById(id: String): Result<InterventionRecord?, Exception> {
         return Result.Success(store[id])
+    }
+
+    override suspend fun getRecentInterventions(userId: String, since: Long): Result<List<InterventionRecord>, Exception> {
+        val records = store.values.filter { it.userId == userId && it.createdAt >= since }.sortedByDescending { it.createdAt }
+        return Result.Success(records)
+    }
+
+    override suspend fun getActiveInterventions(userId: String): Result<List<InterventionRecord>, Exception> {
+        val activeStates = listOf(InterventionState.PROPOSED, InterventionState.APPROVED, InterventionState.TRIGGERED)
+        val records = store.values.filter { it.userId == userId && it.state in activeStates }
+        return Result.Success(records)
+    }
+}
+
+class FakeInterventionPolicyEngine : InterventionPolicyEngine {
+    var result = PolicyEvaluationResult(isAllowed = true, isCooldownActive = false, isDuplicate = false)
+
+    override suspend fun evaluatePolicy(
+        userId: String,
+        candidate: AIOutput.InterventionRecommendation
+    ): PolicyEvaluationResult {
+        return result
     }
 }

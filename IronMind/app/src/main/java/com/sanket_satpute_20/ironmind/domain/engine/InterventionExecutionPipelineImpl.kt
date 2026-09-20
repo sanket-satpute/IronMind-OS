@@ -18,6 +18,7 @@ import com.sanket_satpute_20.ironmind.domain.repository.InterventionRepository
 class InterventionExecutionPipelineImpl(
     private val decisionEngine: DecisionEngine,
     private val interventionRepository: InterventionRepository,
+    private val interventionPolicyEngine: InterventionPolicyEngine,
     private val idGenerator: IdGenerator,
     private val clock: Clock,
     private val logger: IronLogger
@@ -53,7 +54,22 @@ class InterventionExecutionPipelineImpl(
         interventionRepository.save(record)
         logTransition(record)
 
-        // 2. Evaluate via DecisionEngine
+        // 2. Check InterventionPolicyEngine
+        val policyResult = interventionPolicyEngine.evaluatePolicy(userId, candidate)
+        if (!policyResult.isAllowed) {
+            val suppressed = record.copy(
+                state = InterventionState.SUPPRESSED, 
+                updatedAt = now, 
+                resolutionReason = InterventionResolutionReason.TECHNICAL_FAILURE // or null
+            )
+            // Log with reason
+            logger.logLifecycle("Decision", "SUPPRESSED", mapOf("reason" to (policyResult.suppressionReason ?: "policy")))
+            interventionRepository.save(suppressed)
+            logTransition(suppressed)
+            return Result.Success(suppressed)
+        }
+
+        // 3. Evaluate via DecisionEngine
         val action = CandidateAction(
             capability = AutonomyCapability.PROACTIVE_NOTIFICATIONS,
             isSafe = true,
@@ -62,8 +78,8 @@ class InterventionExecutionPipelineImpl(
         val context = EvaluationContext(
             hasRequiredPermissions = true,
             isUserOverrideActive = false,
-            isCooldownActive = false, // Sprint V3.8 will manage cooldowns
-            isDuplicate = false
+            isCooldownActive = policyResult.isCooldownActive,
+            isDuplicate = policyResult.isDuplicate
         )
 
         val decision = decisionEngine.evaluate(userId, action, context)

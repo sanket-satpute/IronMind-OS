@@ -63,4 +63,42 @@ class InterventionRepositoryImpl(
             Result.Failure(e)
         }
     }
+
+    override suspend fun getRecentInterventions(
+        userId: String,
+        since: Long
+    ): Result<List<InterventionRecord>, Exception> = withContext(Dispatchers.IO) {
+        try {
+            val entities = interventionDao.getRecentInterventions(userId, since)
+            val records = entities.map { mapToDomain(it) }
+            Result.Success(records)
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
+
+    override suspend fun getActiveInterventions(userId: String): Result<List<InterventionRecord>, Exception> = withContext(Dispatchers.IO) {
+        try {
+            val entities = interventionDao.getActiveInterventions(userId)
+            val records = entities.map { mapToDomain(it) }
+            Result.Success(records)
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
+
+    private fun mapToDomain(entity: InterventionRecordEntity): InterventionRecord {
+        return InterventionRecord(
+            id = entity.id,
+            userId = entity.userId,
+            type = entity.type,
+            state = entity.state,
+            title = entity.title,
+            description = entity.description,
+            resolutionReason = entity.resolutionReason,
+            contextData = entity.contextData,
+            createdAt = entity.createdAt,
+            updatedAt = entity.updatedAt
+        )
+    }
 }

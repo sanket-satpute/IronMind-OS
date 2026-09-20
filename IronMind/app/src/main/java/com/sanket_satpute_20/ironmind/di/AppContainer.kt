@@ -429,10 +429,18 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         com.sanket_satpute_20.ironmind.data.repository.InterventionRepositoryImpl(database.interventionDao())
     }
 
+    val interventionPolicyEngine: com.sanket_satpute_20.ironmind.domain.engine.InterventionPolicyEngine by lazy {
+        com.sanket_satpute_20.ironmind.domain.engine.InterventionPolicyEngineImpl(
+            interventionRepository = interventionRepository,
+            clock = clock
+        )
+    }
+
     override val interventionExecutionPipeline: com.sanket_satpute_20.ironmind.domain.engine.InterventionExecutionPipeline by lazy {
         com.sanket_satpute_20.ironmind.domain.engine.InterventionExecutionPipelineImpl(
             decisionEngine = decisionEngine,
             interventionRepository = interventionRepository,
+            interventionPolicyEngine = interventionPolicyEngine,
             idGenerator = idGenerator,
             clock = clock,
             logger = logger
