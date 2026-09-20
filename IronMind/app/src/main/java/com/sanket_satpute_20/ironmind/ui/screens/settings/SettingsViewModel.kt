@@ -9,6 +9,9 @@ import com.sanket_satpute_20.ironmind.IronMindApplication
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.usecase.autonomy.GetAutonomySettingsUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.autonomy.ToggleGlobalPauseUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.observation.GetAppUsageObservationSettingsUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.observation.SetAppUsageObservationEnabledUseCase
+import com.sanket_satpute_20.ironmind.domain.provider.AppUsageObservationProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,13 +19,18 @@ import kotlinx.coroutines.launch
 
 data class SettingsUiState(
     val isGlobalPauseActive: Boolean = false,
+    val isAppUsageObservationEnabled: Boolean = false,
+    val isAppUsagePermissionGranted: Boolean = false,
     val isLoading: Boolean = true,
     val errorMessage: String? = null
 )
 
 class SettingsViewModel(
     private val getAutonomySettingsUseCase: GetAutonomySettingsUseCase,
-    private val toggleGlobalPauseUseCase: ToggleGlobalPauseUseCase
+    private val toggleGlobalPauseUseCase: ToggleGlobalPauseUseCase,
+    private val getAppUsageObservationSettingsUseCase: GetAppUsageObservationSettingsUseCase,
+    private val setAppUsageObservationEnabledUseCase: SetAppUsageObservationEnabledUseCase,
+    private val appUsageObservationProvider: AppUsageObservationProvider
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -38,21 +46,18 @@ class SettingsViewModel(
     private fun loadSettings() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
-            when (val result = getAutonomySettingsUseCase(currentUserId)) {
-                is Result.Success -> {
-                    println("IronMindLifecycle [Settings] [LOADED] userId=$currentUserId isGlobalPauseActive=${result.data.isGlobalPauseActive}")
-                    _uiState.value = SettingsUiState(
-                        isGlobalPauseActive = result.data.isGlobalPauseActive,
-                        isLoading = false
-                    )
-                }
-                is Result.Failure -> {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        errorMessage = result.error.message ?: "Failed to load settings"
-                    )
-                }
-            }
+            val autonomyResult = getAutonomySettingsUseCase(currentUserId)
+            val appUsageResult = getAppUsageObservationSettingsUseCase(currentUserId)
+            val isGlobalPaused = if (autonomyResult is Result.Success) autonomyResult.data.isGlobalPauseActive else false
+            val isAppUsageEnabled = if (appUsageResult is Result.Success) appUsageResult.data.isEnabled else false
+            val isPermissionGranted = appUsageObservationProvider.isPermissionGranted()
+            println("IronMindLifecycle [Settings] [LOADED] userId=$currentUserId isGlobalPauseActive=$isGlobalPaused isAppUsageEnabled=$isAppUsageEnabled permissionGranted=$isPermissionGranted")
+            _uiState.value = SettingsUiState(
+                isGlobalPauseActive = isGlobalPaused,
+                isAppUsageObservationEnabled = isAppUsageEnabled,
+                isAppUsagePermissionGranted = isPermissionGranted,
+                isLoading = false
+            )
         }
     }
 
@@ -72,6 +77,21 @@ class SettingsViewModel(
         }
     }
 
+    fun setAppUsageObservationEnabled(isEnabled: Boolean) {
+        viewModelScope.launch {
+            when (val result = setAppUsageObservationEnabledUseCase(currentUserId, isEnabled)) {
+                is Result.Success -> {
+                    _uiState.value = _uiState.value.copy(isAppUsageObservationEnabled = isEnabled, errorMessage = null)
+                }
+                is Result.Failure -> {
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = result.error.message ?: "Failed to update app usage setting"
+                    )
+                }
+            }
+        }
+    }
+
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -79,7 +99,10 @@ class SettingsViewModel(
                 val container = application.container
                 SettingsViewModel(
                     getAutonomySettingsUseCase = container.getAutonomySettingsUseCase,
-                    toggleGlobalPauseUseCase = container.toggleGlobalPauseUseCase
+                    toggleGlobalPauseUseCase = container.toggleGlobalPauseUseCase,
+                    getAppUsageObservationSettingsUseCase = container.getAppUsageObservationSettingsUseCase,
+                    setAppUsageObservationEnabledUseCase = container.setAppUsageObservationEnabledUseCase,
+                    appUsageObservationProvider = container.appUsageObservationProvider
                 )
             }
         }

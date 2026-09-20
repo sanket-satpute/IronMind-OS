@@ -5,6 +5,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -19,7 +20,8 @@ fun SettingsScreen(
     SettingsScreenContent(
         modifier = modifier,
         uiState = uiState,
-        onGlobalPauseToggle = { isPaused -> viewModel.setGlobalPause(isPaused) }
+        onGlobalPauseToggle = { isPaused -> viewModel.setGlobalPause(isPaused) },
+        onAppUsageObservationToggle = { isEnabled -> viewModel.setAppUsageObservationEnabled(isEnabled) }
     )
 }
 
@@ -27,20 +29,22 @@ fun SettingsScreen(
 fun SettingsScreenContent(
     modifier: Modifier = Modifier,
     uiState: SettingsUiState,
-    onGlobalPauseToggle: (Boolean) -> Unit
+    onGlobalPauseToggle: (Boolean) -> Unit,
+    onAppUsageObservationToggle: (Boolean) -> Unit = {}
 ) {
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
             text = "Settings",
             style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(bottom = 24.dp)
+            modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        // Emergency stop card — must be prominent and easy to locate
+        // ── Emergency stop card ──────────────────────────────────────────────
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -68,7 +72,7 @@ fun SettingsScreenContent(
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = if (uiState.isGlobalPauseActive) "Autonomy PAUSED" else "Autonomy ACTIVE",
@@ -90,6 +94,56 @@ fun SettingsScreenContent(
                         text = error,
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
+
+        // ── App Usage Observation card ───────────────────────────────────────
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "📊 App Usage Observation",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                Text(
+                    text = "Allow IronMind to observe which apps you use and for how long. " +
+                            "This is used as behavioral context — not for surveillance. " +
+                            "Only timing and package names are recorded.",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                if (!uiState.isAppUsagePermissionGranted) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    ) {
+                        Text(
+                            text = "⚠ Permission required: Go to Settings → Apps → Special app access → Usage access and grant access to IronMind.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (uiState.isAppUsageObservationEnabled) "Observation ON" else "Observation OFF",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (uiState.isAppUsageObservationEnabled)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Switch(
+                        checked = uiState.isAppUsageObservationEnabled,
+                        onCheckedChange = { onAppUsageObservationToggle(it) }
                     )
                 }
             }

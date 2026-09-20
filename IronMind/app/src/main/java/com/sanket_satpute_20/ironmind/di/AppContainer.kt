@@ -83,6 +83,13 @@ import com.sanket_satpute_20.ironmind.domain.repository.DecisionRecordRepository
 import com.sanket_satpute_20.ironmind.data.repository.DecisionRecordRepositoryImpl
 import com.sanket_satpute_20.ironmind.domain.engine.DecisionEngine
 import com.sanket_satpute_20.ironmind.domain.engine.DecisionEngineImpl
+import com.sanket_satpute_20.ironmind.domain.repository.AppUsageObservationSettingsRepository
+import com.sanket_satpute_20.ironmind.data.repository.AppUsageObservationSettingsRepositoryImpl
+import com.sanket_satpute_20.ironmind.domain.provider.AppUsageObservationProvider
+import com.sanket_satpute_20.ironmind.data.provider.AndroidAppUsageObservationProvider
+import com.sanket_satpute_20.ironmind.domain.usecase.observation.GetAppUsageObservationSettingsUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.observation.SetAppUsageObservationEnabledUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectAppUsageObservationsUseCase
 
 interface AppContainer {
     val goalRepository: GoalRepository
@@ -150,7 +157,13 @@ interface AppContainer {
     val interventionRepository: com.sanket_satpute_20.ironmind.domain.repository.InterventionRepository
     val taskRepository: com.sanket_satpute_20.ironmind.domain.repository.TaskRepository
     val interventionExecutionPipeline: com.sanket_satpute_20.ironmind.domain.engine.InterventionExecutionPipeline
-    
+    // V4.1 App Usage Observation
+    val appUsageObservationSettingsRepository: AppUsageObservationSettingsRepository
+    val appUsageObservationProvider: AppUsageObservationProvider
+    val getAppUsageObservationSettingsUseCase: GetAppUsageObservationSettingsUseCase
+    val setAppUsageObservationEnabledUseCase: SetAppUsageObservationEnabledUseCase
+    val collectAppUsageObservationsUseCase: CollectAppUsageObservationsUseCase
+
     // Services
 }
 
@@ -174,12 +187,17 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             IronMindDatabase.MIGRATION_6_7,
             IronMindDatabase.MIGRATION_7_8,
             IronMindDatabase.MIGRATION_8_9,
-            IronMindDatabase.MIGRATION_9_10
+            IronMindDatabase.MIGRATION_9_10,
+            IronMindDatabase.MIGRATION_10_11
         ).build()
     }
     
     private val globalAutonomyStateDao: com.sanket_satpute_20.ironmind.data.local.dao.GlobalAutonomyStateDao by lazy {
         database.globalAutonomyStateDao()
+    }
+
+    private val appUsageObservationSettingsDao: com.sanket_satpute_20.ironmind.data.local.dao.AppUsageObservationSettingsDao by lazy {
+        database.appUsageObservationSettingsDao()
     }
     
     override val clock: Clock = object : Clock {
@@ -523,6 +541,33 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             eventRepository = eventRepository,
             clock = clock,
             idGenerator = idGenerator
+        )
+    }
+
+    // V4.1 — App Usage Observation
+    override val appUsageObservationSettingsRepository: AppUsageObservationSettingsRepository by lazy {
+        AppUsageObservationSettingsRepositoryImpl(appUsageObservationSettingsDao, clock)
+    }
+
+    override val appUsageObservationProvider: AppUsageObservationProvider by lazy {
+        AndroidAppUsageObservationProvider(context)
+    }
+
+    override val getAppUsageObservationSettingsUseCase: GetAppUsageObservationSettingsUseCase by lazy {
+        GetAppUsageObservationSettingsUseCase(appUsageObservationSettingsRepository)
+    }
+
+    override val setAppUsageObservationEnabledUseCase: SetAppUsageObservationEnabledUseCase by lazy {
+        SetAppUsageObservationEnabledUseCase(appUsageObservationSettingsRepository)
+    }
+
+    override val collectAppUsageObservationsUseCase: CollectAppUsageObservationsUseCase by lazy {
+        CollectAppUsageObservationsUseCase(
+            settingsRepository = appUsageObservationSettingsRepository,
+            observationRepository = observationRepository,
+            appUsageObservationProvider = appUsageObservationProvider,
+            idGenerator = idGenerator,
+            clock = clock
         )
     }
 }

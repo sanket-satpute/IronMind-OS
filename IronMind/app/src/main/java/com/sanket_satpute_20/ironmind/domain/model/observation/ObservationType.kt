@@ -16,5 +16,6 @@ enum class ObservationType {
     CALENDAR_CONTEXT_CHANGED,
     VOICE_CAPTURED,
     USER_INPUT,
+    APP_USAGE_SESSION,
     UNKNOWN
 }
