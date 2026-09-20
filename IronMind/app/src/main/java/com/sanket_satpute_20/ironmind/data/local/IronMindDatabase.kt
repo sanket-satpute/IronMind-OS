@@ -30,9 +30,10 @@ import com.sanket_satpute_20.ironmind.data.local.entity.*
         com.sanket_satpute_20.ironmind.data.local.entity.PatternEntity::class,
         AutonomySettingsEntity::class,
         DecisionRecordEntity::class,
-        NotificationRecordEntity::class
+        NotificationRecordEntity::class,
+        com.sanket_satpute_20.ironmind.data.local.entity.InterventionRecordEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class IronMindDatabase : RoomDatabase() {
@@ -43,6 +44,7 @@ abstract class IronMindDatabase : RoomDatabase() {
     abstract fun autonomySettingsDao(): AutonomySettingsDao
     abstract fun decisionRecordDao(): DecisionRecordDao
     abstract fun notificationRecordDao(): NotificationRecordDao
+    abstract fun interventionDao(): com.sanket_satpute_20.ironmind.data.local.dao.InterventionDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -206,6 +208,29 @@ abstract class IronMindDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
                 println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=8")
+            }
+        }
+
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `intervention_records` (
+                        `id` TEXT NOT NULL,
+                        `userId` TEXT NOT NULL,
+                        `type` TEXT NOT NULL,
+                        `state` TEXT NOT NULL,
+                        `title` TEXT NOT NULL,
+                        `description` TEXT NOT NULL,
+                        `resolutionReason` TEXT,
+                        `contextData` TEXT,
+                        `createdAt` INTEGER NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=9")
             }
         }
     }

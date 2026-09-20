@@ -143,6 +143,8 @@ interface AppContainer {
     val decisionEngine: DecisionEngine
     val autoSchedulingEngine: com.sanket_satpute_20.ironmind.domain.engine.AutoSchedulingEngine
     val autoProtectionEngine: com.sanket_satpute_20.ironmind.domain.engine.AutoProtectionEngine
+    val interventionRepository: com.sanket_satpute_20.ironmind.domain.repository.InterventionRepository
+    val interventionExecutionPipeline: com.sanket_satpute_20.ironmind.domain.engine.InterventionExecutionPipeline
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -160,7 +162,11 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             IronMindDatabase.MIGRATION_1_2,
             IronMindDatabase.MIGRATION_2_3,
             IronMindDatabase.MIGRATION_3_4,
-            IronMindDatabase.MIGRATION_4_5
+            IronMindDatabase.MIGRATION_4_5,
+            IronMindDatabase.MIGRATION_5_6,
+            IronMindDatabase.MIGRATION_6_7,
+            IronMindDatabase.MIGRATION_7_8,
+            IronMindDatabase.MIGRATION_8_9
         ).build()
     }
     
@@ -415,6 +421,20 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             decisionEngine = decisionEngine,
             startProtectionSessionUseCase = startProtectionSessionUseCase,
             clock = com.sanket_satpute_20.ironmind.infrastructure.common.SystemClock(),
+            logger = logger
+        )
+    }
+
+    override val interventionRepository: com.sanket_satpute_20.ironmind.domain.repository.InterventionRepository by lazy {
+        com.sanket_satpute_20.ironmind.data.repository.InterventionRepositoryImpl(database.interventionDao())
+    }
+
+    override val interventionExecutionPipeline: com.sanket_satpute_20.ironmind.domain.engine.InterventionExecutionPipeline by lazy {
+        com.sanket_satpute_20.ironmind.domain.engine.InterventionExecutionPipelineImpl(
+            decisionEngine = decisionEngine,
+            interventionRepository = interventionRepository,
+            idGenerator = idGenerator,
+            clock = clock,
             logger = logger
         )
     }
