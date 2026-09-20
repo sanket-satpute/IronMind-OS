@@ -21,6 +21,9 @@ import com.sanket_satpute_20.ironmind.domain.provider.CalendarObservationProvide
 import com.sanket_satpute_20.ironmind.domain.usecase.observation.GetLocationObservationSettingsUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.observation.SetLocationObservationEnabledUseCase
 import com.sanket_satpute_20.ironmind.domain.provider.LocationObservationProvider
+import com.sanket_satpute_20.ironmind.domain.usecase.observation.GetActivityObservationSettingsUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.observation.SetActivityObservationEnabledUseCase
+import com.sanket_satpute_20.ironmind.domain.provider.ActivityObservationProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,6 +39,8 @@ data class SettingsUiState(
     val isCalendarPermissionGranted: Boolean = false,
     val isLocationObservationEnabled: Boolean = false,
     val isLocationPermissionGranted: Boolean = false,
+    val isActivityObservationEnabled: Boolean = false,
+    val isActivityPermissionGranted: Boolean = false,
     val isLoading: Boolean = true,
     val errorMessage: String? = null
 )
@@ -54,7 +59,10 @@ class SettingsViewModel(
     private val calendarObservationProvider: CalendarObservationProvider,
     private val getLocationObservationSettingsUseCase: GetLocationObservationSettingsUseCase,
     private val setLocationObservationEnabledUseCase: SetLocationObservationEnabledUseCase,
-    private val locationObservationProvider: LocationObservationProvider
+    private val locationObservationProvider: LocationObservationProvider,
+    private val getActivityObservationSettingsUseCase: GetActivityObservationSettingsUseCase,
+    private val setActivityObservationEnabledUseCase: SetActivityObservationEnabledUseCase,
+    private val activityObservationProvider: ActivityObservationProvider
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -75,6 +83,7 @@ class SettingsViewModel(
             val notificationResult = getNotificationObservationSettingsUseCase(currentUserId)
             val calendarResult = getCalendarObservationSettingsUseCase(currentUserId)
             val locationResult = getLocationObservationSettingsUseCase(currentUserId)
+            val activityResult = getActivityObservationSettingsUseCase(currentUserId)
             
             val isGlobalPaused = if (autonomyResult is Result.Success) autonomyResult.data.isGlobalPauseActive else false
             val isAppUsageEnabled = if (appUsageResult is Result.Success) appUsageResult.data.isEnabled else false
@@ -89,7 +98,10 @@ class SettingsViewModel(
             val isLocationEnabled = if (locationResult is Result.Success) locationResult.data.isEnabled else false
             val isLocationPermissionGranted = locationObservationProvider.isPermissionGranted()
             
-            println("IronMindLifecycle [Settings] [LOADED] userId=$currentUserId isGlobalPauseActive=$isGlobalPaused isAppUsageEnabled=$isAppUsageEnabled isNotificationEnabled=$isNotificationEnabled isCalendarEnabled=$isCalendarEnabled isLocationEnabled=$isLocationEnabled")
+            val isActivityEnabled = activityResult.getOrNull()?.isEnabled ?: false
+            val isActivityPermissionGranted = activityObservationProvider.isPermissionGranted()
+            
+            println("IronMindLifecycle [Settings] [LOADED] userId=$currentUserId isGlobalPauseActive=$isGlobalPaused isAppUsageEnabled=$isAppUsageEnabled isNotificationEnabled=$isNotificationEnabled isCalendarEnabled=$isCalendarEnabled isLocationEnabled=$isLocationEnabled isActivityEnabled=$isActivityEnabled")
             _uiState.value = SettingsUiState(
                 isGlobalPauseActive = isGlobalPaused,
                 isAppUsageObservationEnabled = isAppUsageEnabled,
@@ -100,6 +112,8 @@ class SettingsViewModel(
                 isCalendarPermissionGranted = isCalendarPermissionGranted,
                 isLocationObservationEnabled = isLocationEnabled,
                 isLocationPermissionGranted = isLocationPermissionGranted,
+                isActivityObservationEnabled = isActivityEnabled,
+                isActivityPermissionGranted = isActivityPermissionGranted,
                 isLoading = false
             )
         }
@@ -181,6 +195,19 @@ class SettingsViewModel(
         }
     }
 
+    fun setActivityObservationEnabled(isEnabled: Boolean) {
+        viewModelScope.launch {
+            val result = setActivityObservationEnabledUseCase(currentUserId, isEnabled)
+            if (result.isSuccess) {
+                _uiState.value = _uiState.value.copy(isActivityObservationEnabled = isEnabled, errorMessage = null)
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = result.errorOrNull()?.message ?: "Failed to update activity observation setting"
+                )
+            }
+        }
+    }
+
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -200,7 +227,10 @@ class SettingsViewModel(
                     calendarObservationProvider = container.calendarObservationProvider,
                     getLocationObservationSettingsUseCase = container.getLocationObservationSettingsUseCase,
                     setLocationObservationEnabledUseCase = container.setLocationObservationEnabledUseCase,
-                    locationObservationProvider = container.locationObservationProvider
+                    locationObservationProvider = container.locationObservationProvider,
+                    getActivityObservationSettingsUseCase = container.getActivityObservationSettingsUseCase,
+                    setActivityObservationEnabledUseCase = container.setActivityObservationEnabledUseCase,
+                    activityObservationProvider = container.activityObservationProvider
                 )
             }
         }

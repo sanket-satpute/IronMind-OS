@@ -9,6 +9,7 @@ import com.sanket_satpute_20.ironmind.domain.repository.GoalRepository
 import com.sanket_satpute_20.ironmind.domain.repository.ObservationRepository
 import com.sanket_satpute_20.ironmind.domain.repository.ProtectionRepository
 import com.sanket_satpute_20.ironmind.domain.repository.ReflectionRepository
+import com.sanket_satpute_20.ironmind.domain.repository.PatternRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Calendar
@@ -20,7 +21,8 @@ class ContextEngineImpl(
     private val observationRepository: ObservationRepository,
     private val reflectionRepository: ReflectionRepository,
     private val protectionRepository: ProtectionRepository,
-    private val goalRepository: GoalRepository
+    private val goalRepository: GoalRepository,
+    private val patternRepository: PatternRepository
 ) : ContextEngine {
 
     override suspend fun getCurrentContext(userId: String): Result<ContextSnapshot, Exception> = withContext(Dispatchers.IO) {
@@ -71,6 +73,14 @@ class ContextEngineImpl(
                 emptyList()
             }
 
+            // 7. Fetch patterns
+            val patternsResult = patternRepository.getPatternsForUser(userId)
+            val recentPatterns = if (patternsResult is Result.Success) {
+                patternsResult.data.sortedByDescending { it.updatedAt }.take(5)
+            } else {
+                emptyList()
+            }
+
             val snapshot = ContextSnapshot(
                 timestamp = now,
                 dayOfWeek = dayOfWeek,
@@ -78,6 +88,7 @@ class ContextEngineImpl(
                 recentEvents = recentEvents,
                 recentObservations = recentObservations,
                 recentReflections = recentReflections,
+                recentPatterns = recentPatterns,
                 activeProtectionSession = activeProtectionSession,
                 activeGoals = activeGoals
             )

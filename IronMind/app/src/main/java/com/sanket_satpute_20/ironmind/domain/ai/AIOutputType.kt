@@ -12,5 +12,6 @@ enum class AIOutputType {
     BARRIER,
     SUMMARY,
     CLARIFICATION_REQUEST,
-    NO_ACTION
+    NO_ACTION,
+    CONTEXT_SYNTHESIS
 }

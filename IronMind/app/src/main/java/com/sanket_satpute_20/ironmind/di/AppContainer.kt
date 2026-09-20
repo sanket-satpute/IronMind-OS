@@ -64,6 +64,7 @@ import com.sanket_satpute_20.ironmind.domain.repository.ObservationRepository
 import com.sanket_satpute_20.ironmind.data.repository.ObservationRepositoryImpl
 import com.sanket_satpute_20.ironmind.domain.engine.ContextEngine
 import com.sanket_satpute_20.ironmind.domain.engine.ContextEngineImpl
+import com.sanket_satpute_20.ironmind.domain.usecase.context.SynthesizePersonalContextUseCase
 import java.util.UUID
 
 import com.sanket_satpute_20.ironmind.domain.engine.PatternEngine
@@ -142,6 +143,7 @@ interface AppContainer {
     val syncUseCase: SyncUseCase
     val observationRepository: ObservationRepository
     val contextEngine: ContextEngine
+    val synthesizePersonalContextUseCase: SynthesizePersonalContextUseCase
     val patternRepository: PatternRepository
     val patternEngine: PatternEngine
     val extractIntentUseCase: ExtractIntentUseCase
@@ -192,6 +194,13 @@ interface AppContainer {
     val setLocationObservationEnabledUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.SetLocationObservationEnabledUseCase
     val collectLocationObservationUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectLocationObservationUseCase
 
+    // V4.5 Activity / Energy Context
+    val activityObservationSettingsRepository: com.sanket_satpute_20.ironmind.domain.repository.ActivityObservationSettingsRepository
+    val activityObservationProvider: com.sanket_satpute_20.ironmind.domain.provider.ActivityObservationProvider
+    val getActivityObservationSettingsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.GetActivityObservationSettingsUseCase
+    val setActivityObservationEnabledUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.SetActivityObservationEnabledUseCase
+    val collectActivityObservationUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectActivityObservationUseCase
+
     // Services
 }
 
@@ -241,6 +250,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     private val locationObservationSettingsDao: com.sanket_satpute_20.ironmind.data.local.dao.LocationObservationSettingsDao by lazy {
         database.locationObservationSettingsDao()
+    }
+
+    private val activityObservationSettingsDao: com.sanket_satpute_20.ironmind.data.local.dao.ActivityObservationSettingsDao by lazy {
+        database.activityObservationSettingsDao()
     }
     
     override val clock: Clock = object : Clock {
@@ -466,7 +479,15 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             observationRepository = observationRepository,
             reflectionRepository = reflectionRepository,
             protectionRepository = protectionRepository,
-            goalRepository = goalRepository
+            goalRepository = goalRepository,
+            patternRepository = patternRepository
+        )
+    }
+
+    override val synthesizePersonalContextUseCase: SynthesizePersonalContextUseCase by lazy {
+        SynthesizePersonalContextUseCase(
+            contextEngine = contextEngine,
+            ironMindAI = ironMindAI
         )
     }
 
@@ -689,6 +710,33 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             settingsRepository = locationObservationSettingsRepository,
             observationRepository = observationRepository,
             locationObservationProvider = locationObservationProvider,
+            idGenerator = idGenerator,
+            clock = clock
+        )
+    }
+
+    // V4.5 — Activity / Energy Context
+    override val activityObservationSettingsRepository: com.sanket_satpute_20.ironmind.domain.repository.ActivityObservationSettingsRepository by lazy {
+        com.sanket_satpute_20.ironmind.data.repository.ActivityObservationSettingsRepositoryImpl(activityObservationSettingsDao, clock)
+    }
+
+    override val activityObservationProvider: com.sanket_satpute_20.ironmind.domain.provider.ActivityObservationProvider by lazy {
+        com.sanket_satpute_20.ironmind.data.provider.AndroidActivityObservationProvider(context)
+    }
+
+    override val getActivityObservationSettingsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.GetActivityObservationSettingsUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.observation.GetActivityObservationSettingsUseCase(activityObservationSettingsRepository)
+    }
+
+    override val setActivityObservationEnabledUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.SetActivityObservationEnabledUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.observation.SetActivityObservationEnabledUseCase(activityObservationSettingsRepository, getActivityObservationSettingsUseCase)
+    }
+
+    override val collectActivityObservationUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectActivityObservationUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectActivityObservationUseCase(
+            settingsRepository = activityObservationSettingsRepository,
+            observationRepository = observationRepository,
+            activityObservationProvider = activityObservationProvider,
             idGenerator = idGenerator,
             clock = clock
         )

@@ -10,5 +10,6 @@ enum class ObservationSource {
     VOICE,
     SYSTEM,
     EXTERNAL_INTEGRATION,
-    AI
+    AI,
+    ACTIVITY
 }

@@ -170,6 +170,23 @@ sealed class AIOutput {
     ) : AIOutput() {
         override val type: AIOutputType = AIOutputType.NO_ACTION
     }
+
+    /**
+     * AI proposes a synthesized personal context.
+     * Per Sprint V4.6.
+     */
+    data class ContextSynthesis(
+        val explicitIntent: String?,
+        val currentEnvironment: String?,
+        val recentBehavior: String?,
+        val relevantPatterns: String?,
+        val synthesizedSummary: String,
+        override val confidence: Float,
+        override val reasoning: String? = null,
+        override val schemaVersion: Int = 1
+    ) : AIOutput() {
+        override val type: AIOutputType = AIOutputType.CONTEXT_SYNTHESIS
+    }
 }
 
 /**

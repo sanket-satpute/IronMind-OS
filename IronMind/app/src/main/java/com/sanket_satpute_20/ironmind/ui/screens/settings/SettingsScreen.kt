@@ -24,7 +24,8 @@ fun SettingsScreen(
         onAppUsageObservationToggle = { isEnabled -> viewModel.setAppUsageObservationEnabled(isEnabled) },
         onNotificationObservationToggle = { isEnabled -> viewModel.setNotificationObservationEnabled(isEnabled) },
         onCalendarObservationToggle = { isEnabled -> viewModel.setCalendarObservationEnabled(isEnabled) },
-        onLocationObservationToggle = { isEnabled -> viewModel.setLocationObservationEnabled(isEnabled) }
+        onLocationObservationToggle = { isEnabled -> viewModel.setLocationObservationEnabled(isEnabled) },
+        onActivityObservationToggle = { isEnabled -> viewModel.setActivityObservationEnabled(isEnabled) }
     )
 }
 
@@ -36,7 +37,8 @@ fun SettingsScreenContent(
     onAppUsageObservationToggle: (Boolean) -> Unit = {},
     onNotificationObservationToggle: (Boolean) -> Unit = {},
     onCalendarObservationToggle: (Boolean) -> Unit = {},
-    onLocationObservationToggle: (Boolean) -> Unit = {}
+    onLocationObservationToggle: (Boolean) -> Unit = {},
+    onActivityObservationToggle: (Boolean) -> Unit = {}
 ) {
     Column(
         modifier = modifier
@@ -298,6 +300,55 @@ fun SettingsScreenContent(
                     Switch(
                         checked = uiState.isLocationObservationEnabled,
                         onCheckedChange = { onLocationObservationToggle(it) }
+                    )
+                }
+            }
+        }
+
+        // ── Activity Observation card ───────────────────────────────────────────
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "🏃 Activity Context",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                Text(
+                    text = "Allow IronMind to observe broad physical activity (e.g., walking, in-vehicle) to " +
+                            "improve contextual awareness. No health data or exact diagnostics are stored.",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                if (!uiState.isActivityPermissionGranted) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    ) {
+                        Text(
+                            text = "⚠ Permission required: Go to App Info → Permissions and grant Physical Activity access.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (uiState.isActivityObservationEnabled) "Observation ON" else "Observation OFF",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (uiState.isActivityObservationEnabled)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Switch(
+                        checked = uiState.isActivityObservationEnabled,
+                        onCheckedChange = { onActivityObservationToggle(it) }
                     )
                 }
             }

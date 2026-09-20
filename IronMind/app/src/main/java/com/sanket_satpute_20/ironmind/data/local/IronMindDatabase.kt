@@ -36,9 +36,10 @@ import com.sanket_satpute_20.ironmind.data.local.entity.*
         com.sanket_satpute_20.ironmind.data.local.entity.InterventionRecordEntity::class,
         NotificationObservationSettingsEntity::class,
         CalendarObservationSettingsEntity::class,
-        LocationObservationSettingsEntity::class
+        LocationObservationSettingsEntity::class,
+        ActivityObservationSettingsEntity::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = false
 )
 abstract class IronMindDatabase : RoomDatabase() {
@@ -55,6 +56,7 @@ abstract class IronMindDatabase : RoomDatabase() {
     abstract fun notificationObservationSettingsDao(): com.sanket_satpute_20.ironmind.data.local.dao.NotificationObservationSettingsDao
     abstract fun calendarObservationSettingsDao(): com.sanket_satpute_20.ironmind.data.local.dao.CalendarObservationSettingsDao
     abstract fun locationObservationSettingsDao(): com.sanket_satpute_20.ironmind.data.local.dao.LocationObservationSettingsDao
+    abstract fun activityObservationSettingsDao(): com.sanket_satpute_20.ironmind.data.local.dao.ActivityObservationSettingsDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -320,6 +322,22 @@ abstract class IronMindDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
                 println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=14")
+            }
+        }
+
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `activity_observation_settings` (
+                        `userId` TEXT NOT NULL,
+                        `isEnabled` INTEGER NOT NULL,
+                        `lastUpdatedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`userId`)
+                    )
+                    """.trimIndent()
+                )
+                println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=15")
             }
         }
     }
