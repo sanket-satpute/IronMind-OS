@@ -138,7 +138,10 @@ interface AppContainer {
     val ironMindAI: IronMindAI
     val autonomySettingsRepository: AutonomySettingsRepository
     val decisionRecordRepository: DecisionRecordRepository
+    val notificationRecordRepository: com.sanket_satpute_20.ironmind.domain.repository.NotificationRecordRepository
+    val notificationEngine: com.sanket_satpute_20.ironmind.domain.engine.NotificationEngine
     val decisionEngine: DecisionEngine
+    val autoSchedulingEngine: com.sanket_satpute_20.ironmind.domain.engine.AutoSchedulingEngine
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -198,6 +201,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val decisionRecordRepository: DecisionRecordRepository by lazy {
         DecisionRecordRepositoryImpl(database.decisionRecordDao())
+    }
+
+    override val notificationRecordRepository: com.sanket_satpute_20.ironmind.domain.repository.NotificationRecordRepository by lazy {
+        com.sanket_satpute_20.ironmind.data.repository.NotificationRecordRepositoryImpl(database.notificationRecordDao())
     }
 
 
@@ -382,6 +389,22 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         DecisionEngineImpl(
             autonomySettingsRepository = autonomySettingsRepository,
             decisionRecordRepository = decisionRecordRepository,
+            logger = logger
+        )
+    }
+
+    override val notificationEngine: com.sanket_satpute_20.ironmind.domain.engine.NotificationEngine by lazy {
+        com.sanket_satpute_20.ironmind.domain.engine.NotificationEngineImpl(
+            notificationRecordRepository = notificationRecordRepository,
+            notificationProvider = notificationProvider,
+            logger = logger
+        )
+    }
+
+    override val autoSchedulingEngine: com.sanket_satpute_20.ironmind.domain.engine.AutoSchedulingEngine by lazy {
+        com.sanket_satpute_20.ironmind.domain.engine.AutoSchedulingEngineImpl(
+            decisionEngine = decisionEngine,
+            commitmentRepository = commitmentRepository,
             logger = logger
         )
     }

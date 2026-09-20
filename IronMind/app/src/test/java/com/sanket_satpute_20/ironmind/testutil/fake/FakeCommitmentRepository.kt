@@ -47,8 +47,9 @@ class FakeCommitmentRepository : CommitmentRepository {
         val filtered = commitments.values.filter { 
             it.userId == userId && (
                 (it.createdAt in startTime..endTime) ||
-                (it.committedAt != null && it.committedAt!! in startTime..endTime) ||
-                (it.completedAt != null && it.completedAt!! in startTime..endTime)
+                (it.committedAt in startTime..endTime) ||
+                (it.completedAt != null && it.completedAt in startTime..endTime) ||
+                (it.scheduledStartAt != null && it.scheduledStartAt <= endTime && (it.scheduledEndAt ?: it.scheduledStartAt) >= startTime)
             )
         }.sortedByDescending { it.createdAt }
         return Result.Success(filtered)
