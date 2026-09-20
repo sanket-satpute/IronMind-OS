@@ -144,7 +144,10 @@ interface AppContainer {
     val autoSchedulingEngine: com.sanket_satpute_20.ironmind.domain.engine.AutoSchedulingEngine
     val autoProtectionEngine: com.sanket_satpute_20.ironmind.domain.engine.AutoProtectionEngine
     val interventionRepository: com.sanket_satpute_20.ironmind.domain.repository.InterventionRepository
+    val taskRepository: com.sanket_satpute_20.ironmind.domain.repository.TaskRepository
     val interventionExecutionPipeline: com.sanket_satpute_20.ironmind.domain.engine.InterventionExecutionPipeline
+    
+    // Services
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -196,6 +199,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val goalRepository: GoalRepository by lazy {
         GoalRepositoryImpl(database.ironMindDao())
+    }
+
+    override val taskRepository: com.sanket_satpute_20.ironmind.domain.repository.TaskRepository by lazy {
+        com.sanket_satpute_20.ironmind.data.repository.TaskRepositoryImpl(database.ironMindDao())
     }
 
     override val memoryRepository: MemoryRepository by lazy {
@@ -442,6 +449,16 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             interventionRepository = interventionRepository,
             interventionPolicyEngine = interventionPolicyEngine,
             idGenerator = idGenerator,
+            clock = clock,
+            logger = logger
+        )
+    }
+
+    val goalResurfacingEngine: com.sanket_satpute_20.ironmind.domain.engine.GoalResurfacingEngine by lazy {
+        com.sanket_satpute_20.ironmind.domain.engine.GoalResurfacingEngineImpl(
+            goalRepository = goalRepository,
+            taskRepository = taskRepository,
+            interventionExecutionPipeline = interventionExecutionPipeline,
             clock = clock,
             logger = logger
         )
