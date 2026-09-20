@@ -20,14 +20,22 @@ class InterventionEvaluationWorker(
     }
 
     override suspend fun doWork(): Result {
-        val userId = inputData.getString(KEY_USER_ID) ?: return Result.failure()
-        val trigger = inputData.getString(KEY_TRIGGER) ?: TRIGGER_SCHEDULED
-        
-        // This is a placeholder since the current InterventionExecutionPipeline
-        // takes specific Memory or Observation inputs, not just a bare 'evaluate' call.
-        // For a scheduled intervention evaluation, we assume V2.4 will provide a general evaluation method.
-        // For now, we'll just succeed to satisfy the WorkManager contract.
-        
-        return Result.success()
+        return try {
+            val userId = inputData.getString(KEY_USER_ID) ?: return Result.failure()
+            val trigger = inputData.getString(KEY_TRIGGER) ?: TRIGGER_SCHEDULED
+            
+            // This is a placeholder since the current InterventionExecutionPipeline
+            // takes specific Memory or Observation inputs, not just a bare 'evaluate' call.
+            // For a scheduled intervention evaluation, we assume V2.4 will provide a general evaluation method.
+            // For now, we'll just succeed to satisfy the WorkManager contract.
+            
+            Result.success()
+        } catch (e: java.io.IOException) {
+            Result.retry()
+        } catch (e: SecurityException) {
+            Result.failure()
+        } catch (e: Exception) {
+            Result.retry()
+        }
     }
 }

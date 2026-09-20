@@ -24,6 +24,11 @@ class InterventionExecutionPipelineImpl(
     private val logger: IronLogger
 ) : InterventionExecutionPipeline {
 
+    companion object {
+        // If an intervention is delayed by more than 2 hours (e.g. process death, offline), fail it.
+        private const val STALE_THRESHOLD_MS = 2L * 60L * 60L * 1000L
+    }
+
     override suspend fun propose(
         userId: String,
         candidate: AIOutput.InterventionRecommendation
@@ -161,7 +166,20 @@ class InterventionExecutionPipelineImpl(
             return Result.Failure(Exception("Invalid state transition from ${record.state} to $newState"))
         }
 
-        val updatedRecord = record.copy(state = newState, updatedAt = clock.currentTimeMillis())
+        // Sprint V4.12: Check for stale interventions (process death, extreme delays)
+        val now = clock.currentTimeMillis()
+        if (now - record.createdAt > STALE_THRESHOLD_MS) {
+            val staleRecord = record.copy(
+                state = InterventionState.FAILED,
+                resolutionReason = InterventionResolutionReason.TECHNICAL_FAILURE,
+                updatedAt = now
+            )
+            interventionRepository.save(staleRecord)
+            logTransition(staleRecord)
+            return Result.Failure(Exception("Intervention is stale. Failed automatically."))
+        }
+
+        val updatedRecord = record.copy(state = newState, updatedAt = now)
         val saveResult = interventionRepository.save(updatedRecord)
 
         return if (saveResult is Result.Success) {

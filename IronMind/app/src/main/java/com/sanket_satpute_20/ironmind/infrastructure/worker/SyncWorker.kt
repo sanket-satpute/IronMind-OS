@@ -17,16 +17,19 @@ class SyncWorker(
     }
 
     override suspend fun doWork(): Result {
-        val userId = inputData.getString(KEY_USER_ID) ?: return Result.failure()
+        return try {
+            val userId = inputData.getString(KEY_USER_ID) ?: return Result.failure()
 
-        return when (val result = syncUseCase(userId)) {
-            is com.sanket_satpute_20.ironmind.domain.common.Result.Success<*> -> {
-                Result.success()
+            when (val result = syncUseCase(userId)) {
+                is com.sanket_satpute_20.ironmind.domain.common.Result.Success<*> -> Result.success()
+                is com.sanket_satpute_20.ironmind.domain.common.Result.Failure<*> -> Result.retry()
             }
-            is com.sanket_satpute_20.ironmind.domain.common.Result.Failure<*> -> {
-                // Retry safely on failure
-                Result.retry()
-            }
+        } catch (e: java.io.IOException) {
+            Result.retry()
+        } catch (e: SecurityException) {
+            Result.failure()
+        } catch (e: Exception) {
+            Result.retry()
         }
     }
 }

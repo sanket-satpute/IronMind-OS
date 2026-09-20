@@ -17,17 +17,19 @@ class ReflectionProcessingWorker(
     }
 
     override suspend fun doWork(): Result {
-        val reflectionId = inputData.getString(KEY_REFLECTION_ID)
-            ?: return Result.failure()
-
-        return when (val result = reflectionEngine.processReflection(reflectionId)) {
-            is com.sanket_satpute_20.ironmind.domain.common.Result.Success<*> -> {
-                Result.success()
+        return try {
+            val reflectionId = inputData.getString(KEY_REFLECTION_ID) ?: return Result.failure()
+            
+            when (val result = reflectionEngine.processReflection(reflectionId)) {
+                is com.sanket_satpute_20.ironmind.domain.common.Result.Success -> Result.success()
+                is com.sanket_satpute_20.ironmind.domain.common.Result.Failure -> Result.retry()
             }
-            is com.sanket_satpute_20.ironmind.domain.common.Result.Failure<*> -> {
-                // Retry safely on failure
-                Result.retry()
-            }
+        } catch (e: java.io.IOException) {
+            Result.retry()
+        } catch (e: SecurityException) {
+            Result.failure()
+        } catch (e: Exception) {
+            Result.retry()
         }
     }
 }

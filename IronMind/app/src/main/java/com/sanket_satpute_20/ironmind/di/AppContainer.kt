@@ -74,6 +74,8 @@ import java.util.UUID
 
 import com.sanket_satpute_20.ironmind.domain.engine.PatternEngine
 import com.sanket_satpute_20.ironmind.domain.engine.PatternEngineImpl
+import com.sanket_satpute_20.ironmind.execution.background.BackgroundExecutor
+import com.sanket_satpute_20.ironmind.execution.background.BackgroundExecutorImpl
 import com.sanket_satpute_20.ironmind.domain.repository.PatternRepository
 import com.sanket_satpute_20.ironmind.data.repository.PatternRepositoryImpl
 import com.sanket_satpute_20.ironmind.domain.ai.IronMindAI
@@ -133,6 +135,7 @@ interface AppContainer {
     val proposeExperimentUseCase: ProposeExperimentUseCase
     val evolvePersonalModelUseCase: EvolvePersonalModelUseCase
     val saveReflectionUseCase: SaveReflectionUseCase
+    val backgroundExecutor: BackgroundExecutor
     val protectionRepository: ProtectionRepository
     val startProtectionSessionUseCase: StartProtectionSessionUseCase
     val stopProtectionSessionUseCase: StopProtectionSessionUseCase
@@ -525,6 +528,13 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             autonomySettingsRepository = autonomySettingsRepository,
             decisionRecordRepository = decisionRecordRepository,
             logger = logger
+        )
+    }
+
+    override val backgroundExecutor: BackgroundExecutor by lazy {
+        BackgroundExecutorImpl(
+            context = context,
+            workManager = androidx.work.WorkManager.getInstance(context)
         )
     }
 
