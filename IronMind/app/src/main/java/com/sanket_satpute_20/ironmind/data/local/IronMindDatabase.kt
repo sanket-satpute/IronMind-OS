@@ -29,11 +29,12 @@ import com.sanket_satpute_20.ironmind.data.local.entity.*
         ObservationEntity::class,
         com.sanket_satpute_20.ironmind.data.local.entity.PatternEntity::class,
         AutonomySettingsEntity::class,
+        GlobalAutonomyStateEntity::class,
         DecisionRecordEntity::class,
         NotificationRecordEntity::class,
         com.sanket_satpute_20.ironmind.data.local.entity.InterventionRecordEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class IronMindDatabase : RoomDatabase() {
@@ -42,6 +43,7 @@ abstract class IronMindDatabase : RoomDatabase() {
     abstract fun observationDao(): ObservationDao
     abstract fun patternDao(): com.sanket_satpute_20.ironmind.data.local.dao.PatternDao
     abstract fun autonomySettingsDao(): AutonomySettingsDao
+    abstract fun globalAutonomyStateDao(): com.sanket_satpute_20.ironmind.data.local.dao.GlobalAutonomyStateDao
     abstract fun decisionRecordDao(): DecisionRecordDao
     abstract fun notificationRecordDao(): NotificationRecordDao
     abstract fun interventionDao(): com.sanket_satpute_20.ironmind.data.local.dao.InterventionDao
@@ -231,6 +233,22 @@ abstract class IronMindDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
                 println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=9")
+            }
+        }
+
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `global_autonomy_state` (
+                        `userId` TEXT NOT NULL,
+                        `isGlobalPauseActive` INTEGER NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`userId`)
+                    )
+                    """.trimIndent()
+                )
+                println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=10")
             }
         }
     }

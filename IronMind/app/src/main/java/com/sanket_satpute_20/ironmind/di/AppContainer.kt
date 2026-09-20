@@ -137,6 +137,9 @@ interface AppContainer {
     val handleInterventionResultUseCase: HandleInterventionResultUseCase
     val ironMindAI: IronMindAI
     val autonomySettingsRepository: AutonomySettingsRepository
+    val getAutonomySettingsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.autonomy.GetAutonomySettingsUseCase
+    val updateAutonomyLevelUseCase: com.sanket_satpute_20.ironmind.domain.usecase.autonomy.UpdateAutonomyLevelUseCase
+    val toggleGlobalPauseUseCase: com.sanket_satpute_20.ironmind.domain.usecase.autonomy.ToggleGlobalPauseUseCase
     val decisionRecordRepository: DecisionRecordRepository
     val notificationRecordRepository: com.sanket_satpute_20.ironmind.domain.repository.NotificationRecordRepository
     val notificationEngine: com.sanket_satpute_20.ironmind.domain.engine.NotificationEngine
@@ -170,8 +173,13 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             IronMindDatabase.MIGRATION_5_6,
             IronMindDatabase.MIGRATION_6_7,
             IronMindDatabase.MIGRATION_7_8,
-            IronMindDatabase.MIGRATION_8_9
+            IronMindDatabase.MIGRATION_8_9,
+            IronMindDatabase.MIGRATION_9_10
         ).build()
+    }
+    
+    private val globalAutonomyStateDao: com.sanket_satpute_20.ironmind.data.local.dao.GlobalAutonomyStateDao by lazy {
+        database.globalAutonomyStateDao()
     }
     
     override val clock: Clock = object : Clock {
@@ -211,7 +219,19 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     override val autonomySettingsRepository: AutonomySettingsRepository by lazy {
-        AutonomySettingsRepositoryImpl(database.autonomySettingsDao(), clock)
+        AutonomySettingsRepositoryImpl(database.autonomySettingsDao(), globalAutonomyStateDao, clock)
+    }
+
+    override val getAutonomySettingsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.autonomy.GetAutonomySettingsUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.autonomy.GetAutonomySettingsUseCase(autonomySettingsRepository)
+    }
+
+    override val updateAutonomyLevelUseCase: com.sanket_satpute_20.ironmind.domain.usecase.autonomy.UpdateAutonomyLevelUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.autonomy.UpdateAutonomyLevelUseCase(autonomySettingsRepository, logger)
+    }
+
+    override val toggleGlobalPauseUseCase: com.sanket_satpute_20.ironmind.domain.usecase.autonomy.ToggleGlobalPauseUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.autonomy.ToggleGlobalPauseUseCase(autonomySettingsRepository)
     }
 
     override val decisionRecordRepository: DecisionRecordRepository by lazy {

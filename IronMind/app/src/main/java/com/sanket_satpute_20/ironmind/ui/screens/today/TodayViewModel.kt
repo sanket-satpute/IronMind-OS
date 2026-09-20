@@ -14,6 +14,7 @@ import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetActiveCommitm
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.UpdateCommitmentStatusUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.RecommendInterventionUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.HandleInterventionResultUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.autonomy.GetAutonomySettingsUseCase
 import com.sanket_satpute_20.ironmind.domain.ai.AIOutput
 import com.sanket_satpute_20.ironmind.domain.ai.InterventionType
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,7 +26,8 @@ sealed interface TodayUiState {
     data object Loading : TodayUiState
     data class Success(
         val activeCommitments: List<Commitment>,
-        val activeSuggestion: AIOutput.InterventionRecommendation? = null
+        val activeSuggestion: AIOutput.InterventionRecommendation? = null,
+        val isGlobalPauseActive: Boolean = false
     ) : TodayUiState
     data class Error(val message: String) : TodayUiState
 }
@@ -34,7 +36,8 @@ class TodayViewModel(
     private val getActiveCommitmentsUseCase: GetActiveCommitmentsUseCase,
     private val updateCommitmentStatusUseCase: UpdateCommitmentStatusUseCase,
     private val recommendInterventionUseCase: RecommendInterventionUseCase,
-    private val handleInterventionResultUseCase: HandleInterventionResultUseCase
+    private val handleInterventionResultUseCase: HandleInterventionResultUseCase,
+    private val getAutonomySettingsUseCase: GetAutonomySettingsUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<TodayUiState>(TodayUiState.Loading)
@@ -55,7 +58,12 @@ class TodayViewModel(
                     val commitments = result.data
                     // Trigger suggestion check in background
                     fetchSuggestion(commitments)
-                    _uiState.value = TodayUiState.Success(activeCommitments = commitments)
+                    val autonomyResult = getAutonomySettingsUseCase(currentUserId)
+                    val isPaused = if (autonomyResult is Result.Success) autonomyResult.data.isGlobalPauseActive else false
+                    _uiState.value = TodayUiState.Success(
+                        activeCommitments = commitments,
+                        isGlobalPauseActive = isPaused
+                    )
                 }
                 is Result.Failure -> {
                     _uiState.value = TodayUiState.Error(result.error.message ?: "Failed to load commitments")
@@ -136,7 +144,8 @@ class TodayViewModel(
                     getActiveCommitmentsUseCase = container.getActiveCommitmentsUseCase,
                     updateCommitmentStatusUseCase = container.updateCommitmentStatusUseCase,
                     recommendInterventionUseCase = container.recommendInterventionUseCase,
-                    handleInterventionResultUseCase = container.handleInterventionResultUseCase
+                    handleInterventionResultUseCase = container.handleInterventionResultUseCase,
+                    getAutonomySettingsUseCase = container.getAutonomySettingsUseCase
                 )
             }
         }

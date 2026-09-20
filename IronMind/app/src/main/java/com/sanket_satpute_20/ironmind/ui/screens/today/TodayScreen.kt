@@ -59,12 +59,28 @@ fun TodayScreenContent(
                 )
             }
             is TodayUiState.Success -> {
-                TodayContent(
-                    commitments = state.activeCommitments,
-                    activeSuggestion = state.activeSuggestion,
-                    onStatusChange = onStatusChange,
-                    onSuggestionAction = onSuggestionAction
-                )
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Show a prominent banner if global pause is active
+                    if (state.isGlobalPauseActive) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.errorContainer
+                        ) {
+                            Text(
+                                text = "⏸ IronMind Autonomy is paused. Go to Settings to re-enable.",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
+                    TodayContent(
+                        commitments = state.activeCommitments,
+                        activeSuggestion = state.activeSuggestion,
+                        onStatusChange = onStatusChange,
+                        onSuggestionAction = onSuggestionAction
+                    )
+                }
             }
         }
     }
