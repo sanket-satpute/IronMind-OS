@@ -9,6 +9,7 @@ data class InterventionRecord(
     val state: InterventionState,
     val title: String,
     val description: String,
+    val channel: InterventionChannel = InterventionChannel.IN_APP,
     val resolutionReason: InterventionResolutionReason? = null,
     val contextData: String? = null,
     val createdAt: Long,

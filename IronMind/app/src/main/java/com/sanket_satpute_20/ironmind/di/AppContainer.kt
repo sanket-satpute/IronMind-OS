@@ -47,6 +47,8 @@ import com.sanket_satpute_20.ironmind.domain.usecase.reflection.GetReflectionUse
 import com.sanket_satpute_20.ironmind.domain.usecase.memory.GetMemoryUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.pattern.LearnInterventionResponsePatternUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.pattern.LearnInterventionTimingPatternUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.intervention.SelectInterventionChannelUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.experiment.ProposeExperimentUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.history.GetEventUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.search.LocalSearchUseCase
 import com.sanket_satpute_20.ironmind.domain.repository.AuthRepository
@@ -100,6 +102,7 @@ import com.sanket_satpute_20.ironmind.data.provider.AndroidAppUsageObservationPr
 import com.sanket_satpute_20.ironmind.domain.usecase.observation.GetAppUsageObservationSettingsUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.observation.SetAppUsageObservationEnabledUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectAppUsageObservationsUseCase
+import com.sanket_satpute_20.ironmind.domain.repository.ExperimentRepository
 
 interface AppContainer {
     val goalRepository: GoalRepository
@@ -125,6 +128,8 @@ interface AppContainer {
     val updateCommitmentStatusUseCase: UpdateCommitmentStatusUseCase
     val learnInterventionResponsePatternUseCase: LearnInterventionResponsePatternUseCase
     val learnInterventionTimingPatternUseCase: LearnInterventionTimingPatternUseCase
+    val selectInterventionChannelUseCase: SelectInterventionChannelUseCase
+    val proposeExperimentUseCase: ProposeExperimentUseCase
     val saveReflectionUseCase: SaveReflectionUseCase
     val protectionRepository: ProtectionRepository
     val startProtectionSessionUseCase: StartProtectionSessionUseCase
@@ -168,6 +173,7 @@ interface AppContainer {
     val autoProtectionEngine: com.sanket_satpute_20.ironmind.domain.engine.AutoProtectionEngine
     val autonomousReflectionEngine: com.sanket_satpute_20.ironmind.domain.engine.AutonomousReflectionEngine
     val interventionRepository: com.sanket_satpute_20.ironmind.domain.repository.InterventionRepository
+    val experimentRepository: ExperimentRepository
     val taskRepository: com.sanket_satpute_20.ironmind.domain.repository.TaskRepository
     val interventionExecutionPipeline: com.sanket_satpute_20.ironmind.domain.engine.InterventionExecutionPipeline
     // V4.1 App Usage Observation
@@ -232,7 +238,9 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             IronMindDatabase.MIGRATION_10_11,
             IronMindDatabase.MIGRATION_11_12,
             IronMindDatabase.MIGRATION_12_13,
-            IronMindDatabase.MIGRATION_13_14
+            IronMindDatabase.MIGRATION_13_14,
+            IronMindDatabase.MIGRATION_14_15,
+            IronMindDatabase.MIGRATION_15_16
         ).build()
     }
     
@@ -258,6 +266,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     private val activityObservationSettingsDao: com.sanket_satpute_20.ironmind.data.local.dao.ActivityObservationSettingsDao by lazy {
         database.activityObservationSettingsDao()
+    }
+
+    private val experimentDao: com.sanket_satpute_20.ironmind.data.local.dao.ExperimentDao by lazy {
+        database.experimentDao()
     }
     
     override val clock: Clock = object : Clock {
@@ -555,6 +567,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         com.sanket_satpute_20.ironmind.data.repository.InterventionRepositoryImpl(database.interventionDao())
     }
 
+    override val experimentRepository: ExperimentRepository by lazy {
+        com.sanket_satpute_20.ironmind.data.repository.ExperimentRepositoryImpl(experimentDao)
+    }
+
     val interventionPolicyEngine: com.sanket_satpute_20.ironmind.domain.engine.InterventionPolicyEngine by lazy {
         com.sanket_satpute_20.ironmind.domain.engine.InterventionPolicyEngineImpl(
             interventionRepository = interventionRepository,
@@ -682,6 +698,20 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             ironMindAI = ironMindAI,
             clock = clock,
             idGenerator = idGenerator
+        )
+    }
+
+    override val selectInterventionChannelUseCase: SelectInterventionChannelUseCase by lazy {
+        SelectInterventionChannelUseCase(
+            ironMindAI = ironMindAI
+        )
+    }
+
+    override val proposeExperimentUseCase: ProposeExperimentUseCase by lazy {
+        ProposeExperimentUseCase(
+            ironMindAI = ironMindAI,
+            idGenerator = idGenerator,
+            clock = clock
         )
     }
 

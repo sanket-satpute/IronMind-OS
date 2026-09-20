@@ -5,6 +5,7 @@ import androidx.room.PrimaryKey
 import com.sanket_satpute_20.ironmind.domain.ai.InterventionType
 import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionState
 import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionResolutionReason
+import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionChannel
 
 @Entity(tableName = "intervention_records")
 data class InterventionRecordEntity(
@@ -15,6 +16,7 @@ data class InterventionRecordEntity(
     val state: InterventionState,
     val title: String,
     val description: String,
+    val channel: InterventionChannel,
     val resolutionReason: InterventionResolutionReason?,
     val contextData: String?,
     val createdAt: Long,

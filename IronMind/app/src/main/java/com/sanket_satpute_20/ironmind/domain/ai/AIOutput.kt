@@ -1,5 +1,7 @@
 package com.sanket_satpute_20.ironmind.domain.ai
 
+import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionChannel
+
 /**
  * Structured output from the IronMindAI reasoning layer.
  *
@@ -186,6 +188,35 @@ sealed class AIOutput {
         override val schemaVersion: Int = 1
     ) : AIOutput() {
         override val type: AIOutputType = AIOutputType.CONTEXT_SYNTHESIS
+    }
+
+    /**
+     * AI recommends a specific delivery channel for an intervention.
+     * Per Sprint V4.9.
+     */
+    data class ChannelRecommendation(
+        val recommendedChannel: InterventionChannel,
+        override val confidence: Float,
+        override val reasoning: String? = null,
+        override val schemaVersion: Int = 1
+    ) : AIOutput() {
+        override val type: AIOutputType = AIOutputType.CHANNEL_RECOMMENDATION
+    }
+
+    /**
+     * AI proposes a controlled experiment to optimize personal behavior.
+     * Per Sprint V4.10.
+     */
+    data class ExperimentProposal(
+        val hypothesis: String,
+        val activeVariation: String,
+        val controlVariation: String,
+        val targetMetric: String,
+        override val confidence: Float,
+        override val reasoning: String? = null,
+        override val schemaVersion: Int = 1
+    ) : AIOutput() {
+        override val type: AIOutputType = AIOutputType.EXPERIMENT_PROPOSAL
     }
 }
 

@@ -37,9 +37,10 @@ import com.sanket_satpute_20.ironmind.data.local.entity.*
         NotificationObservationSettingsEntity::class,
         CalendarObservationSettingsEntity::class,
         LocationObservationSettingsEntity::class,
-        ActivityObservationSettingsEntity::class
+        ActivityObservationSettingsEntity::class,
+        com.sanket_satpute_20.ironmind.data.local.entity.ExperimentRecordEntity::class
     ],
-    version = 15,
+    version = 17,
     exportSchema = false
 )
 abstract class IronMindDatabase : RoomDatabase() {
@@ -57,6 +58,7 @@ abstract class IronMindDatabase : RoomDatabase() {
     abstract fun calendarObservationSettingsDao(): com.sanket_satpute_20.ironmind.data.local.dao.CalendarObservationSettingsDao
     abstract fun locationObservationSettingsDao(): com.sanket_satpute_20.ironmind.data.local.dao.LocationObservationSettingsDao
     abstract fun activityObservationSettingsDao(): com.sanket_satpute_20.ironmind.data.local.dao.ActivityObservationSettingsDao
+    abstract fun experimentDao(): com.sanket_satpute_20.ironmind.data.local.dao.ExperimentDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -338,6 +340,40 @@ abstract class IronMindDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
                 println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=15")
+            }
+        }
+
+        val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    ALTER TABLE `intervention_records` ADD COLUMN `channel` TEXT NOT NULL DEFAULT 'IN_APP'
+                    """.trimIndent()
+                )
+                println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=16")
+            }
+        }
+
+        val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `experiment_records` (
+                        `id` TEXT NOT NULL,
+                        `userId` TEXT NOT NULL,
+                        `hypothesis` TEXT NOT NULL,
+                        `activeVariation` TEXT NOT NULL,
+                        `controlVariation` TEXT NOT NULL,
+                        `targetMetric` TEXT NOT NULL,
+                        `state` TEXT NOT NULL,
+                        `startedAt` INTEGER NOT NULL,
+                        `endedAt` INTEGER,
+                        `outcomeSummary` TEXT,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=17")
             }
         }
     }
