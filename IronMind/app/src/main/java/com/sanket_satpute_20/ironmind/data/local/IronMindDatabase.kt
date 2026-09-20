@@ -34,9 +34,10 @@ import com.sanket_satpute_20.ironmind.data.local.entity.*
         DecisionRecordEntity::class,
         NotificationRecordEntity::class,
         com.sanket_satpute_20.ironmind.data.local.entity.InterventionRecordEntity::class,
-        NotificationObservationSettingsEntity::class
+        NotificationObservationSettingsEntity::class,
+        CalendarObservationSettingsEntity::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 abstract class IronMindDatabase : RoomDatabase() {
@@ -51,6 +52,7 @@ abstract class IronMindDatabase : RoomDatabase() {
     abstract fun notificationRecordDao(): NotificationRecordDao
     abstract fun interventionDao(): com.sanket_satpute_20.ironmind.data.local.dao.InterventionDao
     abstract fun notificationObservationSettingsDao(): com.sanket_satpute_20.ironmind.data.local.dao.NotificationObservationSettingsDao
+    abstract fun calendarObservationSettingsDao(): com.sanket_satpute_20.ironmind.data.local.dao.CalendarObservationSettingsDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -285,6 +287,21 @@ abstract class IronMindDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
                 println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=12")
+            }
+        }
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `calendar_observation_settings` (
+                        `userId` TEXT NOT NULL,
+                        `isEnabled` INTEGER NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`userId`)
+                    )
+                    """.trimIndent()
+                )
+                println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=13")
             }
         }
     }

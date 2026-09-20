@@ -178,6 +178,13 @@ interface AppContainer {
     val setNotificationObservationEnabledUseCase: SetNotificationObservationEnabledUseCase
     val handleIncomingNotificationUseCase: HandleIncomingNotificationUseCase
 
+    // V4.3 Calendar Context
+    val calendarObservationSettingsRepository: com.sanket_satpute_20.ironmind.domain.repository.CalendarObservationSettingsRepository
+    val calendarObservationProvider: com.sanket_satpute_20.ironmind.domain.provider.CalendarObservationProvider
+    val getCalendarObservationSettingsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.GetCalendarObservationSettingsUseCase
+    val setCalendarObservationEnabledUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.SetCalendarObservationEnabledUseCase
+    val collectCalendarObservationsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectCalendarObservationsUseCase
+
     // Services
 }
 
@@ -203,7 +210,8 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             IronMindDatabase.MIGRATION_8_9,
             IronMindDatabase.MIGRATION_9_10,
             IronMindDatabase.MIGRATION_10_11,
-            IronMindDatabase.MIGRATION_11_12
+            IronMindDatabase.MIGRATION_11_12,
+            IronMindDatabase.MIGRATION_12_13
         ).build()
     }
     
@@ -217,6 +225,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     private val notificationObservationSettingsDao: com.sanket_satpute_20.ironmind.data.local.dao.NotificationObservationSettingsDao by lazy {
         database.notificationObservationSettingsDao()
+    }
+
+    private val calendarObservationSettingsDao: com.sanket_satpute_20.ironmind.data.local.dao.CalendarObservationSettingsDao by lazy {
+        database.calendarObservationSettingsDao()
     }
     
     override val clock: Clock = object : Clock {
@@ -611,6 +623,33 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         HandleIncomingNotificationUseCase(
             notificationObservationSettingsRepository = notificationObservationSettingsRepository,
             observationRepository = observationRepository,
+            idGenerator = idGenerator,
+            clock = clock
+        )
+    }
+
+    // V4.3 — Calendar Context
+    override val calendarObservationSettingsRepository: com.sanket_satpute_20.ironmind.domain.repository.CalendarObservationSettingsRepository by lazy {
+        com.sanket_satpute_20.ironmind.data.repository.CalendarObservationSettingsRepositoryImpl(calendarObservationSettingsDao, clock)
+    }
+
+    override val calendarObservationProvider: com.sanket_satpute_20.ironmind.domain.provider.CalendarObservationProvider by lazy {
+        com.sanket_satpute_20.ironmind.data.provider.AndroidCalendarObservationProvider(context)
+    }
+
+    override val getCalendarObservationSettingsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.GetCalendarObservationSettingsUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.observation.GetCalendarObservationSettingsUseCase(calendarObservationSettingsRepository)
+    }
+
+    override val setCalendarObservationEnabledUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.SetCalendarObservationEnabledUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.observation.SetCalendarObservationEnabledUseCase(calendarObservationSettingsRepository, getCalendarObservationSettingsUseCase)
+    }
+
+    override val collectCalendarObservationsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectCalendarObservationsUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectCalendarObservationsUseCase(
+            settingsRepository = calendarObservationSettingsRepository,
+            observationRepository = observationRepository,
+            calendarObservationProvider = calendarObservationProvider,
             idGenerator = idGenerator,
             clock = clock
         )

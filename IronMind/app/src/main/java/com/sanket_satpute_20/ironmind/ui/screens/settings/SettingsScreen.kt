@@ -22,7 +22,8 @@ fun SettingsScreen(
         uiState = uiState,
         onGlobalPauseToggle = { isPaused -> viewModel.setGlobalPause(isPaused) },
         onAppUsageObservationToggle = { isEnabled -> viewModel.setAppUsageObservationEnabled(isEnabled) },
-        onNotificationObservationToggle = { isEnabled -> viewModel.setNotificationObservationEnabled(isEnabled) }
+        onNotificationObservationToggle = { isEnabled -> viewModel.setNotificationObservationEnabled(isEnabled) },
+        onCalendarObservationToggle = { isEnabled -> viewModel.setCalendarObservationEnabled(isEnabled) }
     )
 }
 
@@ -32,7 +33,8 @@ fun SettingsScreenContent(
     uiState: SettingsUiState,
     onGlobalPauseToggle: (Boolean) -> Unit,
     onAppUsageObservationToggle: (Boolean) -> Unit = {},
-    onNotificationObservationToggle: (Boolean) -> Unit = {}
+    onNotificationObservationToggle: (Boolean) -> Unit = {},
+    onCalendarObservationToggle: (Boolean) -> Unit = {}
 ) {
     Column(
         modifier = modifier
@@ -196,6 +198,55 @@ fun SettingsScreenContent(
                     Switch(
                         checked = uiState.isNotificationObservationEnabled,
                         onCheckedChange = { onNotificationObservationToggle(it) }
+                    )
+                }
+            }
+        }
+
+        // ── Calendar Observation card ───────────────────────────────────────────
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "📅 Calendar Context",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                Text(
+                    text = "Allow IronMind to observe your calendar for contextual awareness (upcoming events, free time). " +
+                            "This helps IronMind reason about time reality rather than scheduling into fictional availability.",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                if (!uiState.isCalendarPermissionGranted) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    ) {
+                        Text(
+                            text = "⚠ Permission required: Go to App Info → Permissions and grant Calendar access.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (uiState.isCalendarObservationEnabled) "Observation ON" else "Observation OFF",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (uiState.isCalendarObservationEnabled)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Switch(
+                        checked = uiState.isCalendarObservationEnabled,
+                        onCheckedChange = { onCalendarObservationToggle(it) }
                     )
                 }
             }
