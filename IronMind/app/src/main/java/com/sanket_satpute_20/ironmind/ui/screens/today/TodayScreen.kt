@@ -17,10 +17,6 @@ import com.sanket_satpute_20.ironmind.domain.model.Commitment
 import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
 import com.sanket_satpute_20.ironmind.domain.model.ResultStatus
 import com.sanket_satpute_20.ironmind.ui.components.CommitmentStatusControls
-import com.sanket_satpute_20.ironmind.ui.components.InterventionSuggestionCard
-import com.sanket_satpute_20.ironmind.domain.ai.AIOutput
-import com.sanket_satpute_20.ironmind.domain.usecase.ai.HandleInterventionResultUseCase
-import com.sanket_satpute_20.ironmind.ui.components.CommitmentStatusControls
 
 @Composable
 fun TodayScreen(
@@ -32,10 +28,7 @@ fun TodayScreen(
     TodayScreenContent(
         modifier = modifier,
         uiState = uiState,
-        onStatusChange = { id, newStatus, outcome -> viewModel.updateCommitmentStatus(id, newStatus, outcome) },
-        onSuggestionAction = { recommendation, action, correctedText -> 
-            viewModel.handleSuggestionAction(recommendation, action, correctedText) 
-        }
+        onStatusChange = { id, newStatus, outcome -> viewModel.updateCommitmentStatus(id, newStatus, outcome) }
     )
 }
 
@@ -43,8 +36,7 @@ fun TodayScreen(
 fun TodayScreenContent(
     modifier: Modifier = Modifier,
     uiState: TodayUiState,
-    onStatusChange: (String, CommitmentStatus, ResultStatus?) -> Unit,
-    onSuggestionAction: (AIOutput.InterventionRecommendation, HandleInterventionResultUseCase.Action, String?) -> Unit = { _, _, _ -> }
+    onStatusChange: (String, CommitmentStatus, ResultStatus?) -> Unit
 ) {
     Box(modifier = modifier.fillMaxSize()) {
         when (val state = uiState) {
@@ -60,25 +52,9 @@ fun TodayScreenContent(
             }
             is TodayUiState.Success -> {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // Show a prominent banner if global pause is active
-                    if (state.isGlobalPauseActive) {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = MaterialTheme.colorScheme.errorContainer
-                        ) {
-                            Text(
-                                text = "⏸ IronMind Autonomy is paused. Go to Settings to re-enable.",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                            )
-                        }
-                    }
                     TodayContent(
                         commitments = state.activeCommitments,
-                        activeSuggestion = state.activeSuggestion,
-                        onStatusChange = onStatusChange,
-                        onSuggestionAction = onSuggestionAction
+                        onStatusChange = onStatusChange
                     )
                 }
             }
@@ -89,9 +65,7 @@ fun TodayScreenContent(
 @Composable
 fun TodayContent(
     commitments: List<Commitment>,
-    activeSuggestion: AIOutput.InterventionRecommendation? = null,
-    onStatusChange: (String, CommitmentStatus, ResultStatus?) -> Unit,
-    onSuggestionAction: (AIOutput.InterventionRecommendation, HandleInterventionResultUseCase.Action, String?) -> Unit = { _, _, _ -> }
+    onStatusChange: (String, CommitmentStatus, ResultStatus?) -> Unit
 ) {
     if (commitments.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -109,18 +83,6 @@ fun TodayContent(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        if (activeSuggestion != null) {
-            item {
-                InterventionSuggestionCard(
-                    recommendation = activeSuggestion,
-                    onAction = { action, correctedText ->
-                        onSuggestionAction(activeSuggestion, action, correctedText)
-                    },
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-            }
-        }
-
         item {
             Text(
                 text = "Next Action",

@@ -5,12 +5,6 @@ import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.CreateCommitmentUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetActiveCommitmentsUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.UpdateCommitmentStatusUseCase
-import com.sanket_satpute_20.ironmind.domain.usecase.ai.RecommendInterventionUseCase
-import com.sanket_satpute_20.ironmind.domain.usecase.ai.HandleInterventionResultUseCase
-import com.sanket_satpute_20.ironmind.domain.ai.AIOutput
-import com.sanket_satpute_20.ironmind.domain.ai.InterventionType
-import com.sanket_satpute_20.ironmind.domain.ai.AIRequest
-import com.sanket_satpute_20.ironmind.domain.usecase.autonomy.GetAutonomySettingsUseCase
 import com.sanket_satpute_20.ironmind.testutil.TestDispatcherRule
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeCommitmentRepository
@@ -37,15 +31,11 @@ class TodayViewModelTest {
     private lateinit var outcomeRepository: FakeOutcomeRepository
     private lateinit var getActiveCommitmentsUseCase: GetActiveCommitmentsUseCase
     private lateinit var updateCommitmentStatusUseCase: UpdateCommitmentStatusUseCase
-    private lateinit var recommendInterventionUseCase: RecommendInterventionUseCase
-    private lateinit var handleInterventionResultUseCase: HandleInterventionResultUseCase
     private lateinit var createCommitmentUseCase: CreateCommitmentUseCase
     private lateinit var clock: FakeClock
     private lateinit var idGenerator: FakeIdGenerator
     private lateinit var reminderScheduler: FakeReminderScheduler
     private lateinit var eventRepository: FakeEventRepository
-    private lateinit var getAutonomySettingsUseCase: GetAutonomySettingsUseCase
-    private lateinit var fakeAutonomySettingsRepository: com.sanket_satpute_20.ironmind.testutil.fake.FakeAutonomySettingsRepository
 
     private lateinit var viewModel: TodayViewModel
 
@@ -61,20 +51,12 @@ class TodayViewModelTest {
         getActiveCommitmentsUseCase = GetActiveCommitmentsUseCase(repository)
         updateCommitmentStatusUseCase = UpdateCommitmentStatusUseCase(repository, outcomeRepository, reminderScheduler, clock, idGenerator, eventRepository)
         createCommitmentUseCase = CreateCommitmentUseCase(repository, reminderScheduler, idGenerator, clock, eventRepository)
-        recommendInterventionUseCase = RecommendInterventionUseCase(FakeIronMindAI())
-        handleInterventionResultUseCase = HandleInterventionResultUseCase(eventRepository, clock, idGenerator)
-        
-        fakeAutonomySettingsRepository = com.sanket_satpute_20.ironmind.testutil.fake.FakeAutonomySettingsRepository()
-        getAutonomySettingsUseCase = GetAutonomySettingsUseCase(fakeAutonomySettingsRepository)
     }
 
     private fun createViewModel() {
         viewModel = TodayViewModel(
             getActiveCommitmentsUseCase,
-            updateCommitmentStatusUseCase,
-            recommendInterventionUseCase,
-            handleInterventionResultUseCase,
-            getAutonomySettingsUseCase
+            updateCommitmentStatusUseCase
         )
     }
 
@@ -142,8 +124,4 @@ class TodayViewModelTest {
     }
 }
 
-class FakeIronMindAI : com.sanket_satpute_20.ironmind.domain.ai.IronMindAI {
-    override suspend fun process(request: AIRequest): Result<AIOutput, Exception> {
-        return Result.Failure(Exception("Not implemented"))
-    }
-}
+
