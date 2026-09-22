@@ -28,6 +28,7 @@ class ContextEngineImplTest {
     private lateinit var reflectionRepository: FakeReflectionRepository
     private lateinit var protectionRepository: FakeProtectionRepository
     private lateinit var goalRepository: FakeGoalRepository
+    private lateinit var patternRepository: FakePatternRepository
     private lateinit var engine: ContextEngineImpl
 
     class FakeClock(var time: Long) : Clock {
@@ -86,6 +87,16 @@ class ContextEngineImplTest {
         override suspend fun saveGoal(goal: Goal): Result<Unit, Exception> = Result.Success(Unit)
         override suspend fun searchGoals(userId: String, query: String): Result<List<Goal>, Exception> = Result.Success(goals)
     }
+    class FakePatternRepository : PatternRepository {
+        var patterns = emptyList<com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern>()
+        override suspend fun getPatternsForUser(userId: String): Result<List<com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern>, Exception> = Result.Success(patterns)
+        override suspend fun getPattern(id: String): Result<com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern?, Exception> = Result.Failure(Exception())
+        override suspend fun getPatternsByType(userId: String, type: com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType): Result<List<com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern>, Exception> = Result.Success(patterns)
+        override suspend fun getPatternsByStatus(userId: String, status: com.sanket_satpute_20.ironmind.domain.model.pattern.PatternStatus): Result<List<com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern>, Exception> = Result.Success(patterns)
+        override suspend fun savePattern(pattern: com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern): Result<Unit, Exception> = Result.Success(Unit)
+        override suspend fun updatePatternConfidence(id: String, confidence: Float, lastObservedAt: Long): Result<Unit, Exception> = Result.Success(Unit)
+        override suspend fun deletePattern(id: String): Result<Unit, Exception> = Result.Success(Unit)
+    }
 
     @Before
     fun setup() {
@@ -96,6 +107,7 @@ class ContextEngineImplTest {
         reflectionRepository = FakeReflectionRepository()
         protectionRepository = FakeProtectionRepository()
         goalRepository = FakeGoalRepository()
+        patternRepository = FakePatternRepository()
 
         engine = ContextEngineImpl(
             clock,
@@ -104,7 +116,8 @@ class ContextEngineImplTest {
             observationRepository,
             reflectionRepository,
             protectionRepository,
-            goalRepository
+            goalRepository,
+            patternRepository
         )
     }
 

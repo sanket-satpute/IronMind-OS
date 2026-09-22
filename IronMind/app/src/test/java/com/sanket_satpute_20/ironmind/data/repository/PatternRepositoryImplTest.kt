@@ -7,6 +7,8 @@ import com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState
 import com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern
 import com.sanket_satpute_20.ironmind.domain.model.pattern.PatternStatus
 import com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Before
@@ -41,6 +43,16 @@ class PatternRepositoryImplTest {
 
         override fun deletePattern(id: String) {
             store.remove(id)
+        }
+
+        override fun getPatternCount(): Flow<Int> = flowOf(store.size)
+
+        override fun deletePatternsForUser(userId: String) {
+            store.values.removeIf { it.userId == userId }
+        }
+
+        override fun deleteExpiredPatternsOlderThan(userId: String, thresholdTime: Long) {
+            store.values.removeIf { it.userId == userId && it.updatedAt < thresholdTime }
         }
     }
 

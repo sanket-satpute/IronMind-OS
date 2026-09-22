@@ -26,4 +26,9 @@ class FakeAutonomySettingsRepository : AutonomySettingsRepository {
         userMap[capability] = level
         return Result.Success(Unit)
     }
+
+    override suspend fun setGlobalPause(userId: String, isPaused: Boolean): Result<Unit, Exception> {
+        if (shouldFail) return Result.Failure(Exception("Fake failure"))
+        return Result.Success(Unit)
+    }
 }

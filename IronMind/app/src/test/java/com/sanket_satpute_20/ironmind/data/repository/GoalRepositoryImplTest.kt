@@ -5,6 +5,8 @@ import com.sanket_satpute_20.ironmind.data.local.entity.*
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.Goal
 import com.sanket_satpute_20.ironmind.domain.model.GoalStatus
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -75,6 +77,21 @@ class GoalRepositoryImplTest {
         override fun getEvent(id: String): EventEntity? = null
         override fun getEventsForDateRange(userId: String, startTime: Long, endTime: Long): List<EventEntity> = emptyList()
         override fun getMemoriesForDateRange(userId: String, startTime: Long, endTime: Long): List<MemoryEntity> = emptyList()
+
+        override fun getProtectionRuleCount(): Flow<Int> = flowOf(0)
+        override fun getEventCount(): Flow<Int> = flowOf(0)
+        override fun getMemoryCount(): Flow<Int> = flowOf(0)
+        override fun deleteUserProfile(userId: String) {}
+        override fun deleteGoalsForUser(userId: String) {}
+        override fun deletePlansForUser(userId: String) {}
+        override fun deleteTasksForUser(userId: String) {}
+        override fun deleteCommitmentsForUser(userId: String) {}
+        override fun deleteReflectionsForUser(userId: String) {}
+        override fun deleteProtectionRulesForUser(userId: String) {}
+        override fun deleteProtectionSessionsForUser(userId: String) {}
+        override fun deleteEventsForUser(userId: String) {}
+        override fun deleteMemoriesForUser(userId: String) {}
+        override fun deleteForgottenMemoriesOlderThan(userId: String, thresholdTime: Long) {}
     }
 
     @Before

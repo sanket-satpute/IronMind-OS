@@ -7,6 +7,8 @@ import com.sanket_satpute_20.ironmind.domain.model.observation.Observation
 import com.sanket_satpute_20.ironmind.domain.model.observation.ObservationProvenance
 import com.sanket_satpute_20.ironmind.domain.model.observation.ObservationSource
 import com.sanket_satpute_20.ironmind.domain.model.observation.ObservationType
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -48,6 +50,27 @@ class ObservationRepositoryImplTest {
 
         override fun deleteObservation(id: String) {
             entities.remove(id)
+        }
+
+        override fun getRecentObservationsByType(type: String, limit: Int): List<ObservationEntity> {
+            return entities.values
+                .filter { it.type == type }
+                .sortedByDescending { it.occurredAt }
+                .take(limit)
+        }
+
+        override fun getObservationCount(): Flow<Int> {
+            return flowOf(entities.size)
+        }
+
+        override fun getLatestObservation(userId: String, type: String): ObservationEntity? {
+            return entities.values
+                .filter { it.userId == userId && it.type == type }
+                .maxByOrNull { it.occurredAt }
+        }
+
+        override fun deleteObservationsForUser(userId: String) {
+            entities.values.removeIf { it.userId == userId }
         }
     }
 

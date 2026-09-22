@@ -266,6 +266,10 @@ class AutoRefFakeAutonomySettingsRepository : AutonomySettingsRepository {
     override suspend fun updateLevel(userId: String, capability: AutonomyCapability, level: AutonomyLevel): Result<Unit, Exception> {
         return Result.Success(Unit)
     }
+
+    override suspend fun setGlobalPause(userId: String, isPaused: Boolean): Result<Unit, Exception> {
+        return Result.Success(Unit)
+    }
 }
 
 class AutoRefFakeMemoryRepository : MemoryRepository {

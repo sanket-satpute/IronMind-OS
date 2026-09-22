@@ -10,6 +10,7 @@ import com.sanket_satpute_20.ironmind.domain.usecase.ai.HandleInterventionResult
 import com.sanket_satpute_20.ironmind.domain.ai.AIOutput
 import com.sanket_satpute_20.ironmind.domain.ai.InterventionType
 import com.sanket_satpute_20.ironmind.domain.ai.AIRequest
+import com.sanket_satpute_20.ironmind.domain.usecase.autonomy.GetAutonomySettingsUseCase
 import com.sanket_satpute_20.ironmind.testutil.TestDispatcherRule
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeCommitmentRepository
@@ -43,6 +44,8 @@ class TodayViewModelTest {
     private lateinit var idGenerator: FakeIdGenerator
     private lateinit var reminderScheduler: FakeReminderScheduler
     private lateinit var eventRepository: FakeEventRepository
+    private lateinit var getAutonomySettingsUseCase: GetAutonomySettingsUseCase
+    private lateinit var fakeAutonomySettingsRepository: com.sanket_satpute_20.ironmind.testutil.fake.FakeAutonomySettingsRepository
 
     private lateinit var viewModel: TodayViewModel
 
@@ -60,6 +63,9 @@ class TodayViewModelTest {
         createCommitmentUseCase = CreateCommitmentUseCase(repository, reminderScheduler, idGenerator, clock, eventRepository)
         recommendInterventionUseCase = RecommendInterventionUseCase(FakeIronMindAI())
         handleInterventionResultUseCase = HandleInterventionResultUseCase(eventRepository, clock, idGenerator)
+        
+        fakeAutonomySettingsRepository = com.sanket_satpute_20.ironmind.testutil.fake.FakeAutonomySettingsRepository()
+        getAutonomySettingsUseCase = GetAutonomySettingsUseCase(fakeAutonomySettingsRepository)
     }
 
     private fun createViewModel() {
@@ -67,7 +73,8 @@ class TodayViewModelTest {
             getActiveCommitmentsUseCase,
             updateCommitmentStatusUseCase,
             recommendInterventionUseCase,
-            handleInterventionResultUseCase
+            handleInterventionResultUseCase,
+            getAutonomySettingsUseCase
         )
     }
 
