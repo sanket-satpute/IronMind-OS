@@ -7,6 +7,7 @@ class FakeAppProtectionProvider : AppProtectionProvider {
     var permissionsGranted = true
     var isActive = false
     val protectedPackages = mutableListOf<String>()
+    var shouldFailRemoval = false
 
     override fun hasRequiredPermissions(): Boolean {
         return permissionsGranted
@@ -24,6 +25,9 @@ class FakeAppProtectionProvider : AppProtectionProvider {
     }
 
     override suspend fun removeProtection(): Result<Unit, Exception> {
+        if (shouldFailRemoval) {
+            return Result.Failure(Exception("Simulated removal failure"))
+        }
         isActive = false
         protectedPackages.clear()
         return Result.Success(Unit)

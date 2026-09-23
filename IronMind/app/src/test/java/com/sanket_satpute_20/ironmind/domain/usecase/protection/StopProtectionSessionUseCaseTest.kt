@@ -76,6 +76,23 @@ class StopProtectionSessionUseCaseTest {
         assertTrue(result is Result.Failure)
     }
 
+    @Test
+    fun `stopping session fails if provider removal fails and session remains active`() = runTest {
+        val session = createActiveSession("s4")
+        protectionRepository.saveProtectionSession(session)
+        
+        protectionProvider.shouldFailRemoval = true
+        
+        val result = stopProtectionSessionUseCase("s4")
+        assertTrue(result is Result.Failure)
+        
+        val updatedSessionResult = protectionRepository.getProtectionSession("s4")
+        assertTrue(updatedSessionResult is Result.Success)
+        
+        val updatedSession = (updatedSessionResult as Result.Success).data
+        assertEquals(ProtectionSessionStatus.ACTIVE, updatedSession.status)
+    }
+
     private fun createActiveSession(id: String): ProtectionSession {
         return ProtectionSession(
             id = id,

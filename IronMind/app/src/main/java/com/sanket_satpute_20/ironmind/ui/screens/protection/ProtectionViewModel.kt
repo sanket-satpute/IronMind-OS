@@ -62,7 +62,7 @@ class ProtectionViewModel(
 
     fun startProtection(targetPackages: List<String>) {
         viewModelScope.launch {
-            println("IronMindLifecycle [Protection] [START_REQUEST] targetPackages=${targetPackages.joinToString()}")
+            println("IronMindLifecycle [Protection] [START_REQUEST] targetCount=${targetPackages.size}")
             when (val result = startProtectionSessionUseCase(
                 userId = currentUserId,
                 targetPackages = targetPackages

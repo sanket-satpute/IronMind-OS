@@ -39,6 +39,11 @@ class StopProtectionSessionUseCase(
             StopReason.EXPIRED -> ProtectionSessionStatus.EXPIRED
         }
 
+        val removeResult = appProtectionProvider.removeProtection()
+        if (removeResult is Result.Failure) {
+            return Result.Failure(Exception("Failed to remove protection: ${removeResult.error.message}"))
+        }
+
         val updatedSession = session.copy(
             status = finalStatus,
             endedAt = now,
@@ -47,7 +52,6 @@ class StopProtectionSessionUseCase(
 
         val saveResult = protectionRepository.saveProtectionSession(updatedSession)
         return if (saveResult is Result.Success) {
-            appProtectionProvider.removeProtection()
             val event = Event(
                 id = java.util.UUID.randomUUID().toString(), // Or inject idGenerator
                 userId = session.userId,
