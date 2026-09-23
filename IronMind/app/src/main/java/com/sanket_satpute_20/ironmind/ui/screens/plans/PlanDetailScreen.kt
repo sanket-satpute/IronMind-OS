@@ -1,12 +1,14 @@
-package com.sanket_satpute_20.ironmind.ui.screens.goals
+package com.sanket_satpute_20.ironmind.ui.screens.plans
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -15,15 +17,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.sanket_satpute_20.ironmind.domain.model.Goal
+import com.sanket_satpute_20.ironmind.domain.model.Task
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GoalsScreen(
+fun PlanDetailScreen(
+    planId: String,
     modifier: Modifier = Modifier,
-    viewModel: GoalsViewModel = viewModel(factory = GoalsViewModel.Factory),
-    onNavigateToGoal: (String) -> Unit = {}
+    viewModel: PlanDetailViewModel = viewModel(factory = PlanDetailViewModel.Factory),
+    onNavigateBack: () -> Unit = {}
 ) {
+    LaunchedEffect(planId) {
+        viewModel.loadData(planId)
+    }
+
     val uiState by viewModel.uiState.collectAsState()
     val showCreateForm by viewModel.showCreateForm.collectAsState()
 
@@ -31,12 +38,20 @@ fun GoalsScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text("Goals") }
+                title = { Text("Plan Details") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { viewModel.openCreateForm() }) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = "Create Goal")
+            // Only show FAB if we successfully loaded the plan
+            if (uiState is PlanDetailUiState.Success) {
+                FloatingActionButton(onClick = { viewModel.openCreateForm() }) {
+                    Icon(imageVector = Icons.Default.Add, contentDescription = "Create Task")
+                }
             }
         }
     ) { paddingValues ->
@@ -46,42 +61,65 @@ fun GoalsScreen(
                 .padding(paddingValues)
         ) {
             when (val state = uiState) {
-                is GoalsUiState.Loading -> {
+                is PlanDetailUiState.Loading -> {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 }
-                is GoalsUiState.Error -> {
+                is PlanDetailUiState.Error -> {
                     Text(
                         text = "Error: ${state.message}",
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
-                is GoalsUiState.Success -> {
-                    if (state.goals.isEmpty()) {
-                        Column(
-                            modifier = Modifier.align(Alignment.Center),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                is PlanDetailUiState.Success -> {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        // Plan Info Header
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
                         ) {
-                            Text(
-                                "No active goals yet.",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                "What are you trying to accomplish?",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(
+                                    text = state.plan.title,
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = state.plan.description.ifBlank { "No description" },
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
                         }
-                    } else {
-                        LazyColumn(
-                            contentPadding = PaddingValues(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            items(state.goals, key = { it.id }) { goal ->
-                                GoalCard(goal = goal, onClick = { onNavigateToGoal(goal.id) })
+
+                        HorizontalDivider()
+
+                        // Tasks List
+                        Text(
+                            text = "Tasks",
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.padding(16.dp)
+                        )
+
+                        if (state.tasks.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text(
+                                    "No tasks yet. Create one!",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        } else {
+                            LazyColumn(
+                                contentPadding = PaddingValues(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                items(state.tasks, key = { it.id }) { task ->
+                                    TaskCard(task = task)
+                                }
                             }
                         }
                     }
@@ -91,15 +129,13 @@ fun GoalsScreen(
     }
 
     if (showCreateForm) {
-        CreateGoalBottomSheet(viewModel = viewModel)
+        CreateTaskBottomSheet(viewModel = viewModel)
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GoalCard(goal: Goal, onClick: () -> Unit = {}) {
+fun TaskCard(task: Task) {
     Card(
-        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -109,14 +145,14 @@ fun GoalCard(goal: Goal, onClick: () -> Unit = {}) {
                 .padding(16.dp)
         ) {
             Text(
-                text = goal.title,
+                text = task.title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
-            if (goal.description.isNotBlank()) {
+            if (task.description.isNotBlank()) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = goal.description,
+                    text = task.description,
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -129,10 +165,10 @@ fun GoalCard(goal: Goal, onClick: () -> Unit = {}) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Badge {
-                    Text("Importance: ${goal.importance}/10")
+                    Text("Priority: ${task.priority}")
                 }
                 Text(
-                    text = goal.status.name,
+                    text = task.status.name,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -143,11 +179,10 @@ fun GoalCard(goal: Goal, onClick: () -> Unit = {}) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateGoalBottomSheet(viewModel: GoalsViewModel) {
-    val newGoalTitle by viewModel.newGoalTitle.collectAsState()
-    val newGoalDescription by viewModel.newGoalDescription.collectAsState()
-    val newGoalWhy by viewModel.newGoalWhy.collectAsState()
-    val newGoalImportance by viewModel.newGoalImportance.collectAsState()
+fun CreateTaskBottomSheet(viewModel: PlanDetailViewModel) {
+    val newTaskTitle by viewModel.newTaskTitle.collectAsState()
+    val newTaskDescription by viewModel.newTaskDescription.collectAsState()
+    val newTaskPriority by viewModel.newTaskPriority.collectAsState()
     val isSaving by viewModel.isSaving.collectAsState()
     val saveError by viewModel.saveError.collectAsState()
     
@@ -164,15 +199,15 @@ fun CreateGoalBottomSheet(viewModel: GoalsViewModel) {
                 .padding(bottom = 32.dp)
         ) {
             Text(
-                text = "Create Goal",
+                text = "Create Task",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(16.dp))
             
             OutlinedTextField(
-                value = newGoalTitle,
-                onValueChange = viewModel::updateNewGoalTitle,
+                value = newTaskTitle,
+                onValueChange = viewModel::updateNewTaskTitle,
                 label = { Text("Title *") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
@@ -180,29 +215,20 @@ fun CreateGoalBottomSheet(viewModel: GoalsViewModel) {
             
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
-                value = newGoalDescription,
-                onValueChange = viewModel::updateNewGoalDescription,
+                value = newTaskDescription,
+                onValueChange = viewModel::updateNewTaskDescription,
                 label = { Text("Description") },
                 modifier = Modifier.fillMaxWidth(),
                 maxLines = 3
             )
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = newGoalWhy,
-                onValueChange = viewModel::updateNewGoalWhy,
-                label = { Text("Why is this important?") },
-                modifier = Modifier.fillMaxWidth(),
-                maxLines = 3
-            )
-            
+
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Importance: ${newGoalImportance.toInt()}/10")
+            Text("Priority: ${newTaskPriority.toInt()} (1 = Highest, 5 = Lowest)")
             Slider(
-                value = newGoalImportance,
-                onValueChange = viewModel::updateNewGoalImportance,
-                valueRange = 1f..10f,
-                steps = 8
+                value = newTaskPriority,
+                onValueChange = viewModel::updateNewTaskPriority,
+                valueRange = 1f..5f,
+                steps = 3
             )
 
             if (saveError != null) {
@@ -217,7 +243,7 @@ fun CreateGoalBottomSheet(viewModel: GoalsViewModel) {
             Spacer(modifier = Modifier.height(24.dp))
             
             Button(
-                onClick = viewModel::createGoal,
+                onClick = viewModel::createTask,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !isSaving
             ) {
@@ -227,7 +253,7 @@ fun CreateGoalBottomSheet(viewModel: GoalsViewModel) {
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text("Save Goal")
+                    Text("Save Task")
                 }
             }
         }
