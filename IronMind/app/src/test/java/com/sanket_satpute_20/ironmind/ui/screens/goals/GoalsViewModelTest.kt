@@ -21,8 +21,10 @@ import org.junit.Test
 
 class FakeGoalRepository : GoalRepository {
     private val goals = mutableListOf<Goal>()
+    var shouldFail = false
 
     override suspend fun saveGoal(goal: Goal): Result<Unit, Exception> {
+        if (shouldFail) return Result.Failure(Exception("Simulated save failure"))
         goals.removeIf { it.id == goal.id }
         goals.add(goal)
         return Result.Success(Unit)
@@ -33,6 +35,7 @@ class FakeGoalRepository : GoalRepository {
     }
 
     override suspend fun getGoalsForUser(userId: String): Result<List<Goal>, Exception> {
+        if (shouldFail) return Result.Failure(Exception("Simulated load failure"))
         return Result.Success(goals.filter { it.userId == userId })
     }
 
@@ -119,5 +122,31 @@ class GoalsViewModelTest {
         val state = viewModel.uiState.value
         assertTrue(state is GoalsUiState.Success)
         assertTrue((state as GoalsUiState.Success).goals.isEmpty())
+    }
+
+    @Test
+    fun `loadGoals handles repository failure`() = runTest {
+        goalRepository.shouldFail = true
+        viewModel = GoalsViewModel(getGoalsUseCase, createGoalUseCase, logger)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is GoalsUiState.Error)
+        assertEquals("Simulated load failure", (state as GoalsUiState.Error).message)
+    }
+
+    @Test
+    fun `createGoal handles repository save failure`() = runTest {
+        viewModel = GoalsViewModel(getGoalsUseCase, createGoalUseCase, logger)
+        advanceUntilIdle()
+
+        goalRepository.shouldFail = true
+        viewModel.updateNewGoalTitle("Learn Compose")
+        
+        viewModel.createGoal()
+        advanceUntilIdle()
+
+        val saveError = viewModel.saveError.value
+        assertEquals("Simulated save failure", saveError)
     }
 }
