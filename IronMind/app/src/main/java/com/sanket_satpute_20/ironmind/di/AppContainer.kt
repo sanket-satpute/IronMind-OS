@@ -159,6 +159,7 @@ interface AppContainer {
     val protectionRepository: ProtectionRepository
     val startProtectionSessionUseCase: StartProtectionSessionUseCase
     val stopProtectionSessionUseCase: StopProtectionSessionUseCase
+    val getActiveProtectionSessionUseCase: com.sanket_satpute_20.ironmind.domain.usecase.protection.GetActiveProtectionSessionUseCase
     val dataManagementRepository: DataManagementRepository
     val dataLifecycleEngine: com.sanket_satpute_20.ironmind.domain.engine.DataLifecycleEngine
     val exportUserDataUseCase: com.sanket_satpute_20.ironmind.domain.usecase.data.ExportUserDataUseCase
@@ -547,6 +548,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             clock,
             eventRepository
         )
+    }
+
+    override val getActiveProtectionSessionUseCase: com.sanket_satpute_20.ironmind.domain.usecase.protection.GetActiveProtectionSessionUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.protection.GetActiveProtectionSessionUseCase(protectionRepository)
     }
 
     override val outboxRepository: OutboxRepository by lazy {

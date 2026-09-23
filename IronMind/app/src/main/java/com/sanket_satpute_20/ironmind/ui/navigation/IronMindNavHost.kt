@@ -12,6 +12,7 @@ import com.sanket_satpute_20.ironmind.ui.screens.today.TodayScreen
 import com.sanket_satpute_20.ironmind.ui.screens.dev.DevelopmentControlCenterScreen
 import com.sanket_satpute_20.ironmind.ui.screens.goals.GoalDetailScreen
 import com.sanket_satpute_20.ironmind.ui.screens.plans.PlanDetailScreen
+import com.sanket_satpute_20.ironmind.ui.screens.protection.ProtectionScreen
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 
@@ -27,7 +28,11 @@ fun IronMindNavHost(
         modifier = modifier
     ) {
         composable(Route.Today.path) {
-            TodayScreen()
+            TodayScreen(
+                onNavigateToProtection = {
+                    appState.navController.navigate(Route.Protection.path)
+                }
+            )
         }
         composable(Route.Goals.path) {
             GoalsScreen(
@@ -71,6 +76,11 @@ fun IronMindNavHost(
         }
         composable(Route.DevControlCenter.path) {
             DevelopmentControlCenterScreen()
+        }
+        composable(Route.Protection.path) {
+            ProtectionScreen(
+                onNavigateBack = { appState.navController.popBackStack() }
+            )
         }
     }
 }

@@ -17,45 +17,68 @@ import com.sanket_satpute_20.ironmind.domain.model.Commitment
 import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
 import com.sanket_satpute_20.ironmind.domain.model.ResultStatus
 import com.sanket_satpute_20.ironmind.ui.components.CommitmentStatusControls
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TodayScreen(
     modifier: Modifier = Modifier,
-    viewModel: TodayViewModel = viewModel(factory = TodayViewModel.Factory)
+    viewModel: TodayViewModel = viewModel(factory = TodayViewModel.Factory),
+    onNavigateToProtection: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
     TodayScreenContent(
         modifier = modifier,
         uiState = uiState,
-        onStatusChange = { id, newStatus, outcome -> viewModel.updateCommitmentStatus(id, newStatus, outcome) }
+        onStatusChange = { id, newStatus, outcome -> viewModel.updateCommitmentStatus(id, newStatus, outcome) },
+        onNavigateToProtection = onNavigateToProtection
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TodayScreenContent(
     modifier: Modifier = Modifier,
     uiState: TodayUiState,
-    onStatusChange: (String, CommitmentStatus, ResultStatus?) -> Unit
+    onStatusChange: (String, CommitmentStatus, ResultStatus?) -> Unit,
+    onNavigateToProtection: () -> Unit
 ) {
-    Box(modifier = modifier.fillMaxSize()) {
-        when (val state = uiState) {
-            is TodayUiState.Loading -> {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-            }
-            is TodayUiState.Error -> {
-                Text(
-                    text = state.message,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.align(Alignment.Center)
-                )
-            }
-            is TodayUiState.Success -> {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    TodayContent(
-                        commitments = state.activeCommitments,
-                        onStatusChange = onStatusChange
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Today") },
+                actions = {
+                    IconButton(onClick = onNavigateToProtection) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = "Protection"
+                        )
+                    }
+                }
+            )
+        }
+    ) { paddingValues ->
+        Box(modifier = modifier.fillMaxSize().padding(paddingValues)) {
+            when (val state = uiState) {
+                is TodayUiState.Loading -> {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                }
+                is TodayUiState.Error -> {
+                    Text(
+                        text = state.message,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.align(Alignment.Center)
                     )
+                }
+                is TodayUiState.Success -> {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        TodayContent(
+                            commitments = state.activeCommitments,
+                            onStatusChange = onStatusChange
+                        )
+                    }
                 }
             }
         }

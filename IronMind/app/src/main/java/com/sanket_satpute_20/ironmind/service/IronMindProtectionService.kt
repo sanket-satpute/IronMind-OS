@@ -3,6 +3,10 @@ package com.sanket_satpute_20.ironmind.service
 import android.accessibilityservice.AccessibilityService
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import android.widget.Toast
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class IronMindProtectionService : AccessibilityService() {
 
@@ -32,9 +36,18 @@ class IronMindProtectionService : AccessibilityService() {
             val packageName = event.packageName?.toString() ?: return
             
             if (protectedPkgs.contains(packageName)) {
-                Log.i(TAG, "IronMindLifecycle [Protection] [INTERVENTION_TRIGGERED] package=$packageName")
-                // In Sprint V0.8 we only log the intervention to show the adapter works.
-                // Future sprints will show the full blocking UI or redirect to Home.
+                Log.i(TAG, "IronMindLifecycle [Protection] [APP_DETECTED] package=$packageName")
+                
+                val blocked = performGlobalAction(GLOBAL_ACTION_HOME)
+                if (blocked) {
+                    Log.i(TAG, "IronMindLifecycle [Protection] [BLOCK_SUCCESS] package=$packageName")
+                    // Show a toast from Main thread
+                    CoroutineScope(Dispatchers.Main).launch {
+                        Toast.makeText(applicationContext, "IronMind: App blocked", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    Log.i(TAG, "IronMindLifecycle [Protection] [BLOCK_FAILURE] package=$packageName reason=GLOBAL_ACTION_HOME_FAILED")
+                }
             }
         }
     }
