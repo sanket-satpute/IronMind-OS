@@ -12,6 +12,11 @@ import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
 import com.sanket_satpute_20.ironmind.testutil.fake.FakePlanRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeTaskRepository
+import com.sanket_satpute_20.ironmind.domain.usecase.commitment.CreateCommitmentUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetActiveCommitmentsUseCase
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeCommitmentRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeEventRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeReminderScheduler
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -29,9 +34,14 @@ class PlanDetailViewModelTest {
 
     private lateinit var planRepository: FakePlanRepository
     private lateinit var taskRepository: FakeTaskRepository
+    private lateinit var commitmentRepository: FakeCommitmentRepository
+    private lateinit var eventRepository: FakeEventRepository
+    private lateinit var reminderScheduler: FakeReminderScheduler
     private lateinit var getPlanUseCase: GetPlanUseCase
     private lateinit var getTasksUseCase: GetTasksUseCase
     private lateinit var createTaskUseCase: CreateTaskUseCase
+    private lateinit var getActiveCommitmentsUseCase: GetActiveCommitmentsUseCase
+    private lateinit var createCommitmentUseCase: CreateCommitmentUseCase
     private lateinit var logger: IronLogger
     private lateinit var clock: FakeClock
     private lateinit var idGenerator: FakeIdGenerator
@@ -42,17 +52,23 @@ class PlanDetailViewModelTest {
     fun setup() {
         planRepository = FakePlanRepository()
         taskRepository = FakeTaskRepository()
+        commitmentRepository = FakeCommitmentRepository()
+        eventRepository = FakeEventRepository()
+        reminderScheduler = FakeReminderScheduler()
+        
         getPlanUseCase = GetPlanUseCase(planRepository)
         getTasksUseCase = GetTasksUseCase(taskRepository)
         clock = FakeClock()
         idGenerator = FakeIdGenerator()
         createTaskUseCase = CreateTaskUseCase(taskRepository, idGenerator, clock)
+        getActiveCommitmentsUseCase = GetActiveCommitmentsUseCase(commitmentRepository)
+        createCommitmentUseCase = CreateCommitmentUseCase(commitmentRepository, reminderScheduler, idGenerator, clock, eventRepository)
         
         logger = object : IronLogger {
             override fun logLifecycle(component: String, event: String, parameters: Map<String, Any?>) {}
         }
 
-        viewModel = PlanDetailViewModel(getPlanUseCase, getTasksUseCase, createTaskUseCase, logger)
+        viewModel = PlanDetailViewModel(getPlanUseCase, getTasksUseCase, createTaskUseCase, getActiveCommitmentsUseCase, createCommitmentUseCase, logger)
     }
 
     @Test
@@ -152,5 +168,39 @@ class PlanDetailViewModelTest {
 
         val saveError = viewModel.saveError.value
         assertEquals("Fake failure", saveError)
+    }
+
+    @Test
+    fun `commitTaskForToday creates commitment and updates UI state`() = runTest {
+        val testPlan = Plan(
+            id = "plan1",
+            userId = "user-1",
+            goalId = "goal1",
+            title = "Test Plan",
+            description = "Desc",
+            status = PlanStatus.ACTIVE,
+            createdAt = clock.currentTimeMillis(),
+            updatedAt = clock.currentTimeMillis(),
+            source = EntitySource.USER
+        )
+        planRepository.savePlan(testPlan)
+
+        viewModel.loadData("plan1")
+        advanceUntilIdle()
+
+        viewModel.updateNewTaskTitle("Task to Commit")
+        viewModel.createTask()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as PlanDetailUiState.Success
+        val task = state.tasks[0]
+        assertTrue(state.committedTaskIds.isEmpty())
+
+        viewModel.commitTaskForToday(task)
+        advanceUntilIdle()
+
+        val updatedState = viewModel.uiState.value as PlanDetailUiState.Success
+        assertEquals(1, updatedState.committedTaskIds.size)
+        assertTrue(updatedState.committedTaskIds.contains(task.id))
     }
 }

@@ -118,7 +118,12 @@ fun PlanDetailScreen(
                                 modifier = Modifier.fillMaxSize()
                             ) {
                                 items(state.tasks, key = { it.id }) { task ->
-                                    TaskCard(task = task)
+                                    val isCommitted = state.committedTaskIds.contains(task.id)
+                                    TaskCard(
+                                        task = task,
+                                        isCommitted = isCommitted,
+                                        onCommitClick = { viewModel.commitTaskForToday(task) }
+                                    )
                                 }
                             }
                         }
@@ -134,7 +139,11 @@ fun PlanDetailScreen(
 }
 
 @Composable
-fun TaskCard(task: Task) {
+fun TaskCard(
+    task: Task,
+    isCommitted: Boolean,
+    onCommitClick: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -172,6 +181,28 @@ fun TaskCard(task: Task) {
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary
                 )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                if (isCommitted) {
+                    Text(
+                        text = "✓ Committed for Today",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                } else {
+                    OutlinedButton(
+                        onClick = onCommitClick,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Text("Commit for Today", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
             }
         }
     }

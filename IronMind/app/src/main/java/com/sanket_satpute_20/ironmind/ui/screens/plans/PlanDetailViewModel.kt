@@ -13,6 +13,9 @@ import com.sanket_satpute_20.ironmind.domain.model.Task
 import com.sanket_satpute_20.ironmind.domain.usecase.plan.GetPlanUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.task.CreateTaskUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.task.GetTasksUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.commitment.CreateCommitmentUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetActiveCommitmentsUseCase
+import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,7 +23,7 @@ import kotlinx.coroutines.launch
 
 sealed class PlanDetailUiState {
     object Loading : PlanDetailUiState()
-    data class Success(val plan: Plan, val tasks: List<Task>) : PlanDetailUiState()
+    data class Success(val plan: Plan, val tasks: List<Task>, val committedTaskIds: Set<String>) : PlanDetailUiState()
     data class Error(val message: String) : PlanDetailUiState()
 }
 
@@ -28,6 +31,8 @@ class PlanDetailViewModel(
     private val getPlanUseCase: GetPlanUseCase,
     private val getTasksUseCase: GetTasksUseCase,
     private val createTaskUseCase: CreateTaskUseCase,
+    private val getActiveCommitmentsUseCase: GetActiveCommitmentsUseCase,
+    private val createCommitmentUseCase: CreateCommitmentUseCase,
     private val logger: IronLogger
 ) : ViewModel() {
 
@@ -77,10 +82,18 @@ class PlanDetailViewModel(
             currentGoalId = plan.goalId
 
             val tasksResult = getTasksUseCase(planId)
+            val commitmentsResult = getActiveCommitmentsUseCase(defaultUserId)
+            
+            val committedTaskIds = if (commitmentsResult is Result.Success) {
+                commitmentsResult.data.mapNotNull { it.taskId }.toSet()
+            } else {
+                emptySet()
+            }
+
             when (tasksResult) {
                 is Result.Success -> {
                     logger.logLifecycle("Task", "LOAD_SUCCESS", mapOf("tasksCount" to tasksResult.data.size))
-                    _uiState.value = PlanDetailUiState.Success(plan, tasksResult.data)
+                    _uiState.value = PlanDetailUiState.Success(plan, tasksResult.data, committedTaskIds)
                 }
                 is Result.Failure -> {
                     logger.logLifecycle("Task", "LOAD_FAILURE", mapOf("reason" to (tasksResult.error.message ?: "Unknown")))
@@ -142,6 +155,39 @@ class PlanDetailViewModel(
         }
     }
 
+    fun commitTaskForToday(task: Task) {
+        val planId = currentPlanId ?: return
+        val currentState = _uiState.value
+        if (currentState is PlanDetailUiState.Success && currentState.committedTaskIds.contains(task.id)) {
+            return
+        }
+        
+        viewModelScope.launch {
+            logger.logLifecycle("Commitment", "CREATE_START")
+            val result = createCommitmentUseCase(
+                userId = defaultUserId,
+                goalId = task.goalId,
+                planId = task.planId,
+                taskId = task.id,
+                parentCommitmentId = null,
+                title = task.title,
+                description = task.description,
+                priority = task.priority,
+                initialStatus = CommitmentStatus.COMMITTED
+            )
+
+            when (result) {
+                is Result.Success -> {
+                    logger.logLifecycle("Commitment", "CREATE_SUCCESS", mapOf("commitmentId" to result.data.id, "taskId" to task.id))
+                    loadData(planId) // Refresh to update committedTaskIds
+                }
+                is Result.Failure -> {
+                    logger.logLifecycle("Commitment", "CREATE_FAILURE", mapOf("reason" to (result.error.message ?: "Unknown error")))
+                }
+            }
+        }
+    }
+
     private fun clearForm() {
         _newTaskTitle.value = ""
         _newTaskDescription.value = ""
@@ -157,6 +203,8 @@ class PlanDetailViewModel(
                     getPlanUseCase = application.container.getPlanUseCase,
                     getTasksUseCase = application.container.getTasksUseCase,
                     createTaskUseCase = application.container.createTaskUseCase,
+                    getActiveCommitmentsUseCase = application.container.getActiveCommitmentsUseCase,
+                    createCommitmentUseCase = application.container.createCommitmentUseCase,
                     logger = application.container.logger
                 )
             }
