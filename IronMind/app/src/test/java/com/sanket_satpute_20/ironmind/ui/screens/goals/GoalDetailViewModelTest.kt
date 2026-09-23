@@ -108,5 +108,47 @@ class GoalDetailViewModelTest {
         val plans = (state as GoalDetailUiState.Success).plans
         assertEquals(1, plans.size)
         assertEquals("New Plan", plans[0].title)
+        assertEquals("goal1", plans[0].goalId)
+    }
+
+    @Test
+    fun `createPlan rejects blank title`() = runTest {
+        viewModel.loadData("goal1")
+        advanceUntilIdle()
+
+        viewModel.updateNewPlanTitle("   ")
+        viewModel.createPlan()
+        advanceUntilIdle()
+
+        val saveError = viewModel.saveError.value
+        assertEquals("Title cannot be empty", saveError)
+    }
+
+    @Test
+    fun `createPlan failure produces error state`() = runTest {
+        val testGoal = Goal(
+            id = "goal1",
+            userId = "user-1",
+            title = "Test Goal",
+            description = "Desc",
+            why = "Why",
+            importance = 5,
+            status = GoalStatus.ACTIVE,
+            createdAt = clock.currentTimeMillis(),
+            updatedAt = clock.currentTimeMillis()
+        )
+        goalRepository.saveGoal(testGoal)
+
+        viewModel.loadData("goal1")
+        advanceUntilIdle()
+
+        planRepository.shouldFail = true
+
+        viewModel.updateNewPlanTitle("New Plan")
+        viewModel.createPlan()
+        advanceUntilIdle()
+
+        val saveError = viewModel.saveError.value
+        assertEquals("Fake failure", saveError)
     }
 }

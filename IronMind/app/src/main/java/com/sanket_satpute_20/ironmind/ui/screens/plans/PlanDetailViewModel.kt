@@ -59,7 +59,7 @@ class PlanDetailViewModel(
 
     fun loadData(planId: String) {
         currentPlanId = planId
-        logger.logLifecycle("PlanDetail", "LOAD_START", mapOf("planId" to planId))
+        logger.logLifecycle("Task", "LOAD_START", mapOf("planId" to planId))
         viewModelScope.launch {
             _uiState.value = PlanDetailUiState.Loading
             
@@ -79,11 +79,11 @@ class PlanDetailViewModel(
             val tasksResult = getTasksUseCase(planId)
             when (tasksResult) {
                 is Result.Success -> {
-                    logger.logLifecycle("PlanDetail", "LOAD_SUCCESS", mapOf("tasksCount" to tasksResult.data.size))
+                    logger.logLifecycle("Task", "LOAD_SUCCESS", mapOf("tasksCount" to tasksResult.data.size))
                     _uiState.value = PlanDetailUiState.Success(plan, tasksResult.data)
                 }
                 is Result.Failure -> {
-                    logger.logLifecycle("PlanDetail", "LOAD_FAILURE", mapOf("reason" to (tasksResult.error.message ?: "Unknown")))
+                    logger.logLifecycle("Task", "LOAD_FAILURE", mapOf("reason" to (tasksResult.error.message ?: "Unknown")))
                     _uiState.value = PlanDetailUiState.Error(tasksResult.error.message ?: "Failed to load tasks")
                 }
             }
