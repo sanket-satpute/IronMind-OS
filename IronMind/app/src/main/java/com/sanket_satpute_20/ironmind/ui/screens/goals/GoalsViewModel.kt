@@ -94,6 +94,7 @@ class GoalsViewModel(
 
     fun createGoal() {
         if (_newGoalTitle.value.isBlank()) {
+            logger.logLifecycle("Goal", "VALIDATION_FAILURE", mapOf("reason" to "blank_title"))
             _saveError.value = "Title cannot be empty"
             return
         }
