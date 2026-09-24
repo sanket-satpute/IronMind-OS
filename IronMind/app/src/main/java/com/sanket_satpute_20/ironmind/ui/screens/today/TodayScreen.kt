@@ -19,6 +19,12 @@ import com.sanket_satpute_20.ironmind.domain.model.ResultStatus
 import com.sanket_satpute_20.ironmind.ui.components.CommitmentStatusControls
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.ui.platform.LocalContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,7 +39,9 @@ fun TodayScreen(
         modifier = modifier,
         uiState = uiState,
         onStatusChange = { id, newStatus, outcome -> viewModel.updateCommitmentStatus(id, newStatus, outcome) },
-        onNavigateToProtection = onNavigateToProtection
+        onNavigateToProtection = onNavigateToProtection,
+        onScheduleClick = { id, time -> viewModel.scheduleCommitment(id, time) },
+        onCancelScheduleClick = { id -> viewModel.cancelSchedule(id) }
     )
 }
 
@@ -43,7 +51,9 @@ fun TodayScreenContent(
     modifier: Modifier = Modifier,
     uiState: TodayUiState,
     onStatusChange: (String, CommitmentStatus, ResultStatus?) -> Unit,
-    onNavigateToProtection: () -> Unit
+    onNavigateToProtection: () -> Unit,
+    onScheduleClick: (String, Long) -> Unit,
+    onCancelScheduleClick: (String) -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -76,7 +86,9 @@ fun TodayScreenContent(
                     Column(modifier = Modifier.fillMaxSize()) {
                         TodayContent(
                             commitments = state.activeCommitments,
-                            onStatusChange = onStatusChange
+                            onStatusChange = onStatusChange,
+                            onScheduleClick = onScheduleClick,
+                            onCancelScheduleClick = onCancelScheduleClick
                         )
                     }
                 }
@@ -88,7 +100,9 @@ fun TodayScreenContent(
 @Composable
 fun TodayContent(
     commitments: List<Commitment>,
-    onStatusChange: (String, CommitmentStatus, ResultStatus?) -> Unit
+    onStatusChange: (String, CommitmentStatus, ResultStatus?) -> Unit,
+    onScheduleClick: (String, Long) -> Unit,
+    onCancelScheduleClick: (String) -> Unit
 ) {
     if (commitments.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -119,7 +133,9 @@ fun TodayContent(
                 CommitmentCard(
                     commitment = nextAction,
                     isNextAction = true,
-                    onStatusChange = { newStatus, outcome -> onStatusChange(nextAction.id, newStatus, outcome) }
+                    onStatusChange = { newStatus, outcome -> onStatusChange(nextAction.id, newStatus, outcome) },
+                    onScheduleClick = { time -> onScheduleClick(nextAction.id, time) },
+                    onCancelScheduleClick = { onCancelScheduleClick(nextAction.id) }
                 )
             }
         }
@@ -138,7 +154,9 @@ fun TodayContent(
                 CommitmentCard(
                     commitment = commitment,
                     isNextAction = false,
-                    onStatusChange = { newStatus, outcome -> onStatusChange(commitment.id, newStatus, outcome) }
+                    onStatusChange = { newStatus, outcome -> onStatusChange(commitment.id, newStatus, outcome) },
+                    onScheduleClick = { time -> onScheduleClick(commitment.id, time) },
+                    onCancelScheduleClick = { onCancelScheduleClick(commitment.id) }
                 )
             }
         }
@@ -149,8 +167,12 @@ fun TodayContent(
 fun CommitmentCard(
     commitment: Commitment,
     isNextAction: Boolean,
-    onStatusChange: (CommitmentStatus, ResultStatus?) -> Unit
+    onStatusChange: (CommitmentStatus, ResultStatus?) -> Unit,
+    onScheduleClick: (Long) -> Unit,
+    onCancelScheduleClick: () -> Unit
 ) {
+    val context = LocalContext.current
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -167,7 +189,36 @@ fun CommitmentCard(
                 Text(text = commitment.description, style = MaterialTheme.typography.bodyMedium)
             }
             
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (commitment.scheduledStartAt != null) {
+                    val formattedTime = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(commitment.scheduledStartAt))
+                    Text(
+                        text = "Scheduled: $formattedTime",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = onCancelScheduleClick) {
+                        Icon(imageVector = Icons.Default.Clear, contentDescription = "Cancel Schedule", tint = MaterialTheme.colorScheme.error)
+                    }
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+                
+                IconButton(onClick = {
+                    showDateTimePicker(context, commitment.scheduledStartAt) { selectedTime ->
+                        onScheduleClick(selectedTime)
+                    }
+                }) {
+                    Icon(imageVector = Icons.Default.DateRange, contentDescription = "Schedule", tint = MaterialTheme.colorScheme.secondary)
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
             
             CommitmentStatusControls(
                 currentStatus = commitment.status,

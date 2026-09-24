@@ -12,6 +12,8 @@ import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
 import com.sanket_satpute_20.ironmind.domain.model.ResultStatus
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetActiveCommitmentsUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.UpdateCommitmentStatusUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.commitment.ScheduleCommitmentUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.commitment.CancelCommitmentScheduleUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,7 +29,9 @@ sealed interface TodayUiState {
 
 class TodayViewModel(
     private val getActiveCommitmentsUseCase: GetActiveCommitmentsUseCase,
-    private val updateCommitmentStatusUseCase: UpdateCommitmentStatusUseCase
+    private val updateCommitmentStatusUseCase: UpdateCommitmentStatusUseCase,
+    private val scheduleCommitmentUseCase: ScheduleCommitmentUseCase,
+    private val cancelCommitmentScheduleUseCase: CancelCommitmentScheduleUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<TodayUiState>(TodayUiState.Loading)
@@ -77,6 +81,29 @@ class TodayViewModel(
 
 
 
+    fun scheduleCommitment(commitmentId: String, timeInMillis: Long) {
+        viewModelScope.launch {
+            when (val result = scheduleCommitmentUseCase(currentUserId, commitmentId, timeInMillis)) {
+                is Result.Success -> loadCommitments()
+                is Result.Failure -> {
+                    // Show error state
+                    _uiState.value = TodayUiState.Error(result.error.message ?: "Failed to schedule reminder")
+                }
+            }
+        }
+    }
+
+    fun cancelSchedule(commitmentId: String) {
+        viewModelScope.launch {
+            when (val result = cancelCommitmentScheduleUseCase(currentUserId, commitmentId)) {
+                is Result.Success -> loadCommitments()
+                is Result.Failure -> {
+                    _uiState.value = TodayUiState.Error(result.error.message ?: "Failed to cancel schedule")
+                }
+            }
+        }
+    }
+
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -84,7 +111,9 @@ class TodayViewModel(
                 val container = application.container
                 TodayViewModel(
                     getActiveCommitmentsUseCase = container.getActiveCommitmentsUseCase,
-                    updateCommitmentStatusUseCase = container.updateCommitmentStatusUseCase
+                    updateCommitmentStatusUseCase = container.updateCommitmentStatusUseCase,
+                    scheduleCommitmentUseCase = container.scheduleCommitmentUseCase,
+                    cancelCommitmentScheduleUseCase = container.cancelCommitmentScheduleUseCase
                 )
             }
         }

@@ -5,6 +5,8 @@ import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.CreateCommitmentUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetActiveCommitmentsUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.UpdateCommitmentStatusUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.commitment.ScheduleCommitmentUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.commitment.CancelCommitmentScheduleUseCase
 import com.sanket_satpute_20.ironmind.testutil.TestDispatcherRule
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeCommitmentRepository
@@ -32,6 +34,8 @@ class TodayViewModelTest {
     private lateinit var getActiveCommitmentsUseCase: GetActiveCommitmentsUseCase
     private lateinit var updateCommitmentStatusUseCase: UpdateCommitmentStatusUseCase
     private lateinit var createCommitmentUseCase: CreateCommitmentUseCase
+    private lateinit var scheduleCommitmentUseCase: ScheduleCommitmentUseCase
+    private lateinit var cancelCommitmentScheduleUseCase: CancelCommitmentScheduleUseCase
     private lateinit var clock: FakeClock
     private lateinit var idGenerator: FakeIdGenerator
     private lateinit var reminderScheduler: FakeReminderScheduler
@@ -51,12 +55,16 @@ class TodayViewModelTest {
         getActiveCommitmentsUseCase = GetActiveCommitmentsUseCase(repository)
         updateCommitmentStatusUseCase = UpdateCommitmentStatusUseCase(repository, outcomeRepository, reminderScheduler, clock, idGenerator, eventRepository)
         createCommitmentUseCase = CreateCommitmentUseCase(repository, reminderScheduler, idGenerator, clock, eventRepository)
+        scheduleCommitmentUseCase = ScheduleCommitmentUseCase(repository, reminderScheduler, clock, idGenerator, eventRepository)
+        cancelCommitmentScheduleUseCase = CancelCommitmentScheduleUseCase(repository, reminderScheduler, clock, idGenerator, eventRepository)
     }
 
     private fun createViewModel() {
         viewModel = TodayViewModel(
             getActiveCommitmentsUseCase,
-            updateCommitmentStatusUseCase
+            updateCommitmentStatusUseCase,
+            scheduleCommitmentUseCase,
+            cancelCommitmentScheduleUseCase
         )
     }
 

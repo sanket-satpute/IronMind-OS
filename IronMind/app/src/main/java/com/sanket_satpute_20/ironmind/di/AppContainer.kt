@@ -27,6 +27,8 @@ import com.sanket_satpute_20.ironmind.data.provider.AndroidNotificationProvider
 import com.sanket_satpute_20.ironmind.data.provider.AndroidSpeechToTextProvider
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.CreateCommitmentUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.EditCommitmentUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.commitment.ScheduleCommitmentUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.commitment.CancelCommitmentScheduleUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetCommitmentsForDateRangeUseCase
 import com.sanket_satpute_20.ironmind.domain.repository.ReflectionRepository
 import com.sanket_satpute_20.ironmind.data.repository.ReflectionRepositoryImpl
@@ -128,6 +130,8 @@ interface AppContainer {
     val getTimelineUseCase: GetTimelineUseCase
     val createCommitmentUseCase: CreateCommitmentUseCase
     val editCommitmentUseCase: EditCommitmentUseCase
+    val scheduleCommitmentUseCase: ScheduleCommitmentUseCase
+    val cancelCommitmentScheduleUseCase: CancelCommitmentScheduleUseCase
     val getGoalsUseCase: GetGoalsUseCase
     val getGoalUseCase: GetGoalUseCase
     val createGoalUseCase: CreateGoalUseCase
@@ -406,6 +410,14 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val editCommitmentUseCase: EditCommitmentUseCase by lazy {
         EditCommitmentUseCase(commitmentRepository, reminderScheduler, clock, idGenerator, eventRepository)
+    }
+
+    override val scheduleCommitmentUseCase: ScheduleCommitmentUseCase by lazy {
+        ScheduleCommitmentUseCase(commitmentRepository, reminderScheduler, clock, idGenerator, eventRepository)
+    }
+
+    override val cancelCommitmentScheduleUseCase: CancelCommitmentScheduleUseCase by lazy {
+        CancelCommitmentScheduleUseCase(commitmentRepository, reminderScheduler, clock, idGenerator, eventRepository)
     }
 
     override val getActiveCommitmentsUseCase: GetActiveCommitmentsUseCase by lazy {
