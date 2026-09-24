@@ -121,6 +121,7 @@ class PlanDetailViewModel(
         val planId = currentPlanId ?: return
 
         if (_newTaskTitle.value.isBlank()) {
+            logger.logLifecycle("Task", "VALIDATION_FAILURE", mapOf("reason" to "blank_title"))
             _saveError.value = "Title cannot be empty"
             return
         }

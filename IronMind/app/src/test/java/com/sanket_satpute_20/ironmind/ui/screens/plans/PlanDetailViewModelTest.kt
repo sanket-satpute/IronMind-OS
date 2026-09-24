@@ -203,4 +203,29 @@ class PlanDetailViewModelTest {
         assertEquals(1, updatedState.committedTaskIds.size)
         assertTrue(updatedState.committedTaskIds.contains(task.id))
     }
+
+    @Test
+    fun `loadData handles task load failure`() = runTest {
+        val testPlan = Plan(
+            id = "plan1",
+            userId = "user-1",
+            goalId = "goal1",
+            title = "Test Plan",
+            description = "Desc",
+            status = PlanStatus.ACTIVE,
+            createdAt = clock.currentTimeMillis(),
+            updatedAt = clock.currentTimeMillis(),
+            source = EntitySource.USER
+        )
+        planRepository.savePlan(testPlan)
+
+        taskRepository.shouldFail = true
+
+        viewModel.loadData("plan1")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is PlanDetailUiState.Error)
+        assertEquals("Fake failure", (state as PlanDetailUiState.Error).message)
+    }
 }

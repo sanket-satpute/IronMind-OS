@@ -151,4 +151,29 @@ class GoalDetailViewModelTest {
         val saveError = viewModel.saveError.value
         assertEquals("Fake failure", saveError)
     }
+
+    @Test
+    fun `loadData handles plan load failure`() = runTest {
+        val testGoal = Goal(
+            id = "goal1",
+            userId = "user-1",
+            title = "Test Goal",
+            description = "Desc",
+            why = "Why",
+            importance = 5,
+            status = GoalStatus.ACTIVE,
+            createdAt = clock.currentTimeMillis(),
+            updatedAt = clock.currentTimeMillis()
+        )
+        goalRepository.saveGoal(testGoal)
+
+        planRepository.shouldFail = true
+
+        viewModel.loadData("goal1")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is GoalDetailUiState.Error)
+        assertEquals("Fake failure", (state as GoalDetailUiState.Error).message)
+    }
 }
