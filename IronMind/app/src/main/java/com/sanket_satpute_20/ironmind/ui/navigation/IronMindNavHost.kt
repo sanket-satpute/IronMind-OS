@@ -13,7 +13,10 @@ import com.sanket_satpute_20.ironmind.ui.screens.dev.DevelopmentControlCenterScr
 import com.sanket_satpute_20.ironmind.ui.screens.goals.GoalDetailScreen
 import com.sanket_satpute_20.ironmind.ui.screens.plans.PlanDetailScreen
 import com.sanket_satpute_20.ironmind.ui.screens.protection.ProtectionScreen
+import com.sanket_satpute_20.ironmind.ui.screens.reflection.NightReflectionScreen
 import androidx.navigation.NavType
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sanket_satpute_20.ironmind.ui.screens.reflection.NightReflectionViewModel
 import androidx.navigation.navArgument
 
 @Composable
@@ -31,6 +34,9 @@ fun IronMindNavHost(
             TodayScreen(
                 onNavigateToProtection = {
                     appState.navController.navigate(Route.Protection.path)
+                },
+                onNavigateToReflection = {
+                    appState.navController.navigate(Route.NightReflection.path)
                 }
             )
         }
@@ -79,6 +85,13 @@ fun IronMindNavHost(
         }
         composable(Route.Protection.path) {
             ProtectionScreen(
+                onNavigateBack = { appState.navController.popBackStack() }
+            )
+        }
+        composable(Route.NightReflection.path) {
+            val viewModel: NightReflectionViewModel = viewModel(factory = NightReflectionViewModel.Factory)
+            NightReflectionScreen(
+                viewModel = viewModel,
                 onNavigateBack = { appState.navController.popBackStack() }
             )
         }

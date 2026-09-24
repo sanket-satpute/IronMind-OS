@@ -7,6 +7,7 @@ sealed class Route(val path: String) {
     data object Settings : Route("settings")
     data object DevControlCenter : Route("dev_control_center")
     data object Protection : Route("protection")
+    data object NightReflection : Route("night_reflection")
 
     data class GoalDetail(val id: String) : Route("goals/$id") {
         companion object {

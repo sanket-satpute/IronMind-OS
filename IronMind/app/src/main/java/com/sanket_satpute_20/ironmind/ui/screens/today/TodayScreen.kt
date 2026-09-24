@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.ui.platform.LocalContext
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -31,7 +32,8 @@ import java.util.Locale
 fun TodayScreen(
     modifier: Modifier = Modifier,
     viewModel: TodayViewModel = viewModel(factory = TodayViewModel.Factory),
-    onNavigateToProtection: () -> Unit = {}
+    onNavigateToProtection: () -> Unit = {},
+    onNavigateToReflection: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -40,6 +42,7 @@ fun TodayScreen(
         uiState = uiState,
         onStatusChange = { id, newStatus, outcome -> viewModel.updateCommitmentStatus(id, newStatus, outcome) },
         onNavigateToProtection = onNavigateToProtection,
+        onNavigateToReflection = onNavigateToReflection,
         onScheduleClick = { id, time -> viewModel.scheduleCommitment(id, time) },
         onCancelScheduleClick = { id -> viewModel.cancelSchedule(id) }
     )
@@ -52,6 +55,7 @@ fun TodayScreenContent(
     uiState: TodayUiState,
     onStatusChange: (String, CommitmentStatus, ResultStatus?) -> Unit,
     onNavigateToProtection: () -> Unit,
+    onNavigateToReflection: () -> Unit,
     onScheduleClick: (String, Long) -> Unit,
     onCancelScheduleClick: (String) -> Unit
 ) {
@@ -60,6 +64,12 @@ fun TodayScreenContent(
             TopAppBar(
                 title = { Text("Today") },
                 actions = {
+                    IconButton(onClick = onNavigateToReflection) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Night Reflection"
+                        )
+                    }
                     IconButton(onClick = onNavigateToProtection) {
                         Icon(
                             imageVector = Icons.Default.Info,
