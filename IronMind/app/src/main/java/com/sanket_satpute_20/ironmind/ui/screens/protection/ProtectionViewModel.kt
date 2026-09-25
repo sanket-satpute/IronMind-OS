@@ -61,6 +61,11 @@ class ProtectionViewModel(
     }
 
     fun startProtection(targetPackages: List<String>) {
+        if (targetPackages.isEmpty()) {
+            println("IronMindLifecycle [Protection] [VALIDATION_FAILURE] reason=empty_targets")
+            _uiState.value = ProtectionUiState.Error("Please select at least one application to protect.")
+            return
+        }
         viewModelScope.launch {
             println("IronMindLifecycle [Protection] [START_REQUEST] targetCount=${targetPackages.size}")
             when (val result = startProtectionSessionUseCase(

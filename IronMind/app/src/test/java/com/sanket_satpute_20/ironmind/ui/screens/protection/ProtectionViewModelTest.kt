@@ -25,13 +25,13 @@ class ProtectionViewModelTest {
 
     @get:Rule
     val dispatcherRule = TestDispatcherRule()
-    
+
     private lateinit var protectionRepository: FakeProtectionRepository
     private lateinit var appProtectionProvider: FakeAppProtectionProvider
     private lateinit var clock: FakeClock
     private lateinit var idGenerator: FakeIdGenerator
     private lateinit var eventRepository: FakeEventRepository
-    
+
     private lateinit var getActiveSessionUseCase: GetActiveProtectionSessionUseCase
     private lateinit var startSessionUseCase: StartProtectionSessionUseCase
     private lateinit var stopSessionUseCase: StopProtectionSessionUseCase
@@ -106,10 +106,38 @@ class ProtectionViewModelTest {
         startSessionUseCase("user-1", "rule-1", "commitment-1", "task-1", null, true, listOf("com.example.app"))
         createViewModel()
         advanceUntilIdle()
-        
+
         viewModel.stopProtection()
         advanceUntilIdle()
 
         assertTrue(viewModel.uiState.value is ProtectionUiState.NoActiveSession)
+    }
+
+    @Test
+    fun `startProtection validation fails on empty targets`() = runTest {
+        createViewModel()
+        advanceUntilIdle()
+
+        viewModel.startProtection(emptyList())
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is ProtectionUiState.Error)
+        assertEquals("Please select at least one application to protect.", (state as ProtectionUiState.Error).message)
+    }
+
+    @Test
+    fun `stopProtection failure produces Error state`() = runTest {
+        startSessionUseCase("user-1", "rule-1", "commitment-1", "task-1", null, true, listOf("com.example.app"))
+        createViewModel()
+        advanceUntilIdle()
+
+        appProtectionProvider.shouldFailRemoval = true
+        viewModel.stopProtection()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is ProtectionUiState.Error)
+        assertEquals("Failed to remove protection: Simulated removal failure", (state as ProtectionUiState.Error).message)
     }
 }
