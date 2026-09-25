@@ -253,7 +253,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     override val logger: IronLogger by lazy {
         DebugIronLogger()
     }
-    
+
     private val database: IronMindDatabase by lazy {
         Room.databaseBuilder(
             context,
@@ -278,7 +278,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             IronMindDatabase.MIGRATION_16_17
         ).build()
     }
-    
+
     private val globalAutonomyStateDao: com.sanket_satpute_20.ironmind.data.local.dao.GlobalAutonomyStateDao by lazy {
         database.globalAutonomyStateDao()
     }
@@ -306,15 +306,15 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     private val experimentDao: com.sanket_satpute_20.ironmind.data.local.dao.ExperimentDao by lazy {
         database.experimentDao()
     }
-    
+
     override val clock: Clock = object : Clock {
         override fun currentTimeMillis(): Long = System.currentTimeMillis()
     }
-    
+
     private val idGenerator = object : IdGenerator {
         override fun generateId(): String = UUID.randomUUID().toString()
     }
-    
+
     override val userProfileRepository: com.sanket_satpute_20.ironmind.domain.repository.UserProfileRepository by lazy {
         com.sanket_satpute_20.ironmind.data.repository.UserProfileRepositoryImpl(database.ironMindDao())
     }
@@ -326,7 +326,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     override val outcomeRepository: OutcomeRepository by lazy {
         com.sanket_satpute_20.ironmind.data.repository.OutcomeRepositoryImpl(database.ironMindDao())
     }
-    
+
     override val devControlRepository: com.sanket_satpute_20.ironmind.domain.repository.DevControlRepository by lazy {
         com.sanket_satpute_20.ironmind.data.repository.DevControlRepositoryImpl(
             ironMindDao = database.ironMindDao(),
@@ -344,7 +344,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     override val eventRepository: EventRepository by lazy {
-        EventRepositoryImpl(database.ironMindDao())
+        EventRepositoryImpl(database.ironMindDao(), logger)
     }
 
     override val goalRepository: GoalRepository by lazy {
@@ -403,7 +403,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     override val speechToTextProvider: SpeechToTextProvider by lazy {
         AndroidSpeechToTextProvider(context, logger)
     }
-    
+
     override val createCommitmentUseCase: CreateCommitmentUseCase by lazy {
         CreateCommitmentUseCase(commitmentRepository, reminderScheduler, idGenerator, clock, eventRepository)
     }
@@ -451,25 +451,25 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     override val authRepository: AuthRepository by lazy {
         AuthRepositoryImpl(FirebaseAuth.getInstance())
     }
-    
+
     override val signInAnonymouslyUseCase: SignInAnonymouslyUseCase by lazy {
         SignInAnonymouslyUseCase(authRepository)
     }
-    
+
     override val observeAuthUserUseCase: ObserveAuthUserUseCase by lazy {
         ObserveAuthUserUseCase(authRepository)
     }
-    
+
     override val signOutUseCase: SignOutUseCase by lazy {
         SignOutUseCase(authRepository)
     }
 
     override val updateCommitmentStatusUseCase: UpdateCommitmentStatusUseCase by lazy {
         UpdateCommitmentStatusUseCase(
-            commitmentRepository, 
-            outcomeRepository, 
+            commitmentRepository,
+            outcomeRepository,
             reminderScheduler,
-            clock, 
+            clock,
             idGenerator,
             eventRepository
         )
@@ -545,9 +545,9 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val startProtectionSessionUseCase: StartProtectionSessionUseCase by lazy {
         StartProtectionSessionUseCase(
-            protectionRepository, 
+            protectionRepository,
             appProtectionProvider,
-            idGenerator, 
+            idGenerator,
             clock,
             eventRepository
         )
@@ -555,7 +555,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val stopProtectionSessionUseCase: StopProtectionSessionUseCase by lazy {
         StopProtectionSessionUseCase(
-            protectionRepository, 
+            protectionRepository,
             appProtectionProvider,
             clock,
             eventRepository

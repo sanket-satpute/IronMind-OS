@@ -70,7 +70,7 @@ interface IronMindDao {
 
     @Query("SELECT * FROM commitment WHERE taskId = :taskId ORDER BY createdAt ASC")
     fun getCommitmentsForTask(taskId: String): List<CommitmentEntity>
-    
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertOutcome(outcome: OutcomeEntity)
 
@@ -88,7 +88,7 @@ interface IronMindDao {
 
     @Query("SELECT * FROM reflection WHERE userId = :userId AND createdAt >= :startTime AND createdAt <= :endTime ORDER BY createdAt DESC")
     fun getReflectionsForDateRange(userId: String, startTime: Long, endTime: Long): List<ReflectionEntity>
-    
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertProtectionRule(rule: ProtectionRuleEntity)
 
@@ -109,14 +109,14 @@ interface IronMindDao {
 
     @Query("SELECT * FROM protection_sessions WHERE userId = :userId AND status = 'ACTIVE' ORDER BY startedAt DESC")
     fun getActiveProtectionSessionsForUser(userId: String): List<ProtectionSessionEntity>
-    
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertEvent(event: EventEntity)
 
-    @Query("SELECT * FROM events WHERE entityId = :entityId ORDER BY occurredAt ASC")
+    @Query("SELECT * FROM events WHERE entityId = :entityId ORDER BY occurredAt ASC, id ASC")
     fun getEventsForEntity(entityId: String): List<EventEntity>
 
-    @Query("SELECT * FROM events WHERE userId = :userId ORDER BY occurredAt ASC")
+    @Query("SELECT * FROM events WHERE userId = :userId ORDER BY occurredAt ASC, id ASC")
     fun getEventsForUser(userId: String): List<EventEntity>
 
     @Query("SELECT COUNT(*) FROM events")
@@ -151,13 +151,13 @@ interface IronMindDao {
     @Query("SELECT * FROM memory WHERE userId = :userId AND content LIKE '%' || :query || '%' ORDER BY createdAt DESC")
     fun searchMemories(userId: String, query: String): List<MemoryEntity>
 
-    @Query("SELECT * FROM events WHERE userId = :userId AND (type LIKE '%' || :query || '%' OR metadata LIKE '%' || :query || '%') ORDER BY occurredAt DESC")
+    @Query("SELECT * FROM events WHERE userId = :userId AND (type LIKE '%' || :query || '%' OR metadata LIKE '%' || :query || '%') ORDER BY occurredAt DESC, id DESC")
     fun searchEvents(userId: String, query: String): List<EventEntity>
 
     @Query("SELECT * FROM events WHERE id = :id LIMIT 1")
     fun getEvent(id: String): EventEntity?
 
-    @Query("SELECT * FROM events WHERE userId = :userId AND occurredAt >= :startTime AND occurredAt <= :endTime ORDER BY occurredAt DESC")
+    @Query("SELECT * FROM events WHERE userId = :userId AND occurredAt >= :startTime AND occurredAt <= :endTime ORDER BY occurredAt DESC, id DESC")
     fun getEventsForDateRange(userId: String, startTime: Long, endTime: Long): List<EventEntity>
 
     @Query("SELECT * FROM memory WHERE userId = :userId AND createdAt >= :startTime AND createdAt <= :endTime ORDER BY createdAt DESC")

@@ -9,7 +9,9 @@ import com.sanket_satpute_20.ironmind.testutil.fake.FakePlanRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeEventRepository
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import com.sanket_satpute_20.ironmind.domain.model.EventType
 import org.junit.Before
 import org.junit.Test
 
@@ -19,7 +21,7 @@ class PlanCreationTest {
     private lateinit var clock: FakeClock
     private lateinit var idGenerator: FakeIdGenerator
     private lateinit var eventRepository: FakeEventRepository
-    
+
     private lateinit var createPlanUseCase: CreatePlanUseCase
 
     @Before
@@ -28,24 +30,24 @@ class PlanCreationTest {
         clock = FakeClock()
         idGenerator = FakeIdGenerator()
         eventRepository = FakeEventRepository()
-        
+
         createPlanUseCase = CreatePlanUseCase(repository, idGenerator, clock, eventRepository)
     }
 
     @Test
     fun `create plan succeeds with valid input`() = runTest {
         idGenerator.nextId = "plan-1"
-        
+
         val result = createPlanUseCase(
             userId = "user-1",
             goalId = "goal-1",
             title = "My Plan",
             description = "Plan desc"
         )
-        
+
         assertTrue(result is Result.Success)
         val plan = (result as Result.Success).data
-        
+
         assertEquals("plan-1", plan.id)
         assertEquals("user-1", plan.userId)
         assertEquals("goal-1", plan.goalId)
@@ -54,6 +56,28 @@ class PlanCreationTest {
         assertEquals(EntitySource.USER, plan.source)
         assertEquals(clock.currentTimeMillis(), plan.createdAt)
         assertEquals(clock.currentTimeMillis(), plan.startedAt)
+
+        val events = eventRepository.events.values.toList()
+        assertEquals(1, events.size)
+        assertEquals(EventType.PLAN_CREATED, events[0].type)
+        assertEquals(plan.id, events[0].entityId)
+    }
+
+    @Test
+    fun `create plan succeeds even if event persistence fails`() = runTest {
+        eventRepository.shouldFail = true
+
+        val result = createPlanUseCase(
+            userId = "user-1",
+            goalId = "goal-1",
+            title = "My Plan",
+            description = "Plan desc"
+        )
+
+        assertTrue(result is Result.Success)
+        val plan = (result as Result.Success).data
+        assertNotNull(repository.getPlan(plan.id))
+        assertTrue(eventRepository.events.isEmpty())
     }
 
     @Test
@@ -64,7 +88,7 @@ class PlanCreationTest {
             title = "   ",
             description = "Plan desc"
         )
-        
+
         assertTrue(result is Result.Failure)
         assertEquals("Title cannot be blank", (result as Result.Failure).error.message)
     }

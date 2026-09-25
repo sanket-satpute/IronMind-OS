@@ -6,11 +6,13 @@ import com.sanket_satpute_20.ironmind.data.local.entity.toEntity
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.Event
 import com.sanket_satpute_20.ironmind.domain.repository.EventRepository
+import com.sanket_satpute_20.ironmind.domain.logging.IronLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class EventRepositoryImpl(
-    private val dao: IronMindDao
+    private val dao: IronMindDao,
+    private val logger: IronLogger? = null
 ) : EventRepository {
 
     override suspend fun saveEvent(event: Event): Result<Event, Exception> = withContext(Dispatchers.IO) {
@@ -18,6 +20,14 @@ class EventRepositoryImpl(
             dao.insertEvent(event.toEntity())
             Result.Success(event)
         } catch (e: Exception) {
+            logger?.logLifecycle(
+                "Event",
+                "PERSIST_FAILURE",
+                mapOf(
+                    "eventType" to event.type.name,
+                    "source" to event.source.name
+                )
+            )
             Result.Failure(e)
         }
     }
