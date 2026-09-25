@@ -14,6 +14,9 @@ import com.sanket_satpute_20.ironmind.testutil.fake.FakeCommitmentRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeEventRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeGoalRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeReflectionRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakePlanRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeTaskRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeIronLogger
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -26,6 +29,9 @@ class GetTimelineUseCaseTest {
     private lateinit var commitmentRepository: FakeCommitmentRepository
     private lateinit var reflectionRepository: FakeReflectionRepository
     private lateinit var goalRepository: FakeGoalRepository
+    private lateinit var planRepository: FakePlanRepository
+    private lateinit var taskRepository: FakeTaskRepository
+    private lateinit var logger: FakeIronLogger
     private lateinit var getTimelineUseCase: GetTimelineUseCase
 
     @Before
@@ -34,19 +40,25 @@ class GetTimelineUseCaseTest {
         commitmentRepository = FakeCommitmentRepository()
         reflectionRepository = FakeReflectionRepository()
         goalRepository = FakeGoalRepository()
+        planRepository = FakePlanRepository()
+        taskRepository = FakeTaskRepository()
+        logger = FakeIronLogger()
 
         getTimelineUseCase = GetTimelineUseCase(
             eventRepository,
             commitmentRepository,
             reflectionRepository,
-            goalRepository
+            goalRepository,
+            planRepository,
+            taskRepository,
+            logger
         )
     }
 
     @Test
     fun `invoke returns mapped timeline items sorted by timestamp`() = runTest {
         val userId = "user-1"
-        
+
         // Create Commitment
         val commitment = Commitment(
             id = "c1",
@@ -61,7 +73,7 @@ class GetTimelineUseCaseTest {
             updatedAt = 1000L
         )
         commitmentRepository.saveCommitment(commitment)
-        
+
         val event1 = Event(
             id = "e1",
             userId = userId,
@@ -72,7 +84,7 @@ class GetTimelineUseCaseTest {
             source = EntitySource.USER
         )
         eventRepository.saveEvent(event1)
-        
+
         // Create Reflection
         val reflection = Reflection(
             id = "r1",
@@ -84,7 +96,7 @@ class GetTimelineUseCaseTest {
             createdAt = 2000L
         )
         reflectionRepository.saveReflection(reflection)
-        
+
         val event2 = Event(
             id = "e2",
             userId = userId,
@@ -109,7 +121,7 @@ class GetTimelineUseCaseTest {
             updatedAt = 3000L
         )
         goalRepository.saveGoal(goal)
-        
+
         val event3 = Event(
             id = "e3",
             userId = userId,
@@ -131,20 +143,20 @@ class GetTimelineUseCaseTest {
             source = EntitySource.AI
         )
         eventRepository.saveEvent(event4)
-        
+
         val result = getTimelineUseCase(userId)
         assertTrue(result is Result.Success)
-        
+
         val items = (result as Result.Success).data
         assertEquals(3, items.size) // Sync started should be ignored
-        
+
         // Verify sorting (descending)
         assertTrue(items[0] is TimelineItem.GoalEvent)
         assertEquals("Read a book", (items[0] as TimelineItem.GoalEvent).goalTitle)
-        
+
         assertTrue(items[1] is TimelineItem.ReflectionRecorded)
-        assertEquals("Felt great today", (items[1] as TimelineItem.ReflectionRecorded).content)
-        
+        assertEquals("POSITIVE", (items[1] as TimelineItem.ReflectionRecorded).sentiment)
+
         assertTrue(items[2] is TimelineItem.CommitmentEvent)
         assertEquals("Read 10 pages", (items[2] as TimelineItem.CommitmentEvent).commitmentTitle)
     }

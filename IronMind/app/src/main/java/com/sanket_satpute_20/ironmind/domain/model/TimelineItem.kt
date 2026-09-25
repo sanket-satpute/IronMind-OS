@@ -8,14 +8,12 @@ sealed class TimelineItem {
         override val id: String,
         override val timestamp: Long,
         val commitmentTitle: String,
-        val previousStatus: String?,
-        val newStatus: String?
+        val actionDescription: String
     ) : TimelineItem()
 
     data class ReflectionRecorded(
         override val id: String,
         override val timestamp: Long,
-        val content: String,
         val sentiment: String
     ) : TimelineItem()
 
@@ -23,7 +21,27 @@ sealed class TimelineItem {
         override val id: String,
         override val timestamp: Long,
         val goalTitle: String,
-        val newStatus: String
+        val actionDescription: String
+    ) : TimelineItem()
+
+    data class PlanEvent(
+        override val id: String,
+        override val timestamp: Long,
+        val planTitle: String,
+        val actionDescription: String
+    ) : TimelineItem()
+
+    data class TaskEvent(
+        override val id: String,
+        override val timestamp: Long,
+        val taskTitle: String,
+        val actionDescription: String
+    ) : TimelineItem()
+
+    data class OutcomeRecorded(
+        override val id: String,
+        override val timestamp: Long,
+        val actionDescription: String
     ) : TimelineItem()
 
     data class MajorEvent(

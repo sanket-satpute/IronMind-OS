@@ -101,29 +101,32 @@ fun TimelineItemCard(item: TimelineItem) {
                 is TimelineItem.CommitmentEvent -> Icons.Default.CheckCircle
                 is TimelineItem.ReflectionRecorded -> Icons.Default.Star
                 is TimelineItem.GoalEvent -> Icons.Default.Star
+                is TimelineItem.PlanEvent -> Icons.Default.Info
+                is TimelineItem.TaskEvent -> Icons.Default.CheckCircle
+                is TimelineItem.OutcomeRecorded -> Icons.Default.CheckCircle
                 is TimelineItem.MajorEvent -> Icons.Default.Info
             }
-            
+
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 modifier = Modifier.size(24.dp),
                 tint = MaterialTheme.colorScheme.primary
             )
-            
+
             Spacer(modifier = Modifier.width(16.dp))
-            
+
             Column {
                 Text(
                     text = dateString,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                
+
                 when (item) {
                     is TimelineItem.CommitmentEvent -> {
                         Text(
-                            text = "Commitment: ${item.newStatus}",
+                            text = item.actionDescription,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -131,19 +134,42 @@ fun TimelineItemCard(item: TimelineItem) {
                     }
                     is TimelineItem.ReflectionRecorded -> {
                         Text(
-                            text = "Reflection Recorded (${item.sentiment})",
+                            text = "Reflection Recorded",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
-                        Text(text = item.content, style = MaterialTheme.typography.bodyMedium)
+                        Text(text = "Sentiment: ${item.sentiment}", style = MaterialTheme.typography.bodyMedium)
                     }
                     is TimelineItem.GoalEvent -> {
                         Text(
-                            text = "Goal: ${item.newStatus}",
+                            text = item.actionDescription,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                         Text(text = item.goalTitle, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    is TimelineItem.PlanEvent -> {
+                        Text(
+                            text = item.actionDescription,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(text = item.planTitle, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    is TimelineItem.TaskEvent -> {
+                        Text(
+                            text = item.actionDescription,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(text = item.taskTitle, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    is TimelineItem.OutcomeRecorded -> {
+                        Text(
+                            text = item.actionDescription,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                     is TimelineItem.MajorEvent -> {
                         Text(

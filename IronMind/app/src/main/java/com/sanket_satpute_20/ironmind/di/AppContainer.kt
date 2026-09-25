@@ -389,7 +389,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
 
     override val getTimelineUseCase: GetTimelineUseCase by lazy {
-        GetTimelineUseCase(eventRepository, commitmentRepository, reflectionRepository, goalRepository)
+        GetTimelineUseCase(eventRepository, commitmentRepository, reflectionRepository, goalRepository, planRepository, taskRepository, logger)
     }
 
     override val reminderScheduler: ReminderScheduler by lazy {
