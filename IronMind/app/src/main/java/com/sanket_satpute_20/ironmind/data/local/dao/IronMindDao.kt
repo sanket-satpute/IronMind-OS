@@ -131,7 +131,7 @@ interface IronMindDao {
     @Query("SELECT * FROM memory WHERE userId = :userId ORDER BY createdAt DESC")
     fun getMemoriesForUser(userId: String): List<MemoryEntity>
 
-    @Query("SELECT * FROM memory WHERE userId = :userId AND status NOT IN ('EXPIRED', 'DELETED') ORDER BY confidence DESC")
+    @Query("SELECT * FROM memory WHERE userId = :userId AND status NOT IN ('EXPIRED', 'DELETED', 'INACTIVE') ORDER BY confidence DESC")
     fun getActiveMemoriesForUser(userId: String): List<MemoryEntity>
 
     @Query("SELECT COUNT(*) FROM memory")

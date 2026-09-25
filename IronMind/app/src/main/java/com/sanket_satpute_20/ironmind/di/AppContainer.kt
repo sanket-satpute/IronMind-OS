@@ -55,6 +55,7 @@ import com.sanket_satpute_20.ironmind.domain.usecase.task.CreateTaskUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetCommitmentUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.reflection.GetReflectionUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.memory.GetMemoryUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.memory.GetActiveMemoriesUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.pattern.LearnInterventionResponsePatternUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.pattern.LearnInterventionTimingPatternUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.intervention.SelectInterventionChannelUseCase
@@ -146,6 +147,7 @@ interface AppContainer {
     val getCommitmentUseCase: GetCommitmentUseCase
     val getReflectionUseCase: GetReflectionUseCase
     val getMemoryUseCase: GetMemoryUseCase
+    val getActiveMemoriesUseCase: GetActiveMemoriesUseCase
     val getEventUseCase: GetEventUseCase
     val localSearchUseCase: LocalSearchUseCase
     val authRepository: AuthRepository
@@ -438,6 +440,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val getMemoryUseCase: GetMemoryUseCase by lazy {
         GetMemoryUseCase(memoryRepository)
+    }
+
+    override val getActiveMemoriesUseCase: GetActiveMemoriesUseCase by lazy {
+        GetActiveMemoriesUseCase(memoryRepository)
     }
 
     override val getEventUseCase: GetEventUseCase by lazy {

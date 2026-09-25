@@ -24,7 +24,8 @@ class FakeMemoryRepository : MemoryRepository {
         val active = memories.values.filter { memory ->
             memory.userId == userId &&
             memory.status != com.sanket_satpute_20.ironmind.domain.model.MemoryStatus.EXPIRED &&
-            memory.status != com.sanket_satpute_20.ironmind.domain.model.MemoryStatus.DELETED
+            memory.status != com.sanket_satpute_20.ironmind.domain.model.MemoryStatus.DELETED &&
+            memory.status != com.sanket_satpute_20.ironmind.domain.model.MemoryStatus.INACTIVE
         }
         return Result.Success(active)
     }

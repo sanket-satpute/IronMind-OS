@@ -26,6 +26,7 @@ class MemoryUseCasesTest {
     private lateinit var correctMemoryUseCase: CorrectMemoryUseCase
     private lateinit var weakenMemoryUseCase: WeakenMemoryUseCase
     private lateinit var expireMemoryUseCase: ExpireMemoryUseCase
+    private lateinit var getActiveMemoriesUseCase: GetActiveMemoriesUseCase
 
     @Before
     fun setup() {
@@ -39,6 +40,7 @@ class MemoryUseCasesTest {
         correctMemoryUseCase = CorrectMemoryUseCase(memoryRepository, eventRepository, idGenerator, clock)
         weakenMemoryUseCase = WeakenMemoryUseCase(memoryRepository, eventRepository, idGenerator, clock)
         expireMemoryUseCase = ExpireMemoryUseCase(memoryRepository, eventRepository, idGenerator, clock)
+        getActiveMemoriesUseCase = GetActiveMemoriesUseCase(memoryRepository)
     }
 
     @Test
@@ -105,7 +107,7 @@ class MemoryUseCasesTest {
     }
 
     @Test
-    fun `correctMemory updates content and resets to UNCONFIRMED`() = runTest {
+    fun `correctMemory updates content, sets source to USER, and sets USER_CONFIRMED`() = runTest {
         val proposed = (proposeMemoryUseCase(
             userId = "user-1", type = "preference",
             content = "Old content.",
@@ -121,7 +123,8 @@ class MemoryUseCasesTest {
         assertTrue(result is Result.Success)
         val corrected = (result as Result.Success).data
         assertEquals("Corrected content.", corrected.content)
-        assertEquals(MemoryConfirmationState.UNCONFIRMED, corrected.confirmationState)
+        assertEquals(EntitySource.USER, corrected.source)
+        assertEquals(MemoryConfirmationState.USER_CONFIRMED, corrected.confirmationState)
     }
 
     @Test
@@ -179,7 +182,7 @@ class MemoryUseCasesTest {
     }
 
     @Test
-    fun `getActiveMemoriesForUser excludes EXPIRED memories`() = runTest {
+    fun `getActiveMemoriesForUser excludes EXPIRED, INACTIVE, and DELETED memories`() = runTest {
         proposeMemoryUseCase(
             userId = "user-1", type = "preference",
             content = "Active memory.",
@@ -193,7 +196,21 @@ class MemoryUseCasesTest {
         ) as Result.Success).data
         expireMemoryUseCase(userId = "user-1", memoryId = proposed2.id)
 
-        val result = memoryRepository.getActiveMemoriesForUser("user-1")
+        val proposedInactive = (proposeMemoryUseCase(
+            userId = "user-1", type = "preference",
+            content = "This will be inactive.",
+            source = EntitySource.USER, confidence = 0.5f
+        ) as Result.Success).data
+        memoryRepository.saveMemory(proposedInactive.copy(status = MemoryStatus.INACTIVE))
+
+        val proposedDeleted = (proposeMemoryUseCase(
+            userId = "user-1", type = "preference",
+            content = "This will be deleted.",
+            source = EntitySource.USER, confidence = 0.5f
+        ) as Result.Success).data
+        memoryRepository.saveMemory(proposedDeleted.copy(status = MemoryStatus.DELETED))
+
+        val result = getActiveMemoriesUseCase(userId = "user-1")
         assertTrue(result is Result.Success)
         val active = (result as Result.Success).data
         assertEquals(1, active.size)

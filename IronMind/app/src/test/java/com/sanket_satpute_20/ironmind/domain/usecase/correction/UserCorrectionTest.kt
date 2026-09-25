@@ -42,6 +42,10 @@ class UserCorrectionTest {
     private lateinit var createCommitmentUseCase: CreateCommitmentUseCase
     private lateinit var editCommitmentUseCase: EditCommitmentUseCase
 
+    private lateinit var memoryRepository: com.sanket_satpute_20.ironmind.testutil.fake.FakeMemoryRepository
+    private lateinit var proposeMemoryUseCase: com.sanket_satpute_20.ironmind.domain.usecase.memory.ProposeMemoryUseCase
+    private lateinit var correctMemoryUseCase: com.sanket_satpute_20.ironmind.domain.usecase.memory.CorrectMemoryUseCase
+
     @Before
     fun setup() {
         goalRepository = FakeGoalRepository()
@@ -55,6 +59,10 @@ class UserCorrectionTest {
         editGoalUseCase = EditGoalUseCase(goalRepository, clock, idGenerator, eventRepository)
         createCommitmentUseCase = CreateCommitmentUseCase(commitmentRepository, reminderScheduler, idGenerator, clock, eventRepository)
         editCommitmentUseCase = EditCommitmentUseCase(commitmentRepository, reminderScheduler, clock, idGenerator, eventRepository)
+
+        memoryRepository = com.sanket_satpute_20.ironmind.testutil.fake.FakeMemoryRepository()
+        proposeMemoryUseCase = com.sanket_satpute_20.ironmind.domain.usecase.memory.ProposeMemoryUseCase(memoryRepository, eventRepository, idGenerator, clock)
+        correctMemoryUseCase = com.sanket_satpute_20.ironmind.domain.usecase.memory.CorrectMemoryUseCase(memoryRepository, eventRepository, idGenerator, clock)
     }
 
     // =========================================================
@@ -271,5 +279,45 @@ class UserCorrectionTest {
 
         assertTrue(result is Result.Failure)
         assertEquals(eventCountBefore, eventRepository.events.size)
+    }
+
+    // =========================================================
+    // MEMORY CORRECTIONS
+    // =========================================================
+
+    @Test
+    fun `correctMemory emits MEMORY_UPDATED event with source USER and upgrades confidence`() = runTest {
+        val memory = (proposeMemoryUseCase(
+            userId = "user-1",
+            type = "preference",
+            content = "Old AI assumption",
+            source = EntitySource.AI,
+            confidence = 0.5f
+        ) as Result.Success).data
+
+        clock.advanceTimeBy(1000)
+
+        val result = correctMemoryUseCase(
+            userId = "user-1",
+            memoryId = memory.id,
+            newContent = "Authoritative User Truth"
+        )
+
+        assertTrue(result is Result.Success)
+        val corrected = (result as Result.Success).data
+        assertEquals("Authoritative User Truth", corrected.content)
+        assertEquals(EntitySource.USER, corrected.source)
+        assertEquals(com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState.USER_CONFIRMED, corrected.confirmationState)
+        assertEquals(1.0f, corrected.confidence) // Explicit user correction means high confidence
+
+        val correctionEvents = eventRepository.events.values.filter {
+            it.entityId == memory.id && it.type == EventType.MEMORY_UPDATED
+        }
+        assertEquals(1, correctionEvents.size)
+        val event = correctionEvents.first()
+        assertEquals(EntitySource.USER, event.source)
+        assertEquals("MEMORY", event.entityType)
+        assertEquals("Old AI assumption", event.previousState)
+        assertEquals("Authoritative User Truth", event.newState)
     }
 }

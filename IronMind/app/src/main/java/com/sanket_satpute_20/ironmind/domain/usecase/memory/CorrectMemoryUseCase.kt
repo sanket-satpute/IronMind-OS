@@ -12,8 +12,9 @@ import com.sanket_satpute_20.ironmind.domain.repository.EventRepository
 import com.sanket_satpute_20.ironmind.domain.repository.MemoryRepository
 
 /**
- * Corrects the content of an existing memory and resets confirmation to UNCONFIRMED.
- * Original content is replaced; confidence may be adjusted by caller.
+ * Corrects the content of an existing memory based on explicit user feedback.
+ * Original content is replaced, and because it comes from the user, it is treated as
+ * highly confident and USER_CONFIRMED.
  */
 class CorrectMemoryUseCase(
     private val memoryRepository: MemoryRepository,
@@ -42,8 +43,9 @@ class CorrectMemoryUseCase(
         val now = clock.currentTimeMillis()
         val updated = existing.copy(
             content = newContent,
-            confidence = newConfidence ?: existing.confidence,
-            confirmationState = MemoryConfirmationState.UNCONFIRMED,
+            confidence = newConfidence ?: 1.0f, // Explicit user correction implies high confidence
+            source = EntitySource.USER,
+            confirmationState = MemoryConfirmationState.USER_CONFIRMED,
             lastObservedAt = now,
             updatedAt = now
         )
@@ -57,10 +59,12 @@ class CorrectMemoryUseCase(
                 entityId = memoryId,
                 occurredAt = now,
                 recordedAt = now,
-                source = EntitySource.USER
+                source = EntitySource.USER,
+                previousState = existing.content,
+                newState = updated.content
             )
             eventRepository.saveEvent(event)
-            println("IronMindLifecycle [Memory] [CORRECTED] memoryId=$memoryId")
+            println("IronMindLifecycle Memory [CORRECT] memoryId=$memoryId")
             Result.Success(updated)
         } else {
             Result.Failure((saveResult as Result.Failure).error)
