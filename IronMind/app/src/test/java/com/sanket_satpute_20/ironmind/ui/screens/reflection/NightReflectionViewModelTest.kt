@@ -34,7 +34,7 @@ class NightReflectionViewModelTest {
     private lateinit var clock: FakeClock
     private lateinit var idGenerator: FakeIdGenerator
     private lateinit var eventRepository: FakeEventRepository
-    
+
     private lateinit var getCommitmentsForDateRangeUseCase: GetCommitmentsForDateRangeUseCase
     private lateinit var saveReflectionUseCase: SaveReflectionUseCase
     private lateinit var logger: IronLogger
@@ -85,7 +85,7 @@ class NightReflectionViewModelTest {
 
         val state = viewModel.uiState.value
         assertTrue(state is NightReflectionUiState.Success)
-        
+
         val summary = (state as NightReflectionUiState.Success).summary
         assertEquals(2, summary.completed.size)
         assertEquals(1, summary.missed.size)
@@ -96,12 +96,28 @@ class NightReflectionViewModelTest {
     fun `saveReflection succeeds and updates state`() = runTest {
         viewModel = NightReflectionViewModel(getCommitmentsForDateRangeUseCase, saveReflectionUseCase, reflectionRepository, clock, logger)
         advanceUntilIdle()
-        
+
         viewModel.saveReflection(content = "Good day")
         advanceUntilIdle()
-        
+
         val state = viewModel.uiState.value
         assertTrue(state is NightReflectionUiState.Success)
         assertTrue((state as NightReflectionUiState.Success).isSaved)
+    }
+    @Test
+    fun `saveReflection with blank content produces validation failure`() = runTest {
+        viewModel = NightReflectionViewModel(getCommitmentsForDateRangeUseCase, saveReflectionUseCase, reflectionRepository, clock, logger)
+        advanceUntilIdle()
+
+        viewModel.saveReflection(content = "   ")
+        advanceUntilIdle()
+
+        // It stays in Success state but doesn't set isSaved to true (early return)
+        // Or if it passes to useCase, useCase returns Failure and sets UI to Error.
+        // Actually, with the new code, the ViewModel just returns on blank content
+        // But wait! If we just return, the UI state remains Success(isSaved=false).
+        val state = viewModel.uiState.value
+        assertTrue(state is NightReflectionUiState.Success)
+        assertTrue(!(state as NightReflectionUiState.Success).isSaved)
     }
 }

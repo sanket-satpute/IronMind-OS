@@ -58,6 +58,7 @@ class NightReflectionViewModel(
 
     fun loadSummary(userId: String = "user-1") { // Default user for V0
         viewModelScope.launch {
+            logger.logLifecycle("Reflection", "LOAD_START")
             _uiState.value = NightReflectionUiState.Loading
 
             // Calculate start and end of today
@@ -97,8 +98,10 @@ class NightReflectionViewModel(
                         existingReflection = existingReflection,
                         isSaved = existingReflection != null
                     )
+                    logger.logLifecycle("Reflection", "LOAD_SUCCESS", mapOf("hasExisting" to (existingReflection != null).toString()))
                 }
                 is Result.Failure -> {
+                    logger.logLifecycle("Reflection", "LOAD_FAILURE", mapOf("error" to (result.error.message ?: "Unknown")))
                     _uiState.value = NightReflectionUiState.Error(result.error.message ?: "Failed to load summary")
                 }
             }
@@ -107,6 +110,11 @@ class NightReflectionViewModel(
 
     fun saveReflection(userId: String = "user-1", content: String) {
         viewModelScope.launch {
+            if (content.isBlank()) {
+                logger.logLifecycle("Reflection", "VALIDATION_FAILURE", mapOf("reason" to "Blank reflection"))
+                return@launch
+            }
+            logger.logLifecycle("Reflection", "SAVE_START")
             val currentState = _uiState.value
             if (currentState is NightReflectionUiState.Success) {
                 val result = saveReflectionUseCase(
@@ -115,9 +123,11 @@ class NightReflectionViewModel(
                 )
                 when (result) {
                     is Result.Success -> {
+                        logger.logLifecycle("Reflection", "SAVE_SUCCESS")
                         _uiState.value = currentState.copy(isSaved = true)
                     }
                     is Result.Failure -> {
+                        logger.logLifecycle("Reflection", "SAVE_FAILURE", mapOf("error" to (result.error.message ?: "Unknown")))
                         _uiState.value = NightReflectionUiState.Error(result.error.message ?: "Failed to save reflection")
                     }
                 }
