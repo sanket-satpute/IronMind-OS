@@ -5,6 +5,7 @@ import com.sanket_satpute_20.ironmind.domain.model.GoalStatus
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeGoalRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeEventRepository
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -17,6 +18,7 @@ class GoalStateTransitionTest {
     private lateinit var repository: FakeGoalRepository
     private lateinit var clock: FakeClock
     private lateinit var idGenerator: FakeIdGenerator
+    private lateinit var eventRepository: FakeEventRepository
     
     private lateinit var createGoalUseCase: CreateGoalUseCase
     private lateinit var updateGoalStatusUseCase: UpdateGoalStatusUseCase
@@ -26,8 +28,9 @@ class GoalStateTransitionTest {
         repository = FakeGoalRepository()
         clock = FakeClock()
         idGenerator = FakeIdGenerator()
+        eventRepository = FakeEventRepository()
         
-        createGoalUseCase = CreateGoalUseCase(repository, idGenerator, clock)
+        createGoalUseCase = CreateGoalUseCase(repository, idGenerator, clock, eventRepository)
         updateGoalStatusUseCase = UpdateGoalStatusUseCase(repository, clock)
     }
 

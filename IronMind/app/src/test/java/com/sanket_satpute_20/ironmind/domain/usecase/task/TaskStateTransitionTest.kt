@@ -5,6 +5,7 @@ import com.sanket_satpute_20.ironmind.domain.model.TaskStatus
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeTaskRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeEventRepository
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -18,6 +19,7 @@ class TaskStateTransitionTest {
     private lateinit var repository: FakeTaskRepository
     private lateinit var clock: FakeClock
     private lateinit var idGenerator: FakeIdGenerator
+    private lateinit var eventRepository: FakeEventRepository
     
     private lateinit var createTaskUseCase: CreateTaskUseCase
     private lateinit var updateTaskStatusUseCase: UpdateTaskStatusUseCase
@@ -27,8 +29,9 @@ class TaskStateTransitionTest {
         repository = FakeTaskRepository()
         clock = FakeClock()
         idGenerator = FakeIdGenerator()
+        eventRepository = FakeEventRepository()
         
-        createTaskUseCase = CreateTaskUseCase(repository, idGenerator, clock)
+        createTaskUseCase = CreateTaskUseCase(repository, idGenerator, clock, eventRepository)
         updateTaskStatusUseCase = UpdateTaskStatusUseCase(repository, clock)
     }
 

@@ -51,7 +51,7 @@ class UserCorrectionTest {
         idGenerator = FakeIdGenerator()
         reminderScheduler = FakeReminderScheduler()
 
-        createGoalUseCase = CreateGoalUseCase(goalRepository, idGenerator, clock)
+        createGoalUseCase = CreateGoalUseCase(goalRepository, idGenerator, clock, eventRepository)
         editGoalUseCase = EditGoalUseCase(goalRepository, clock, idGenerator, eventRepository)
         createCommitmentUseCase = CreateCommitmentUseCase(commitmentRepository, reminderScheduler, idGenerator, clock, eventRepository)
         editCommitmentUseCase = EditCommitmentUseCase(commitmentRepository, reminderScheduler, clock, idGenerator, eventRepository)

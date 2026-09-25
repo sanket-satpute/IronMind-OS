@@ -30,7 +30,7 @@ class GoalCreationTest {
         idGenerator = FakeIdGenerator()
         eventRepository = FakeEventRepository()
         
-        createGoalUseCase = CreateGoalUseCase(repository, idGenerator, clock)
+        createGoalUseCase = CreateGoalUseCase(repository, idGenerator, clock, eventRepository)
         editGoalUseCase = EditGoalUseCase(repository, clock, idGenerator, eventRepository)
     }
 

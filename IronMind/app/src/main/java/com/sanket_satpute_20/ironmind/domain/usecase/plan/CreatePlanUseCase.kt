@@ -7,11 +7,15 @@ import com.sanket_satpute_20.ironmind.domain.model.EntitySource
 import com.sanket_satpute_20.ironmind.domain.model.Plan
 import com.sanket_satpute_20.ironmind.domain.model.PlanStatus
 import com.sanket_satpute_20.ironmind.domain.repository.PlanRepository
+import com.sanket_satpute_20.ironmind.domain.repository.EventRepository
+import com.sanket_satpute_20.ironmind.domain.model.Event
+import com.sanket_satpute_20.ironmind.domain.model.EventType
 
 class CreatePlanUseCase(
     private val repository: PlanRepository,
     private val idGenerator: IdGenerator,
-    private val clock: Clock
+    private val clock: Clock,
+    private val eventRepository: EventRepository
 ) {
     suspend operator fun invoke(
         userId: String,
@@ -39,7 +43,20 @@ class CreatePlanUseCase(
 
         return when (val result = repository.savePlan(plan)) {
             is Result.Failure -> Result.Failure(result.error)
-            is Result.Success -> Result.Success(plan)
+            is Result.Success -> {
+                val event = Event(
+                    id = idGenerator.generateId(),
+                    userId = userId,
+                    type = EventType.PLAN_CREATED,
+                    entityType = "PLAN",
+                    entityId = plan.id,
+                    occurredAt = now,
+                    recordedAt = now,
+                    source = EntitySource.USER
+                )
+                eventRepository.saveEvent(event)
+                Result.Success(plan)
+            }
         }
     }
 }

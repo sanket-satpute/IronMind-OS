@@ -6,6 +6,7 @@ import com.sanket_satpute_20.ironmind.domain.model.PlanStatus
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
 import com.sanket_satpute_20.ironmind.testutil.fake.FakePlanRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeEventRepository
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -17,6 +18,7 @@ class PlanCreationTest {
     private lateinit var repository: FakePlanRepository
     private lateinit var clock: FakeClock
     private lateinit var idGenerator: FakeIdGenerator
+    private lateinit var eventRepository: FakeEventRepository
     
     private lateinit var createPlanUseCase: CreatePlanUseCase
 
@@ -25,8 +27,9 @@ class PlanCreationTest {
         repository = FakePlanRepository()
         clock = FakeClock()
         idGenerator = FakeIdGenerator()
+        eventRepository = FakeEventRepository()
         
-        createPlanUseCase = CreatePlanUseCase(repository, idGenerator, clock)
+        createPlanUseCase = CreatePlanUseCase(repository, idGenerator, clock, eventRepository)
     }
 
     @Test

@@ -9,6 +9,7 @@ import com.sanket_satpute_20.ironmind.domain.usecase.goal.GetGoalsUseCase
 import com.sanket_satpute_20.ironmind.testutil.TestDispatcherRule
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeEventRepository
 import com.sanket_satpute_20.ironmind.domain.repository.GoalRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -56,6 +57,7 @@ class GoalsViewModelTest {
     private lateinit var logger: IronLogger
     private lateinit var clock: FakeClock
     private lateinit var idGenerator: FakeIdGenerator
+    private lateinit var eventRepository: FakeEventRepository
 
     private lateinit var viewModel: GoalsViewModel
 
@@ -65,7 +67,8 @@ class GoalsViewModelTest {
         getGoalsUseCase = GetGoalsUseCase(goalRepository)
         clock = FakeClock()
         idGenerator = FakeIdGenerator()
-        createGoalUseCase = CreateGoalUseCase(goalRepository, idGenerator, clock)
+        eventRepository = FakeEventRepository()
+        createGoalUseCase = CreateGoalUseCase(goalRepository, idGenerator, clock, eventRepository)
         
         logger = object : IronLogger {
             override fun logLifecycle(component: String, event: String, parameters: Map<String, Any?>) {}

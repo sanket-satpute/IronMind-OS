@@ -7,11 +7,15 @@ import com.sanket_satpute_20.ironmind.domain.model.EntitySource
 import com.sanket_satpute_20.ironmind.domain.model.Task
 import com.sanket_satpute_20.ironmind.domain.model.TaskStatus
 import com.sanket_satpute_20.ironmind.domain.repository.TaskRepository
+import com.sanket_satpute_20.ironmind.domain.repository.EventRepository
+import com.sanket_satpute_20.ironmind.domain.model.Event
+import com.sanket_satpute_20.ironmind.domain.model.EventType
 
 class CreateTaskUseCase(
     private val repository: TaskRepository,
     private val idGenerator: IdGenerator,
-    private val clock: Clock
+    private val clock: Clock,
+    private val eventRepository: EventRepository
 ) {
     suspend operator fun invoke(
         userId: String,
@@ -48,7 +52,20 @@ class CreateTaskUseCase(
 
         return when (val result = repository.saveTask(task)) {
             is Result.Failure -> Result.Failure(result.error)
-            is Result.Success -> Result.Success(task)
+            is Result.Success -> {
+                val event = Event(
+                    id = idGenerator.generateId(),
+                    userId = userId,
+                    type = EventType.TASK_CREATED,
+                    entityType = "TASK",
+                    entityId = task.id,
+                    occurredAt = now,
+                    recordedAt = now,
+                    source = EntitySource.USER
+                )
+                eventRepository.saveEvent(event)
+                Result.Success(task)
+            }
         }
     }
 }

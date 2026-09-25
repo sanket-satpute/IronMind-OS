@@ -60,7 +60,7 @@ class PlanDetailViewModelTest {
         getTasksUseCase = GetTasksUseCase(taskRepository)
         clock = FakeClock()
         idGenerator = FakeIdGenerator()
-        createTaskUseCase = CreateTaskUseCase(taskRepository, idGenerator, clock)
+        createTaskUseCase = CreateTaskUseCase(taskRepository, idGenerator, clock, eventRepository)
         getActiveCommitmentsUseCase = GetActiveCommitmentsUseCase(commitmentRepository)
         createCommitmentUseCase = CreateCommitmentUseCase(commitmentRepository, reminderScheduler, idGenerator, clock, eventRepository)
         

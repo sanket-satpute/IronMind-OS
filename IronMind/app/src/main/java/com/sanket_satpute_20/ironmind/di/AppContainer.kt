@@ -492,7 +492,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     override val createGoalUseCase: CreateGoalUseCase by lazy {
-        CreateGoalUseCase(goalRepository, idGenerator, clock)
+        CreateGoalUseCase(goalRepository, idGenerator, clock, eventRepository)
     }
 
     override val getPlansUseCase: GetPlansUseCase by lazy {
@@ -504,7 +504,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     override val createPlanUseCase: CreatePlanUseCase by lazy {
-        CreatePlanUseCase(planRepository, idGenerator, clock)
+        CreatePlanUseCase(planRepository, idGenerator, clock, eventRepository)
     }
 
     override val getTasksUseCase: GetTasksUseCase by lazy {
@@ -512,7 +512,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     override val createTaskUseCase: CreateTaskUseCase by lazy {
-        CreateTaskUseCase(taskRepository, idGenerator, clock)
+        CreateTaskUseCase(taskRepository, idGenerator, clock, eventRepository)
     }
 
     override val proposeMemoryUseCase: ProposeMemoryUseCase by lazy {
