@@ -8,6 +8,13 @@ class GetMemoryUseCase(
     private val repository: MemoryRepository
 ) {
     suspend operator fun invoke(id: String): Result<Memory?, Exception> {
-        return repository.getMemoryById(id)
+        println("IronMindLifecycle Memory [LOAD_START] memoryId=$id")
+        val result = repository.getMemoryById(id)
+        if (result is Result.Success) {
+            println("IronMindLifecycle Memory [LOAD_SUCCESS] memoryId=$id found=${result.data != null}")
+        } else {
+            println("IronMindLifecycle Memory [LOAD_FAILURE] memoryId=$id error=${(result as Result.Failure).error.message}")
+        }
+        return result
     }
 }

@@ -48,7 +48,7 @@ class ConfirmMemoryUseCase(
                 source = EntitySource.USER
             )
             eventRepository.saveEvent(event)
-            println("IronMindLifecycle [Memory] [CONFIRMED] memoryId=$memoryId")
+            println("IronMindLifecycle Memory [CONFIRM] memoryId=$memoryId")
             Result.Success(updated)
         } else {
             Result.Failure((saveResult as Result.Failure).error)

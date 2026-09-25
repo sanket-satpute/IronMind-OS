@@ -30,10 +30,13 @@ class ProposeMemoryUseCase(
         confidence: Float,
         evidenceCount: Int = 1
     ): Result<Memory, Exception> {
+        println("IronMindLifecycle Memory [CREATE_START]")
         if (content.isBlank()) {
+            println("IronMindLifecycle Memory [CREATE_FAILURE] error=blank_content")
             return Result.Failure(IllegalArgumentException("Memory content cannot be blank"))
         }
         if (confidence < 0f || confidence > 1f) {
+            println("IronMindLifecycle Memory [CREATE_FAILURE] error=invalid_confidence")
             return Result.Failure(IllegalArgumentException("Confidence must be between 0.0 and 1.0"))
         }
 
@@ -68,10 +71,11 @@ class ProposeMemoryUseCase(
                 source = source
             )
             eventRepository.saveEvent(event)
-            println("IronMindLifecycle [Memory] [PROPOSED] memoryId=${memory.id} source=${source.name}")
+            println("IronMindLifecycle Memory [CREATE_SUCCESS] memoryId=${memory.id} source=${source.name}")
             Result.Success(memory)
         } else {
-            Result.Failure((result as Result.Failure).error)
+            println("IronMindLifecycle Memory [CREATE_FAILURE] error=${(result as Result.Failure).error.message}")
+            Result.Failure(result.error)
         }
     }
 }

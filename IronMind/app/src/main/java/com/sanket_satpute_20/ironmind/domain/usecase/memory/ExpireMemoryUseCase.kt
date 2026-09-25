@@ -49,7 +49,7 @@ class ExpireMemoryUseCase(
                 source = EntitySource.SYSTEM
             )
             eventRepository.saveEvent(event)
-            println("IronMindLifecycle [Memory] [EXPIRED] memoryId=$memoryId")
+            println("IronMindLifecycle Memory [INVALIDATE] memoryId=$memoryId")
             Result.Success(updated)
         } else {
             Result.Failure((saveResult as Result.Failure).error)
