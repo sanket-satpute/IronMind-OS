@@ -26,8 +26,10 @@ class CollectLocationObservationUseCase(
     private val locationObservationProvider: LocationObservationProvider,
     private val idGenerator: IdGenerator,
     private val clock: Clock
-) {
-    suspend operator fun invoke(userId: String): Result<Int, Exception> {
+) : ObservationCollector {
+    override val collectorName: String = "Location"
+
+    override suspend operator fun invoke(userId: String): Result<Int, Exception> {
         return try {
             // Guard 1: user consent
             val settingsResult = settingsRepository.getSettings(userId)

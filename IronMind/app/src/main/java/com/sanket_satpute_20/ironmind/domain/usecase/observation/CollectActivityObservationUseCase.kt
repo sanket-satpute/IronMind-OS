@@ -17,8 +17,10 @@ class CollectActivityObservationUseCase(
     private val activityObservationProvider: ActivityObservationProvider,
     private val idGenerator: IdGenerator,
     private val clock: Clock
-) {
-    suspend operator fun invoke(userId: String): Result<Int, Exception> {
+) : ObservationCollector {
+    override val collectorName: String = "Activity"
+
+    override suspend operator fun invoke(userId: String): Result<Int, Exception> {
         return try {
             val settingsResult = settingsRepository.getSettings(userId)
             if (settingsResult is Result.Success && !(settingsResult as Result.Success).data.isEnabled) {

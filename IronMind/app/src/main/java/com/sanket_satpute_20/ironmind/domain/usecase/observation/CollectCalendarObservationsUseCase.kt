@@ -19,11 +19,13 @@ class CollectCalendarObservationsUseCase(
     private val calendarObservationProvider: CalendarObservationProvider,
     private val idGenerator: IdGenerator,
     private val clock: Clock
-) {
+) : ObservationCollector {
+    override val collectorName: String = "Calendar"
+
     // Lookahead window: check the next 24 hours of events
     private val lookaheadWindowMillis = 24 * 60 * 60 * 1000L // 24 hours
 
-    suspend operator fun invoke(userId: String): Result<Int, Exception> {
+    override suspend operator fun invoke(userId: String): Result<Int, Exception> {
         return try {
             // Guard 1: user consent
             val settingsResult = settingsRepository.getSettings(userId)

@@ -28,11 +28,13 @@ class CollectAppUsageObservationsUseCase(
     private val appUsageObservationProvider: AppUsageObservationProvider,
     private val idGenerator: IdGenerator,
     private val clock: Clock
-) {
+) : ObservationCollector {
+    override val collectorName: String = "AppUsage"
+
     // Lookback window: collect the last hour of app usage events each run
     private val lookbackWindowMillis = 60 * 60 * 1000L // 1 hour
 
-    suspend operator fun invoke(userId: String): Result<Int, Exception> {
+    override suspend operator fun invoke(userId: String): Result<Int, Exception> {
         return try {
             // Guard 1: user consent
             val settingsResult = settingsRepository.getSettings(userId)
