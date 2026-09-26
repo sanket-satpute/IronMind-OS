@@ -57,8 +57,13 @@ class CollectAppUsageObservationsUseCase(
             val now = clock.currentTimeMillis()
 
             for (event in events) {
+                // Use deterministic ID to prevent duplicates across runs for the same event
+                val deterministicId = java.util.UUID.nameUUIDFromBytes(
+                    "appusage_${userId}_${event.packageName}_${event.startTimeMillis}".toByteArray()
+                ).toString()
+
                 val observation = Observation(
-                    id = idGenerator.generateId(),
+                    id = deterministicId,
                     userId = userId,
                     type = ObservationType.APP_USAGE_SESSION,
                     source = ObservationSource.APP_USAGE,
