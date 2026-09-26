@@ -249,6 +249,7 @@ interface AppContainer {
 
     // V4.6 Orchestration
     val collectObservationsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectObservationsUseCase
+    val executeObservationCollectionUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.ExecuteObservationCollectionUseCase
 
     // Services
 }
@@ -927,6 +928,12 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
                 collectLocationObservationUseCase,
                 collectActivityObservationUseCase
             )
+        )
+    }
+
+    override val executeObservationCollectionUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.ExecuteObservationCollectionUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.observation.ExecuteObservationCollectionUseCase(
+            collectObservationsUseCase = collectObservationsUseCase
         )
     }
 
