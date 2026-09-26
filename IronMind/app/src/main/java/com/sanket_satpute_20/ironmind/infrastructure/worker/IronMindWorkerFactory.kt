@@ -21,6 +21,7 @@ class IronMindWorkerFactory(
             EventProcessingWorker::class.java.name -> EventProcessingWorker(appContext, workerParameters, appContainer.eventRepository) // Placeholder for now
             PatternUpdateWorker::class.java.name -> PatternUpdateWorker(appContext, workerParameters, appContainer.patternEngine)
             InterventionEvaluationWorker::class.java.name -> InterventionEvaluationWorker(appContext, workerParameters, appContainer.interventionExecutionPipeline)
+            ObservationWorker::class.java.name -> ObservationWorker(appContext, workerParameters, appContainer.executeObservationCollectionUseCase, appContainer.authRepository)
             else -> null // Let DefaultWorkerFactory handle other workers
         }
     }

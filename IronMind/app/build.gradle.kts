@@ -59,6 +59,7 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.generativeai)
+    testImplementation("io.mockk:mockk:1.13.13")
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation("org.json:json:20231013")

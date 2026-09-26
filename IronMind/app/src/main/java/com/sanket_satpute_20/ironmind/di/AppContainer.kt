@@ -250,6 +250,7 @@ interface AppContainer {
     // V4.6 Orchestration
     val collectObservationsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectObservationsUseCase
     val executeObservationCollectionUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.ExecuteObservationCollectionUseCase
+    val observationScheduler: com.sanket_satpute_20.ironmind.infrastructure.worker.ObservationScheduler
 
     // Services
 }
@@ -935,6 +936,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         com.sanket_satpute_20.ironmind.domain.usecase.observation.ExecuteObservationCollectionUseCase(
             collectObservationsUseCase = collectObservationsUseCase
         )
+    }
+
+    override val observationScheduler: com.sanket_satpute_20.ironmind.infrastructure.worker.ObservationScheduler by lazy {
+        com.sanket_satpute_20.ironmind.infrastructure.worker.ObservationScheduler(androidx.work.WorkManager.getInstance(context))
     }
 
     override val dataManagementRepository: DataManagementRepository by lazy {
