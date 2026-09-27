@@ -256,6 +256,14 @@ interface AppContainer {
     val reconcileObservationSchedulingUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.ReconcileObservationSchedulingUseCase
     val observationSchedulingCoordinator: com.sanket_satpute_20.ironmind.domain.usecase.observation.ObservationSchedulingCoordinator
 
+    // V4.7 Factual Context Assembly
+    val aggregateAppUsageObservationsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.AggregateAppUsageObservationsUseCase
+    val aggregateActivityObservationsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.AggregateActivityObservationsUseCase
+    val aggregateCalendarObservationsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.AggregateCalendarObservationsUseCase
+    val aggregateLocationObservationsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.AggregateLocationObservationsUseCase
+    val aggregateNotificationObservationsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.AggregateNotificationObservationsUseCase
+    val buildFactualContextSnapshotUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.BuildFactualContextSnapshotUseCase
+
     // Services
 }
 
@@ -1016,6 +1024,37 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     override val deleteUserDataUseCase: com.sanket_satpute_20.ironmind.domain.usecase.data.DeleteUserDataUseCase by lazy {
         com.sanket_satpute_20.ironmind.domain.usecase.data.DeleteUserDataUseCase(
             dataManagementRepository = dataManagementRepository
+        )
+    }
+
+    // V4.7 — Factual Context Assembly
+    override val aggregateAppUsageObservationsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.AggregateAppUsageObservationsUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.observation.AggregateAppUsageObservationsUseCase(observationRepository)
+    }
+
+    override val aggregateActivityObservationsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.AggregateActivityObservationsUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.observation.AggregateActivityObservationsUseCase(observationRepository)
+    }
+
+    override val aggregateCalendarObservationsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.AggregateCalendarObservationsUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.observation.AggregateCalendarObservationsUseCase(observationRepository)
+    }
+
+    override val aggregateLocationObservationsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.AggregateLocationObservationsUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.observation.AggregateLocationObservationsUseCase(observationRepository)
+    }
+
+    override val aggregateNotificationObservationsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.AggregateNotificationObservationsUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.observation.AggregateNotificationObservationsUseCase(observationRepository)
+    }
+
+    override val buildFactualContextSnapshotUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.BuildFactualContextSnapshotUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.observation.BuildFactualContextSnapshotUseCase(
+            aggregateAppUsage = aggregateAppUsageObservationsUseCase,
+            aggregateActivity = aggregateActivityObservationsUseCase,
+            aggregateCalendar = aggregateCalendarObservationsUseCase,
+            aggregateLocation = aggregateLocationObservationsUseCase,
+            aggregateNotifications = aggregateNotificationObservationsUseCase
         )
     }
 }
