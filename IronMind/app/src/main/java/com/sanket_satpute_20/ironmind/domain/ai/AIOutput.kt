@@ -179,7 +179,7 @@ sealed class AIOutput {
      * Per Sprint V4.6.
      */
     data class ContextSynthesis(
-        val explicitIntent: String?,
+        val inferredIntentHypothesis: String?,
         val currentEnvironment: String?,
         val recentBehavior: String?,
         val relevantPatterns: String?,

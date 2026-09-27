@@ -28,7 +28,7 @@ class SynthesizePersonalContextUseCase(
             // 2. Request AI synthesis to form a coherent personal context
             val request = AIRequest(
                 userId = userId,
-                input = "Synthesize current personal context. Principle: Current explicit intent has higher authority than older inferred patterns.",
+                input = "Synthesize current personal context. Identify a possible current intent hypothesis from the supplied context. Treat explicit user-authored information as authoritative. Do not claim an inferred hypothesis is user-confirmed intent.",
                 requestType = AIRequestType.CONTEXT_SYNTHESIS,
                 contextSnapshot = snapshot
             )
@@ -51,7 +51,7 @@ class SynthesizePersonalContextUseCase(
             // 3. Extract synthesized content from AI output
             val personalContext = PersonalContext(
                 timestamp = snapshot.timestamp,
-                explicitIntent = aiOutput.explicitIntent,
+                inferredIntentHypothesis = aiOutput.inferredIntentHypothesis,
                 currentEnvironment = aiOutput.currentEnvironment,
                 recentBehavior = aiOutput.recentBehavior,
                 relevantPatterns = aiOutput.relevantPatterns,
