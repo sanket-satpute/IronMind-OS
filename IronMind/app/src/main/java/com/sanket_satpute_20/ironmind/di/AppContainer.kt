@@ -254,6 +254,7 @@ interface AppContainer {
     val observationSchedulingPolicyUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.ObservationSchedulingPolicyUseCase
     val activateObservationSchedulingUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.ActivateObservationSchedulingUseCase
     val reconcileObservationSchedulingUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.ReconcileObservationSchedulingUseCase
+    val observationSchedulingCoordinator: com.sanket_satpute_20.ironmind.domain.usecase.observation.ObservationSchedulingCoordinator
 
     // Services
 }
@@ -968,6 +969,12 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             policyUseCase = observationSchedulingPolicyUseCase,
             activateUseCase = activateObservationSchedulingUseCase,
             observationScheduler = observationScheduler
+        )
+    }
+
+    override val observationSchedulingCoordinator: com.sanket_satpute_20.ironmind.domain.usecase.observation.ObservationSchedulingCoordinator by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.observation.ObservationSchedulingCoordinator(
+            reconcileObservationSchedulingUseCase = reconcileObservationSchedulingUseCase
         )
     }
 
