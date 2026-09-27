@@ -6,7 +6,7 @@ import com.sanket_satpute_20.ironmind.domain.model.context.ContextSnapshot
 import com.sanket_satpute_20.ironmind.domain.repository.CommitmentRepository
 import com.sanket_satpute_20.ironmind.domain.repository.EventRepository
 import com.sanket_satpute_20.ironmind.domain.repository.GoalRepository
-import com.sanket_satpute_20.ironmind.domain.repository.ObservationRepository
+import com.sanket_satpute_20.ironmind.domain.usecase.observation.BuildFactualContextSnapshotUseCase
 import com.sanket_satpute_20.ironmind.domain.repository.ProtectionRepository
 import com.sanket_satpute_20.ironmind.domain.repository.ReflectionRepository
 import com.sanket_satpute_20.ironmind.domain.repository.PatternRepository
@@ -18,7 +18,7 @@ class ContextEngineImpl(
     private val clock: Clock,
     private val commitmentRepository: CommitmentRepository,
     private val eventRepository: EventRepository,
-    private val observationRepository: ObservationRepository,
+    private val buildFactualContextSnapshotUseCase: BuildFactualContextSnapshotUseCase,
     private val reflectionRepository: ReflectionRepository,
     private val protectionRepository: ProtectionRepository,
     private val goalRepository: GoalRepository,
@@ -47,9 +47,15 @@ class ContextEngineImpl(
                 emptyList()
             }
 
-            // 3. Fetch recent observations
-            val observationsResult = observationRepository.getObservations(userId, limit = 10, offset = 0)
-            val recentObservations = if (observationsResult is Result.Success) observationsResult.data else emptyList()
+            // 3. Fetch factual context snapshot (24-hour window)
+            val observationStartTimeMs = now - 86_400_000L
+            val factualContextResult = buildFactualContextSnapshotUseCase(userId, observationStartTimeMs, now)
+            if (factualContextResult is Result.Failure) {
+                println("IronMindLifecycle [ContextEngine] [FACTUAL_CONTEXT_FAILED] userId=$userId error=${factualContextResult.error.message}")
+                return@withContext Result.Failure(factualContextResult.error)
+            }
+            val factualContextSnapshot = (factualContextResult as Result.Success).data
+            println("IronMindLifecycle [ContextEngine] [FACTUAL_CONTEXT_ATTACHED] userId=$userId startTimeMs=$observationStartTimeMs endTimeMs=$now")
 
             // 4. Fetch recent reflections
             // Using past 7 days roughly
@@ -86,7 +92,7 @@ class ContextEngineImpl(
                 dayOfWeek = dayOfWeek,
                 activeCommitments = activeCommitments,
                 recentEvents = recentEvents,
-                recentObservations = recentObservations,
+                factualContextSnapshot = factualContextSnapshot,
                 recentReflections = recentReflections,
                 recentPatterns = recentPatterns,
                 activeProtectionSession = activeProtectionSession,

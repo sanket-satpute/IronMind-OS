@@ -7,10 +7,19 @@ import com.sanket_satpute_20.ironmind.domain.model.Commitment
 import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
 import com.sanket_satpute_20.ironmind.domain.model.Event
 import com.sanket_satpute_20.ironmind.domain.model.Goal
-import com.sanket_satpute_20.ironmind.domain.model.observation.Observation
+import com.sanket_satpute_20.ironmind.domain.model.observation.FactualContextSnapshot
+import com.sanket_satpute_20.ironmind.domain.model.observation.AppUsageObservationAggregation
+import com.sanket_satpute_20.ironmind.domain.model.observation.ActivityObservationAggregation
+import com.sanket_satpute_20.ironmind.domain.model.observation.CalendarObservationAggregation
+import com.sanket_satpute_20.ironmind.domain.model.observation.LocationObservationAggregation
+import com.sanket_satpute_20.ironmind.domain.model.observation.NotificationObservationAggregation
 import com.sanket_satpute_20.ironmind.domain.model.ProtectionSession
 import com.sanket_satpute_20.ironmind.domain.model.Reflection
+import com.sanket_satpute_20.ironmind.domain.usecase.observation.BuildFactualContextSnapshotUseCase
 import com.sanket_satpute_20.ironmind.domain.repository.*
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -24,7 +33,7 @@ class ContextEngineImplTest {
     private lateinit var clock: FakeClock
     private lateinit var commitmentRepository: FakeCommitmentRepository
     private lateinit var eventRepository: FakeEventRepository
-    private lateinit var observationRepository: FakeObservationRepository
+    private lateinit var buildFactualContextSnapshotUseCase: BuildFactualContextSnapshotUseCase
     private lateinit var reflectionRepository: FakeReflectionRepository
     private lateinit var protectionRepository: FakeProtectionRepository
     private lateinit var goalRepository: FakeGoalRepository
@@ -55,20 +64,7 @@ class ContextEngineImplTest {
         override suspend fun saveEvent(event: Event): Result<Event, Exception> = Result.Success(event)
         override suspend fun searchEvents(userId: String, query: String): Result<List<Event>, Exception> = Result.Success(events)
     }
-    class FakeObservationRepository : ObservationRepository {
-        var observations = emptyList<Observation>()
-        override suspend fun getObservations(userId: String, limit: Int, offset: Int): Result<List<Observation>, Exception> = Result.Success(observations)
-        override suspend fun insertObservation(observation: Observation): Result<Unit, Exception> = Result.Success(Unit)
-        override suspend fun getObservationsByType(userId: String, type: com.sanket_satpute_20.ironmind.domain.model.observation.ObservationType, limit: Int, offset: Int): Result<List<Observation>, Exception> = Result.Success(observations)
-        override suspend fun getObservationById(id: String): Result<Observation, Exception> = Result.Failure(Exception())
-        override suspend fun deleteObservation(id: String): Result<Unit, Exception> = Result.Success(Unit)
-        override suspend fun getObservationsForTimeWindow(
-            userId: String,
-            type: com.sanket_satpute_20.ironmind.domain.model.observation.ObservationType,
-            startTimeMs: Long,
-            endTimeMs: Long
-        ): Result<List<Observation>, Exception> = Result.Success(observations)
-    }
+
     class FakeReflectionRepository : ReflectionRepository {
         var reflections = emptyList<Reflection>()
         override suspend fun getReflectionsForDateRange(userId: String, startTime: Long, endTime: Long): Result<List<Reflection>, Exception> = Result.Success(reflections)
@@ -109,7 +105,7 @@ class ContextEngineImplTest {
         clock = FakeClock(1700000000000L) // Some deterministic time
         commitmentRepository = FakeCommitmentRepository()
         eventRepository = FakeEventRepository()
-        observationRepository = FakeObservationRepository()
+        buildFactualContextSnapshotUseCase = mockk()
         reflectionRepository = FakeReflectionRepository()
         protectionRepository = FakeProtectionRepository()
         goalRepository = FakeGoalRepository()
@@ -119,7 +115,7 @@ class ContextEngineImplTest {
             clock,
             commitmentRepository,
             eventRepository,
-            observationRepository,
+            buildFactualContextSnapshotUseCase,
             reflectionRepository,
             protectionRepository,
             goalRepository,
@@ -129,6 +125,20 @@ class ContextEngineImplTest {
 
     @Test
     fun `getCurrentContext returns successful snapshot`() = runTest {
+        val now = 1700000000000L
+        val startTimeMs = now - 86_400_000L
+        val emptySnapshot = FactualContextSnapshot(
+            userId = "user-1",
+            startTimeMs = startTimeMs,
+            endTimeMs = now,
+            appUsage = AppUsageObservationAggregation("user-1", startTimeMs, now, 0, 0L, 0),
+            activity = ActivityObservationAggregation("user-1", startTimeMs, now, 0, 0, emptyMap(), null, null),
+            calendar = CalendarObservationAggregation("user-1", startTimeMs, now, 0, 0, 0L, null, null),
+            location = LocationObservationAggregation("user-1", startTimeMs, now, 0, 0, 0, null, null),
+            notifications = NotificationObservationAggregation("user-1", startTimeMs, now, 0, 0, null, null)
+        )
+        coEvery { buildFactualContextSnapshotUseCase("user-1", startTimeMs, now) } returns Result.Success(emptySnapshot)
+
         val result = engine.getCurrentContext("user-1")
         assertTrue(result is Result.Success)
         val snapshot = (result as Result.Success).data
@@ -141,9 +151,24 @@ class ContextEngineImplTest {
         
         assertTrue(snapshot.activeCommitments.isEmpty())
         assertTrue(snapshot.recentEvents.isEmpty())
-        assertTrue(snapshot.recentObservations.isEmpty())
+        assertNotNull(snapshot.factualContextSnapshot)
+        assertEquals(startTimeMs, snapshot.factualContextSnapshot.startTimeMs)
+        assertEquals(now, snapshot.factualContextSnapshot.endTimeMs)
         assertTrue(snapshot.recentReflections.isEmpty())
         assertTrue(snapshot.activeGoals.isEmpty())
         assertEquals(null, snapshot.activeProtectionSession)
+    }
+
+    @Test
+    fun `getCurrentContext returns failure when factual assembly fails`() = runTest {
+        val now = 1700000000000L
+        val startTimeMs = now - 86_400_000L
+        val expectedError = Exception("Factual aggregation failed")
+
+        coEvery { buildFactualContextSnapshotUseCase("user-1", startTimeMs, now) } returns Result.Failure(expectedError)
+
+        val result = engine.getCurrentContext("user-1")
+        assertTrue(result is Result.Failure)
+        assertEquals(expectedError, (result as Result.Failure).error)
     }
 }

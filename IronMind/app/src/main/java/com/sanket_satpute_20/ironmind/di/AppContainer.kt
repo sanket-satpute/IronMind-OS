@@ -614,7 +614,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             clock = clock,
             commitmentRepository = commitmentRepository,
             eventRepository = eventRepository,
-            observationRepository = observationRepository,
+            buildFactualContextSnapshotUseCase = buildFactualContextSnapshotUseCase,
             reflectionRepository = reflectionRepository,
             protectionRepository = protectionRepository,
             goalRepository = goalRepository,
