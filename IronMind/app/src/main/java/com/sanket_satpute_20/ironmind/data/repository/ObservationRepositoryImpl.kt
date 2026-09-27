@@ -68,4 +68,18 @@ class ObservationRepositoryImpl(
             Result.Failure(e)
         }
     }
+
+    override suspend fun getObservationsForTimeWindow(
+        userId: String,
+        type: ObservationType,
+        startTimeMs: Long,
+        endTimeMs: Long
+    ): Result<List<Observation>, Exception> = withContext(Dispatchers.IO) {
+        try {
+            val observations = observationDao.getObservationsForTimeWindow(userId, type.name, startTimeMs, endTimeMs).map { it.toDomain() }
+            Result.Success(observations)
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
 }

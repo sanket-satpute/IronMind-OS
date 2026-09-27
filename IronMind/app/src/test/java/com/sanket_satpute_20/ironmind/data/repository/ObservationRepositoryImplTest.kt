@@ -72,6 +72,12 @@ class ObservationRepositoryImplTest {
         override fun deleteObservationsForUser(userId: String) {
             entities.values.removeIf { it.userId == userId }
         }
+
+        override fun getObservationsForTimeWindow(userId: String, type: String, startTimeMs: Long, endTimeMs: Long): List<ObservationEntity> {
+            return entities.values
+                .filter { it.userId == userId && it.type == type && it.occurredAt >= startTimeMs && it.occurredAt < endTimeMs }
+                .sortedBy { it.occurredAt }
+        }
     }
 
     @Before

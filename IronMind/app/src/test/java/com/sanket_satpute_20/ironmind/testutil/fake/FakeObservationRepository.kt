@@ -53,4 +53,16 @@ class FakeObservationRepository : ObservationRepository {
         observations.remove(id)
         return Result.Success(Unit)
     }
+
+    override suspend fun getObservationsForTimeWindow(
+        userId: String,
+        type: ObservationType,
+        startTimeMs: Long,
+        endTimeMs: Long
+    ): Result<List<Observation>, Exception> {
+        val result = observations.values
+            .filter { it.userId == userId && it.type == type && it.occurredAt >= startTimeMs && it.occurredAt < endTimeMs }
+            .sortedBy { it.occurredAt }
+        return Result.Success(result)
+    }
 }

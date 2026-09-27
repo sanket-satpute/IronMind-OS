@@ -62,6 +62,12 @@ class ContextEngineImplTest {
         override suspend fun getObservationsByType(userId: String, type: com.sanket_satpute_20.ironmind.domain.model.observation.ObservationType, limit: Int, offset: Int): Result<List<Observation>, Exception> = Result.Success(observations)
         override suspend fun getObservationById(id: String): Result<Observation, Exception> = Result.Failure(Exception())
         override suspend fun deleteObservation(id: String): Result<Unit, Exception> = Result.Success(Unit)
+        override suspend fun getObservationsForTimeWindow(
+            userId: String,
+            type: com.sanket_satpute_20.ironmind.domain.model.observation.ObservationType,
+            startTimeMs: Long,
+            endTimeMs: Long
+        ): Result<List<Observation>, Exception> = Result.Success(observations)
     }
     class FakeReflectionRepository : ReflectionRepository {
         var reflections = emptyList<Reflection>()

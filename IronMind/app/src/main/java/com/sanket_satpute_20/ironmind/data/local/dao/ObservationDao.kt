@@ -36,4 +36,7 @@ interface ObservationDao {
 
     @Query("DELETE FROM observations WHERE id = :id")
     fun deleteObservation(id: String)
+
+    @Query("SELECT * FROM observations WHERE userId = :userId AND type = :type AND occurredAt >= :startTimeMs AND occurredAt < :endTimeMs ORDER BY occurredAt ASC")
+    fun getObservationsForTimeWindow(userId: String, type: String, startTimeMs: Long, endTimeMs: Long): List<ObservationEntity>
 }
