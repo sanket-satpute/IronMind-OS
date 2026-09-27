@@ -9,6 +9,7 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.verify
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import java.io.ByteArrayOutputStream
@@ -29,7 +30,8 @@ class ObservationSchedulerTest {
     fun `Scheduler creates unique WorkManager work`() {
         every { workManager.enqueueUniquePeriodicWork(any(), any(), any<PeriodicWorkRequest>()) } returns mockk()
 
-        scheduler.scheduleObservationCollection()
+        val result = scheduler.scheduleObservationCollection()
+        assertTrue(result is com.sanket_satpute_20.ironmind.domain.common.Result.Success)
         
         verify(exactly = 1) { 
             workManager.enqueueUniquePeriodicWork(
@@ -62,7 +64,8 @@ class ObservationSchedulerTest {
     fun `Cancellation targets the correct unique work`() {
         every { workManager.cancelUniqueWork(any()) } returns mockk()
 
-        scheduler.cancelObservationCollection()
+        val result = scheduler.cancelObservationCollection()
+        assertTrue(result is com.sanket_satpute_20.ironmind.domain.common.Result.Success)
         
         verify(exactly = 1) { 
             workManager.cancelUniqueWork(ObservationScheduler.UNIQUE_WORK_NAME)
@@ -80,12 +83,24 @@ class ObservationSchedulerTest {
             scheduler.cancelObservationCollection()
             
             val logs = outContent.toString()
-            assertTrue(logs.contains("IronMindLifecycle ObservationScheduler [SCHEDULED]"))
-            assertTrue(logs.contains("IronMindLifecycle ObservationScheduler [CANCELLED]"))
+            assertTrue(logs.contains("IronMindLifecycle [ObservationScheduling] [SCHEDULED]"))
+            assertTrue(logs.contains("IronMindLifecycle [ObservationScheduling] [CANCELLED]"))
             assertTrue(!logs.contains("raw"))
             assertTrue(!logs.contains("payload"))
         } finally {
             System.setOut(originalOut)
         }
+    }
+
+    @Test
+    fun `Scheduler exceptions return explicit failures`() {
+        every { workManager.enqueueUniquePeriodicWork(any(), any(), any<PeriodicWorkRequest>()) } throws RuntimeException("DB error")
+        every { workManager.cancelUniqueWork(any()) } throws RuntimeException("DB error")
+
+        val scheduleResult = scheduler.scheduleObservationCollection()
+        val cancelResult = scheduler.cancelObservationCollection()
+
+        assertTrue(scheduleResult is com.sanket_satpute_20.ironmind.domain.common.Result.Failure)
+        assertTrue(cancelResult is com.sanket_satpute_20.ironmind.domain.common.Result.Failure)
     }
 }

@@ -3,6 +3,9 @@ package com.sanket_satpute_20.ironmind.domain.usecase.observation
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -25,58 +28,58 @@ class ObservationSchedulingCoordinatorTest {
     @Test
     fun `A ApplicationStarted invokes reconciliation exactly once`() = runBlocking<Unit> {
         coEvery { reconcileUseCase() } returns ObservationSchedulingReconciliationResult.Activated
-        
+
         coordinator.handle(ObservationSchedulingLifecycleEvent.ApplicationStarted)
-        
+
         coVerify(exactly = 1) { reconcileUseCase() }
     }
 
     @Test
     fun `B AuthenticationAvailable invokes reconciliation exactly once`() = runBlocking<Unit> {
         coEvery { reconcileUseCase() } returns ObservationSchedulingReconciliationResult.Activated
-        
+
         coordinator.handle(ObservationSchedulingLifecycleEvent.AuthenticationAvailable)
-        
+
         coVerify(exactly = 1) { reconcileUseCase() }
     }
 
     @Test
     fun `C AuthenticationUnavailable invokes reconciliation exactly once`() = runBlocking<Unit> {
         coEvery { reconcileUseCase() } returns ObservationSchedulingReconciliationResult.Activated
-        
+
         coordinator.handle(ObservationSchedulingLifecycleEvent.AuthenticationUnavailable)
-        
+
         coVerify(exactly = 1) { reconcileUseCase() }
     }
 
     @Test
     fun `D ObservationConsentChanged invokes reconciliation exactly once`() = runBlocking<Unit> {
         coEvery { reconcileUseCase() } returns ObservationSchedulingReconciliationResult.Activated
-        
+
         coordinator.handle(ObservationSchedulingLifecycleEvent.ObservationConsentChanged)
-        
+
         coVerify(exactly = 1) { reconcileUseCase() }
     }
 
     @Test
     fun `E GlobalAutonomyPauseChanged invokes reconciliation exactly once`() = runBlocking<Unit> {
         coEvery { reconcileUseCase() } returns ObservationSchedulingReconciliationResult.Activated
-        
+
         coordinator.handle(ObservationSchedulingLifecycleEvent.GlobalAutonomyPauseChanged)
-        
+
         coVerify(exactly = 1) { reconcileUseCase() }
     }
 
     @Test
     fun `F Every supported event uses the SAME reconciliation boundary`() = runBlocking<Unit> {
         coEvery { reconcileUseCase() } returns ObservationSchedulingReconciliationResult.Activated
-        
+
         coordinator.handle(ObservationSchedulingLifecycleEvent.ApplicationStarted)
         coordinator.handle(ObservationSchedulingLifecycleEvent.AuthenticationAvailable)
         coordinator.handle(ObservationSchedulingLifecycleEvent.AuthenticationUnavailable)
         coordinator.handle(ObservationSchedulingLifecycleEvent.ObservationConsentChanged)
         coordinator.handle(ObservationSchedulingLifecycleEvent.GlobalAutonomyPauseChanged)
-        
+
         // Ensure no direct scheduler/policy calls (validated by lack of dependencies in constructor)
         coVerify(exactly = 5) { reconcileUseCase() }
     }
@@ -97,12 +100,12 @@ class ObservationSchedulingCoordinatorTest {
     @Test
     fun `I Coordinator is stateless - repeated identical events delegate to reconciliation`() = runBlocking<Unit> {
         coEvery { reconcileUseCase() } returns ObservationSchedulingReconciliationResult.Activated
-        
+
         coordinator.handle(ObservationSchedulingLifecycleEvent.ApplicationStarted)
         coordinator.handle(ObservationSchedulingLifecycleEvent.ApplicationStarted)
         coordinator.handle(ObservationSchedulingLifecycleEvent.ObservationConsentChanged)
         coordinator.handle(ObservationSchedulingLifecycleEvent.ObservationConsentChanged)
-        
+
         coVerify(exactly = 4) { reconcileUseCase() }
     }
 
@@ -112,7 +115,7 @@ class ObservationSchedulingCoordinatorTest {
         coEvery { reconcileUseCase() } returns ObservationSchedulingReconciliationResult.Activated
         var result = coordinator.handle(ObservationSchedulingLifecycleEvent.ApplicationStarted)
         assertTrue(result is ObservationSchedulingReconciliationResult.Activated)
-        
+
         // Cancelled(DENIED_AUTH)
         coEvery { reconcileUseCase() } returns ObservationSchedulingReconciliationResult.Cancelled(ObservationSchedulingPolicyResult.Denied.Reason.DENIED_AUTH)
         result = coordinator.handle(ObservationSchedulingLifecycleEvent.AuthenticationUnavailable)
@@ -135,7 +138,7 @@ class ObservationSchedulingCoordinatorTest {
     @Test
     fun `K Safe logging`() = runBlocking<Unit> {
         coEvery { reconcileUseCase() } returns ObservationSchedulingReconciliationResult.Activated
-        
+
         val originalOut = System.out
         val outContent = ByteArrayOutputStream()
         System.setOut(PrintStream(outContent))
@@ -143,13 +146,13 @@ class ObservationSchedulingCoordinatorTest {
         try {
             coordinator.handle(ObservationSchedulingLifecycleEvent.ApplicationStarted)
             coordinator.handle(ObservationSchedulingLifecycleEvent.AuthenticationAvailable)
-            
+
             val logs = outContent.toString()
             assertTrue(logs.contains("IronMindLifecycle [ObservationSchedulingCoordinator] [RECONCILE] event=APPLICATION_STARTED"))
             assertTrue(logs.contains("IronMindLifecycle [ObservationSchedulingCoordinator] [RECONCILE] event=AUTHENTICATION_AVAILABLE"))
             assertTrue(!logs.contains("user-"))
             assertTrue(!logs.contains("payload"))
-            
+
         } finally {
             System.setOut(originalOut)
         }
@@ -159,5 +162,50 @@ class ObservationSchedulingCoordinatorTest {
     fun `L No Android lifecycle integration`() = runBlocking<Unit> {
         // Implicitly tested. This class contains no lifecycle observers, Application dependencies, etc.
         assertTrue(true)
+    }
+
+    @Test
+    fun `M Concurrent events are serialized`() = runBlocking<Unit> {
+        val startedExecution = CompletableDeferred<Unit>()
+        val finishExecution = CompletableDeferred<Unit>()
+
+        var concurrentExecutions = 0
+        var maxConcurrentExecutions = 0
+
+        coEvery { reconcileUseCase() } coAnswers {
+            concurrentExecutions++
+            if (concurrentExecutions > maxConcurrentExecutions) {
+                maxConcurrentExecutions = concurrentExecutions
+            }
+
+            startedExecution.complete(Unit)
+            finishExecution.await()
+
+            concurrentExecutions--
+            ObservationSchedulingReconciliationResult.Activated
+        }
+
+        // Launch first request
+        val job1 = async { coordinator.handle(ObservationSchedulingLifecycleEvent.ApplicationStarted) }
+
+        // Wait until first request is inside the critical section
+        startedExecution.await()
+
+        // Launch second request (it should wait on the Mutex)
+        val job2 = async { coordinator.handle(ObservationSchedulingLifecycleEvent.AuthenticationAvailable) }
+
+        // Let them both try to run (yield essentially)
+        delay(100)
+
+        // Allow the first one to finish
+        finishExecution.complete(Unit)
+
+        job1.await()
+        // Wait a bit to ensure job2 finishes, though await() does it
+        job2.await()
+
+        // If they were not serialized, maxConcurrentExecutions would be 2
+        assertEquals(1, maxConcurrentExecutions)
+        coVerify(exactly = 2) { reconcileUseCase() }
     }
 }

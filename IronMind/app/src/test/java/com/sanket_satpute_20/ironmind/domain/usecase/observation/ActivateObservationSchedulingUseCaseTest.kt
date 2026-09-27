@@ -29,6 +29,7 @@ class ActivateObservationSchedulingUseCaseTest {
     @Test
     fun `A Policy Allowed invokes schedule once and returns Activated`() = runBlocking<Unit> {
         coEvery { policyUseCase() } returns ObservationSchedulingPolicyResult.Allowed
+        every { observationScheduler.scheduleObservationCollection() } returns com.sanket_satpute_20.ironmind.domain.common.Result.Success(Unit)
 
         val result = useCase()
 
@@ -77,12 +78,13 @@ class ActivateObservationSchedulingUseCaseTest {
 
     @Test
     fun `E Policy is authoritative and does not inspect repositories`() = runBlocking<Unit> {
-        // Since we did not provide AuthRepository, AutonomySettingsRepository etc., 
+        // Since we did not provide AuthRepository, AutonomySettingsRepository etc.,
         // to this class, it CANNOT inspect them independently. It purely relies on policyUseCase.
         coEvery { policyUseCase() } returns ObservationSchedulingPolicyResult.Allowed
-        
+        every { observationScheduler.scheduleObservationCollection() } returns com.sanket_satpute_20.ironmind.domain.common.Result.Success(Unit)
+
         val result = useCase()
-        
+
         verify(exactly = 1) { observationScheduler.scheduleObservationCollection() }
         assertTrue(result is ObservationSchedulingActivationResult.Activated)
     }
@@ -97,7 +99,7 @@ class ActivateObservationSchedulingUseCaseTest {
 
     @Test
     fun `G No automatic invocation`() {
-        // Implicitly tested. This class has no lifecycle components. 
+        // Implicitly tested. This class has no lifecycle components.
         // We just verify it executes when explicitly called.
         assertTrue(true)
     }
@@ -105,19 +107,20 @@ class ActivateObservationSchedulingUseCaseTest {
     @Test
     fun `H Safe logging`() = runBlocking<Unit> {
         coEvery { policyUseCase() } returns ObservationSchedulingPolicyResult.Allowed
-        
+        every { observationScheduler.scheduleObservationCollection() } returns com.sanket_satpute_20.ironmind.domain.common.Result.Success(Unit)
+
         val originalOut = System.out
         val outContent = ByteArrayOutputStream()
         System.setOut(PrintStream(outContent))
 
         try {
             useCase()
-            
+
             val logs = outContent.toString()
             assertTrue(logs.contains("IronMindLifecycle [ObservationSchedulingActivation] [ACTIVATED]"))
             assertTrue(!logs.contains("user-"))
             assertTrue(!logs.contains("payload"))
-            
+
         } finally {
             System.setOut(originalOut)
         }
@@ -128,30 +131,31 @@ class ActivateObservationSchedulingUseCaseTest {
         coEvery { policyUseCase() } returns ObservationSchedulingPolicyResult.Denied(
             ObservationSchedulingPolicyResult.Denied.Reason.DENIED_AUTH
         )
-        
+
         val originalOut = System.out
         val outContent = ByteArrayOutputStream()
         System.setOut(PrintStream(outContent))
 
         try {
             useCase()
-            
+
             val logs = outContent.toString()
             assertTrue(logs.contains("IronMindLifecycle [ObservationSchedulingActivation] [DENIED] reason=DENIED_AUTH"))
             assertTrue(!logs.contains("user-"))
             assertTrue(!logs.contains("payload"))
-            
+
         } finally {
             System.setOut(originalOut)
         }
     }
 
-    @Test(expected = RuntimeException::class)
-    fun `I Scheduler exception behavior bubbles up`() = runBlocking<Unit> {
+    @Test
+    fun `I Scheduler exception behavior returns ScheduleFailed`() = runBlocking<Unit> {
         coEvery { policyUseCase() } returns ObservationSchedulingPolicyResult.Allowed
-        every { observationScheduler.scheduleObservationCollection() } throws RuntimeException("Scheduler failed")
+        every { observationScheduler.scheduleObservationCollection() } returns com.sanket_satpute_20.ironmind.domain.common.Result.Failure(com.sanket_satpute_20.ironmind.infrastructure.worker.ObservationSchedulingError.ScheduleFailed)
 
-        // Should bubble up exception
-        useCase()
+        val result = useCase()
+
+        assertTrue(result is ObservationSchedulingActivationResult.ScheduleFailed)
     }
 }

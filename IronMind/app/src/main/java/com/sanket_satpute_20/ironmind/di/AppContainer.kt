@@ -966,7 +966,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val reconcileObservationSchedulingUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.ReconcileObservationSchedulingUseCase by lazy {
         com.sanket_satpute_20.ironmind.domain.usecase.observation.ReconcileObservationSchedulingUseCase(
-            policyUseCase = observationSchedulingPolicyUseCase,
+
             activateUseCase = activateObservationSchedulingUseCase,
             observationScheduler = observationScheduler
         )

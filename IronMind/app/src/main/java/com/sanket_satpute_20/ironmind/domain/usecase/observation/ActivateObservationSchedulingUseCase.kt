@@ -7,6 +7,7 @@ sealed class ObservationSchedulingActivationResult {
     data class Denied(
         val reason: ObservationSchedulingPolicyResult.Denied.Reason
     ) : ObservationSchedulingActivationResult()
+    object ScheduleFailed : ObservationSchedulingActivationResult()
 }
 
 class ActivateObservationSchedulingUseCase(
@@ -16,9 +17,15 @@ class ActivateObservationSchedulingUseCase(
     suspend operator fun invoke(): ObservationSchedulingActivationResult {
         return when (val policyResult = policyUseCase()) {
             is ObservationSchedulingPolicyResult.Allowed -> {
-                observationScheduler.scheduleObservationCollection()
-                println("IronMindLifecycle [ObservationSchedulingActivation] [ACTIVATED]")
-                ObservationSchedulingActivationResult.Activated
+                when (observationScheduler.scheduleObservationCollection()) {
+                    is com.sanket_satpute_20.ironmind.domain.common.Result.Success -> {
+                        println("IronMindLifecycle [ObservationSchedulingActivation] [ACTIVATED]")
+                        ObservationSchedulingActivationResult.Activated
+                    }
+                    is com.sanket_satpute_20.ironmind.domain.common.Result.Failure -> {
+                        ObservationSchedulingActivationResult.ScheduleFailed
+                    }
+                }
             }
             is ObservationSchedulingPolicyResult.Denied -> {
                 println("IronMindLifecycle [ObservationSchedulingActivation] [DENIED] reason=${policyResult.reason.name}")
