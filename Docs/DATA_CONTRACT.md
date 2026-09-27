@@ -5415,6 +5415,28 @@ Current environment
 
 ---
 
+# 291A. CURRENT OBSERVATION CONTEXT HORIZON
+
+Current observation context uses a 24-hour horizon.
+
+The interval is `[startTimeMs, endTimeMs)`.
+
+*   `endTimeMs` is the current ContextEngine evaluation time.
+*   `startTimeMs` is 24 hours before `endTimeMs`.
+
+Observation inclusion uses `occurredAt`.
+`recordedAt` is ingestion metadata and does not determine inclusion.
+
+All observations in the window are eligible for deterministic factual aggregation.
+
+Latest-N observation count is not the semantic definition of current observation context.
+
+Reflection's existing 7-day window remains separate.
+
+This policy does not authorize raw observation exposure to AI.
+
+---
+
 # 292. CONTEXT REFERENCES
 
 AI contexts may reference entity IDs rather than copying all full records.
