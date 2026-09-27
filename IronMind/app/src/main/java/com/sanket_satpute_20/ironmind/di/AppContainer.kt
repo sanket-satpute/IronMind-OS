@@ -387,7 +387,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     override val toggleGlobalPauseUseCase: com.sanket_satpute_20.ironmind.domain.usecase.autonomy.ToggleGlobalPauseUseCase by lazy {
-        com.sanket_satpute_20.ironmind.domain.usecase.autonomy.ToggleGlobalPauseUseCase(autonomySettingsRepository)
+        com.sanket_satpute_20.ironmind.domain.usecase.autonomy.ToggleGlobalPauseUseCase(autonomySettingsRepository, observationSchedulingCoordinator)
     }
 
     override val decisionRecordRepository: DecisionRecordRepository by lazy {
@@ -763,7 +763,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     override val setAppUsageObservationEnabledUseCase: SetAppUsageObservationEnabledUseCase by lazy {
-        SetAppUsageObservationEnabledUseCase(appUsageObservationSettingsRepository)
+        SetAppUsageObservationEnabledUseCase(appUsageObservationSettingsRepository, getAppUsageObservationSettingsUseCase, observationSchedulingCoordinator)
     }
 
     override val collectAppUsageObservationsUseCase: CollectAppUsageObservationsUseCase by lazy {
@@ -858,7 +858,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     override val setCalendarObservationEnabledUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.SetCalendarObservationEnabledUseCase by lazy {
-        com.sanket_satpute_20.ironmind.domain.usecase.observation.SetCalendarObservationEnabledUseCase(calendarObservationSettingsRepository, getCalendarObservationSettingsUseCase)
+        com.sanket_satpute_20.ironmind.domain.usecase.observation.SetCalendarObservationEnabledUseCase(calendarObservationSettingsRepository, getCalendarObservationSettingsUseCase, observationSchedulingCoordinator)
     }
 
     override val collectCalendarObservationsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectCalendarObservationsUseCase by lazy {
@@ -885,7 +885,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     override val setLocationObservationEnabledUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.SetLocationObservationEnabledUseCase by lazy {
-        com.sanket_satpute_20.ironmind.domain.usecase.observation.SetLocationObservationEnabledUseCase(locationObservationSettingsRepository, getLocationObservationSettingsUseCase)
+        com.sanket_satpute_20.ironmind.domain.usecase.observation.SetLocationObservationEnabledUseCase(locationObservationSettingsRepository, getLocationObservationSettingsUseCase, observationSchedulingCoordinator)
     }
 
     override val collectLocationObservationUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectLocationObservationUseCase by lazy {
@@ -912,7 +912,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     override val setActivityObservationEnabledUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.SetActivityObservationEnabledUseCase by lazy {
-        com.sanket_satpute_20.ironmind.domain.usecase.observation.SetActivityObservationEnabledUseCase(activityObservationSettingsRepository, getActivityObservationSettingsUseCase)
+        com.sanket_satpute_20.ironmind.domain.usecase.observation.SetActivityObservationEnabledUseCase(activityObservationSettingsRepository, getActivityObservationSettingsUseCase, observationSchedulingCoordinator)
     }
 
     override val collectActivityObservationUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectActivityObservationUseCase by lazy {

@@ -5,15 +5,21 @@ import com.sanket_satpute_20.ironmind.domain.repository.ActivityObservationSetti
 
 class SetActivityObservationEnabledUseCase(
     private val repository: ActivityObservationSettingsRepository,
-    private val getSettingsUseCase: GetActivityObservationSettingsUseCase
+    private val getSettingsUseCase: GetActivityObservationSettingsUseCase,
+    private val coordinator: com.sanket_satpute_20.ironmind.domain.usecase.observation.ObservationSchedulingCoordinator
 ) {
     suspend operator fun invoke(userId: String, isEnabled: Boolean): Result<Unit, Exception> {
         val currentSettings = getSettingsUseCase(userId)
         
-        if (currentSettings is Result.Success && (currentSettings as Result.Success).data.isEnabled == isEnabled) {
+        if (currentSettings is Result.Success && currentSettings.data.isEnabled == isEnabled) {
             return Result.Success(Unit)
         }
 
-        return repository.setEnabled(userId, isEnabled)
+        val result = repository.setEnabled(userId, isEnabled)
+        if (result is Result.Success) {
+            println("IronMindLifecycle [ObservationSchedulingLifecycle] [CONSENT_CHANGED]")
+            coordinator.handle(com.sanket_satpute_20.ironmind.domain.usecase.observation.ObservationSchedulingLifecycleEvent.ObservationConsentChanged)
+        }
+        return result
     }
 }
