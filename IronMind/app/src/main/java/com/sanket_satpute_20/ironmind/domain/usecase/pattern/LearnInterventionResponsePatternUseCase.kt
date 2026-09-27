@@ -20,7 +20,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * Sprint V4.7: Intervention Learning.
- * 
+ *
  * Objective: Learn which interventions tend to help under which conditions.
  * Critical distinction: Do not learn from technical failures as if they were behavioral failures.
  */
@@ -34,14 +34,14 @@ class LearnInterventionResponsePatternUseCase(
     suspend operator fun invoke(
         userId: String,
         sinceTimestamp: Long
-    ): Result<Pattern?, Exception> = withContext(Dispatchers.IO) {
+    ): Result<com.sanket_satpute_20.ironmind.domain.model.pattern.PatternCandidate?, Exception> = withContext(Dispatchers.IO) {
         try {
             // 1. Fetch recent interventions
             val interventionsResult = interventionRepository.getRecentInterventions(userId, sinceTimestamp)
             if (interventionsResult is Result.Failure) {
                 return@withContext Result.Failure(interventionsResult.error)
             }
-            
+
             val recentInterventions = (interventionsResult as Result.Success).data
 
             // 2. Filter out technical failures and incomplete interventions
@@ -76,9 +76,9 @@ class LearnInterventionResponsePatternUseCase(
             if (aiResult is Result.Failure) {
                 return@withContext Result.Failure(aiResult.error)
             }
-            
+
             val aiOutput = (aiResult as Result.Success).data
-            
+
             if (!aiOutput.isValid()) {
                 return@withContext Result.Failure(IllegalStateException("Invalid AI intervention learning output"))
             }
@@ -92,36 +92,15 @@ class LearnInterventionResponsePatternUseCase(
                 return@withContext Result.Failure(IllegalStateException("Unexpected AI output type: ${aiOutput.type}"))
             }
 
-            // 5. Convert AI candidate to domain Pattern
-            val now = clock.currentTimeMillis()
-            val pattern = Pattern(
-                id = idGenerator.generateId(),
-                userId = userId,
-                type = PatternType.INTERVENTION_RESPONSE_PATTERN,
-                description = aiOutput.patternDescription,
-                conditions = null,
-                predictedBehavior = null,
-                confidence = aiOutput.confidence,
-                evidenceCount = validInterventions.size,
-                evidenceReferences = aiOutput.evidenceReferences,
-                firstObservedAt = now,
-                lastObservedAt = now,
-                status = PatternStatus.ACTIVE,
-                confirmationState = MemoryConfirmationState.UNCONFIRMED,
-                createdAt = now,
-                updatedAt = now
-            )
+            // 5. Domain Learning Boundary (Sprint 11C)
+            // AI outputs PatternCandidates, not Patterns.
+            // DO NOT directly persist these candidates.
+            // The future Pattern Engine will validate evidence, calculate confidence, and manage state.
 
-            // 6. Save pattern
-            val saveResult = patternRepository.savePattern(pattern)
-            if (saveResult is Result.Failure) {
-                return@withContext Result.Failure(saveResult.error)
-            }
+            val candidate = aiOutput.candidate
+            println("IronMindLifecycle [InterventionLearning] [CANDIDATE_LOGGED] type=${candidate.type} description=${candidate.description}")
 
-            // 7. Log lifecycle
-            println("IronMindLifecycle [Pattern] [CREATED] type=INTERVENTION_RESPONSE_PATTERN patternId=${pattern.id}")
-
-            Result.Success(pattern)
+            Result.Success(candidate)
         } catch (e: Exception) {
             Result.Failure(e)
         }

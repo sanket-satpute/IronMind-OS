@@ -54,8 +54,7 @@ sealed class AIOutput {
      * Per §78: PATTERN_CANDIDATE category. Must not include identity labels (§26).
      */
     data class PatternCandidate(
-        val patternDescription: String,
-        val evidenceReferences: List<String> = emptyList(),
+        val candidate: com.sanket_satpute_20.ironmind.domain.model.pattern.PatternCandidate,
         override val confidence: Float,
         override val reasoning: String? = null,
         override val schemaVersion: Int = 1
@@ -221,12 +220,12 @@ sealed class AIOutput {
     }
 
     /**
-     * AI evolves the personal model by generating new patterns and invalidating obsolete ones.
-     * Per Sprint V4.11.
+     * AI proposes an evolution of the personal model by generating new candidates.
+     * Contradictions to existing patterns are signalled inside the candidates.
+     * Per Sprint 11C.
      */
     data class ModelEvolution(
-        val evolvedPatterns: List<Pattern>,
-        val obsoletePatternIds: List<String>,
+        val evolvedCandidates: List<com.sanket_satpute_20.ironmind.domain.model.pattern.PatternCandidate>,
         override val confidence: Float,
         override val reasoning: String? = null,
         override val schemaVersion: Int = 1

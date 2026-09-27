@@ -105,30 +105,12 @@ class AutonomousReflectionEngineImpl(
             }
             is AIOutput.PatternCandidate -> {
                 if (memoryPatternProcessingLevel == AutonomyLevel.FULL_AUTO || memoryPatternProcessingLevel == AutonomyLevel.ASK_BEFORE_ACTION) {
-                    val confirmationState = if (memoryPatternProcessingLevel == AutonomyLevel.FULL_AUTO) {
-                        MemoryConfirmationState.SYSTEM_CONFIRMED
-                    } else {
-                        MemoryConfirmationState.UNCONFIRMED
-                    }
+                    val candidate = aiOutput.candidate
+                    // Sprint 11C: AI outputs PatternCandidates, not Patterns.
+                    // DO NOT directly persist these candidates into Pattern Repository.
+                    // The future Pattern Engine will validate evidence, calculate confidence, and manage state.
                     
-                    val pattern = Pattern(
-                        id = idGenerator.generateId(),
-                        userId = reflection.userId,
-                        type = PatternType.CONTEXT_PATTERN,
-                        description = aiOutput.patternDescription,
-                        conditions = null,
-                        predictedBehavior = null,
-                        confidence = aiOutput.confidence,
-                        evidenceCount = 1, // First observation
-                        evidenceReferences = aiOutput.evidenceReferences,
-                        firstObservedAt = now,
-                        lastObservedAt = now,
-                        status = PatternStatus.ACTIVE,
-                        confirmationState = confirmationState,
-                        createdAt = now,
-                        updatedAt = now
-                    )
-                    patternRepository.savePattern(pattern)
+                    println("IronMindLifecycle [ReflectionEngine] [CANDIDATE_LOGGED] type=${candidate.type} description=${candidate.description} contradictionSignal=${candidate.contradictionSignal}")
                 }
             }
             else -> {

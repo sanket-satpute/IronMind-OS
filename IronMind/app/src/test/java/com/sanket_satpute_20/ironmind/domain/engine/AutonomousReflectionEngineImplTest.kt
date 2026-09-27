@@ -173,18 +173,21 @@ class AutonomousReflectionEngineImplTest {
             )
         )
         
+        val domainCandidate = com.sanket_satpute_20.ironmind.domain.model.pattern.PatternCandidate(
+            type = com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType.CONTEXT_PATTERN,
+            description = "User experiences afternoon fatigue post-lunch."
+        )
         ironMindAI.mockResponse = AIOutput.PatternCandidate(
-            patternDescription = "User experiences afternoon fatigue post-lunch.",
+            candidate = domainCandidate,
             confidence = 0.85f
         )
 
         val result = engine.processReflection("r4")
         assertTrue(result is Result.Success)
         
-        // Check pattern is saved and active
-        assertEquals(1, patternRepository.patterns.size)
-        assertEquals(PatternStatus.ACTIVE, patternRepository.patterns[0].status)
-        assertEquals("User experiences afternoon fatigue post-lunch.", patternRepository.patterns[0].description)
+        // Sprint 11C: Pattern should NOT be saved automatically, even when FULL_AUTO,
+        // because the transitional boundary leaves persistence to the future Pattern Engine.
+        assertEquals(0, patternRepository.patterns.size)
     }
 
     @Test
@@ -208,8 +211,12 @@ class AutonomousReflectionEngineImplTest {
             )
         )
         
+        val domainCandidate = com.sanket_satpute_20.ironmind.domain.model.pattern.PatternCandidate(
+            type = com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType.CONTEXT_PATTERN,
+            description = "User experiences afternoon fatigue post-lunch."
+        )
         ironMindAI.mockResponse = AIOutput.PatternCandidate(
-            patternDescription = "User experiences afternoon fatigue post-lunch.",
+            candidate = domainCandidate,
             confidence = 0.85f
         )
 

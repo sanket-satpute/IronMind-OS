@@ -35,9 +35,9 @@ class EvolvePersonalModelUseCase(
             // 2. Request AI evaluation of the current model against reality
             val requestInput = """
                 Evaluate the provided context to evolve the personal model.
-                1. Formulate new patterns if strong evidence supports them.
-                2. Identify obsolete pattern IDs that contradict current reality or lack sustained evidence.
-                Remember: The personal model must evolve dynamically when reality changes.
+                1. Propose PatternCandidates if strong evidence supports them.
+                2. If a candidate contradicts an existing pattern, include the existing pattern's ID as contradictionSignal.
+                Remember: You do not have authority to declare facts; you may only propose candidates.
             """.trimIndent()
 
             val request = AIRequest(
@@ -57,28 +57,19 @@ class EvolvePersonalModelUseCase(
                 return@withContext Result.Success(Unit)
             }
 
-            // 3. Update Domain (PatternRepository)
-            // Persist newly evolved patterns
-            for (newPattern in aiOutput.evolvedPatterns) {
-                patternRepository.savePattern(newPattern)
-            }
+            // 3. Domain Learning Boundary
+            // Sprint 11C: AI outputs PatternCandidates, not Patterns.
+            // DO NOT directly persist these candidates.
+            // The future Pattern Engine will validate evidence, calculate confidence, and manage state.
 
-            // Expire obsolete patterns (decay assumption)
-            for (obsoleteId in aiOutput.obsoletePatternIds) {
-                val existingResult = patternRepository.getPattern(obsoleteId)
-                if (existingResult.isSuccess && existingResult.getOrNull() != null) {
-                    val pattern = existingResult.getOrNull()!!
-                    val updatedPattern = pattern.copy(
-                        status = PatternStatus.EXPIRED,
-                        confidence = 0f,
-                        updatedAt = System.currentTimeMillis()
-                    )
-                    patternRepository.savePattern(updatedPattern)
-                    println("IronMindLifecycle [PatternEngine] [PATTERN_EXPIRED] patternId=${obsoleteId} reason=ModelEvolution")
-                }
-            }
+            val candidates = aiOutput.evolvedCandidates
 
-            println("IronMindLifecycle [PersonalModel] [EVOLVED] userId=$userId newPatterns=${aiOutput.evolvedPatterns.size} obsoletePatterns=${aiOutput.obsoletePatternIds.size}")
+            // Temporary transitional behavior: Log candidates instead of blindly saving
+            println("IronMindLifecycle [PatternLearning] [CANDIDATES_RECEIVED] userId=$userId candidateCount=${candidates.size}")
+
+            for (candidate in candidates) {
+                println("IronMindLifecycle [PatternLearning] [CANDIDATE_LOGGED] type=${candidate.type} description=${candidate.description} contradictionSignal=${candidate.contradictionSignal}")
+            }
             Result.Success(Unit)
 
         } catch (e: Exception) {

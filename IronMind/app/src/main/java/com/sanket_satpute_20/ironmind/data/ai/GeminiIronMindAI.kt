@@ -21,7 +21,7 @@ import java.io.IOException
 
 /**
  * Concrete implementation of IronMindAI using Google Gemini.
- * 
+ *
  * Supports:
  * - Structured JSON generation
  * - Fallbacks, retries, timeouts
@@ -75,7 +75,7 @@ class GeminiIronMindAI(
                 }
             }
         }
-        
+
         // Offline fallback / ultimate failure handling
         return Result.Failure(lastException ?: Exception("Unknown AI failure"))
     }
@@ -125,20 +125,20 @@ class GeminiIronMindAI(
             You are the IronMind AI Reasoning Layer (Prompt Version: $promptVersion).
             Analyze the user input and provide a JSON response exactly matching the requested format.
             Confidence must be between 0.0 and 1.0.
-            
+
             [CONTEXT]
             User ID: ${request.userId}
             Context Elements: ${request.contextSnapshot?.let { "Included" } ?: "None"}
-            
+
             [USER INPUT]
             ${request.input}
-            
+
             [REQUEST TYPE]
             ${request.requestType.name}
-            
+
             [TYPE-SPECIFIC INSTRUCTIONS]
             $typeSpecificInstructions
-            
+
             Return JSON only. Format it as:
             {
                 "type": "<Match AIOutputType for this request>",
@@ -156,7 +156,7 @@ class GeminiIronMindAI(
                 // Strip markdown formatting if the model accidentally returns it despite responseMimeType
                 val cleanJson = jsonText.replace("```json", "").replace("```", "").trim()
                 val jsonObject = JSONObject(cleanJson)
-                
+
                 val typeStr = jsonObject.optString("type")
                 val confidence = jsonObject.optDouble("confidence", 0.0).toFloat()
                 val reasoningStr = jsonObject.optString("reasoning", "")
@@ -176,12 +176,28 @@ class GeminiIronMindAI(
                         reasoning = reasoning,
                         schemaVersion = schemaVersion
                     )
-                    AIOutputType.PATTERN_CANDIDATE.name -> AIOutput.PatternCandidate(
-                        patternDescription = jsonObject.optString("patternDescription", ""),
-                        confidence = confidence,
-                        reasoning = reasoning,
-                        schemaVersion = schemaVersion
-                    )
+                    AIOutputType.PATTERN_CANDIDATE.name -> {
+                        val typeStrLocal = jsonObject.optString("patternType", com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType.CONTEXT_PATTERN.name)
+                        val pType = try {
+                            com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType.valueOf(typeStrLocal)
+                        } catch (e: Exception) {
+                            com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType.CONTEXT_PATTERN
+                        }
+
+                        val domainCandidate = com.sanket_satpute_20.ironmind.domain.model.pattern.PatternCandidate(
+                            type = pType,
+                            description = jsonObject.optString("patternDescription", ""),
+                            conditions = if (jsonObject.has("conditions") && !jsonObject.isNull("conditions")) jsonObject.getString("conditions") else null,
+                            predictedBehavior = if (jsonObject.has("predictedBehavior") && !jsonObject.isNull("predictedBehavior")) jsonObject.getString("predictedBehavior") else null,
+                            contradictionSignal = if (jsonObject.has("contradictionSignal") && !jsonObject.isNull("contradictionSignal")) jsonObject.getString("contradictionSignal") else null
+                        )
+                        AIOutput.PatternCandidate(
+                            candidate = domainCandidate,
+                            confidence = confidence,
+                            reasoning = reasoning,
+                            schemaVersion = schemaVersion
+                        )
+                    }
                     AIOutputType.MEMORY_CANDIDATE.name -> AIOutput.MemoryCandidate(
                         candidateContent = jsonObject.optString("candidateContent", ""),
                         confidence = confidence,
@@ -264,6 +280,36 @@ class GeminiIronMindAI(
                         reasoning = reasoning,
                         schemaVersion = schemaVersion
                     )
+                    AIOutputType.MODEL_EVOLUTION.name -> {
+                        val candidatesArray = jsonObject.optJSONArray("evolvedCandidates")
+                        val candidates = mutableListOf<com.sanket_satpute_20.ironmind.domain.model.pattern.PatternCandidate>()
+                        if (candidatesArray != null) {
+                            for (i in 0 until candidatesArray.length()) {
+                                val candObj = candidatesArray.getJSONObject(i)
+                                val typeStrLocal = candObj.optString("patternType", com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType.CONTEXT_PATTERN.name)
+                                val pType = try {
+                                    com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType.valueOf(typeStrLocal)
+                                } catch (e: Exception) {
+                                    com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType.CONTEXT_PATTERN
+                                }
+                                candidates.add(
+                                    com.sanket_satpute_20.ironmind.domain.model.pattern.PatternCandidate(
+                                        type = pType,
+                                        description = candObj.optString("patternDescription", ""),
+                                        conditions = if (candObj.has("conditions") && !candObj.isNull("conditions")) candObj.getString("conditions") else null,
+                                        predictedBehavior = if (candObj.has("predictedBehavior") && !candObj.isNull("predictedBehavior")) candObj.getString("predictedBehavior") else null,
+                                        contradictionSignal = if (candObj.has("contradictionSignal") && !candObj.isNull("contradictionSignal")) candObj.getString("contradictionSignal") else null
+                                    )
+                                )
+                            }
+                        }
+                        AIOutput.ModelEvolution(
+                            evolvedCandidates = candidates,
+                            confidence = confidence,
+                            reasoning = reasoning,
+                            schemaVersion = schemaVersion
+                        )
+                    }
                     AIOutputType.CLARIFICATION_REQUEST.name -> AIOutput.ClarificationRequest(
                         question = jsonObject.optString("question", ""),
                         confidence = confidence,
