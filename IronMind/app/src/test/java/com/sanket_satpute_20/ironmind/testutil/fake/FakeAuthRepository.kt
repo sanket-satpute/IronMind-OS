@@ -41,4 +41,8 @@ class FakeAuthRepository : AuthRepository {
     override fun getCurrentUser(): AuthUser? {
         return _currentUser.value
     }
+
+    fun setTestUser(user: AuthUser?) {
+        _currentUser.value = user
+    }
 }

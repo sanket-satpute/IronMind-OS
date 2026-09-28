@@ -13,6 +13,7 @@ import com.sanket_satpute_20.ironmind.domain.repository.LocationObservationSetti
 import com.sanket_satpute_20.ironmind.domain.usecase.autonomy.ToggleGlobalPauseUseCase
 import com.sanket_satpute_20.ironmind.domain.repository.AuthRepository
 import com.sanket_satpute_20.ironmind.domain.model.AuthUser
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeAuthRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -37,7 +38,7 @@ class ObservationSchedulingLifecycleIntegrationTest {
     private val calendarRepo = mockk<CalendarObservationSettingsRepository>()
     private val locationRepo = mockk<LocationObservationSettingsRepository>()
     private val autonomyRepo = mockk<AutonomySettingsRepository>()
-    private val authRepo = mockk<AuthRepository>()
+    private val authRepo = FakeAuthRepository()
     
     // Get Use Cases
     private val getAppUsageSettingsUseCase = mockk<GetAppUsageObservationSettingsUseCase>()
@@ -57,8 +58,7 @@ class ObservationSchedulingLifecycleIntegrationTest {
     @Test
     fun `1 ApplicationStarted causes exactly one coordinator invocation`() = runTest {
         val testScope = TestScope(StandardTestDispatcher(testScheduler))
-        val authFlow = MutableStateFlow<AuthUser?>(null)
-        every { authRepo.currentUser } returns authFlow
+        authRepo.setTestUser(null)
         
         val adapter = ObservationSchedulingAppLifecycleAdapter(coordinator, authRepo, testScope)
         adapter.start()
@@ -71,8 +71,7 @@ class ObservationSchedulingLifecycleIntegrationTest {
     @Test
     fun `2 AuthenticationAvailable causes coordinator invocation`() = runTest {
         val testScope = TestScope(StandardTestDispatcher(testScheduler))
-        val authFlow = MutableStateFlow<AuthUser?>(AuthUser("user1", false, "user@example.com", "User"))
-        every { authRepo.currentUser } returns authFlow
+        authRepo.setTestUser(AuthUser("user1", false, "user@example.com", "User"))
         
         val adapter = ObservationSchedulingAppLifecycleAdapter(coordinator, authRepo, testScope)
         adapter.start()
@@ -85,8 +84,7 @@ class ObservationSchedulingLifecycleIntegrationTest {
     @Test
     fun `3 AuthenticationUnavailable causes coordinator invocation`() = runTest {
         val testScope = TestScope(StandardTestDispatcher(testScheduler))
-        val authFlow = MutableStateFlow<AuthUser?>(null)
-        every { authRepo.currentUser } returns authFlow
+        authRepo.setTestUser(null)
         
         val adapter = ObservationSchedulingAppLifecycleAdapter(coordinator, authRepo, testScope)
         adapter.start()
@@ -99,14 +97,13 @@ class ObservationSchedulingLifecycleIntegrationTest {
     @Test
     fun `4 Repeated authenticated state does not emit duplicate AuthenticationAvailable`() = runTest {
         val testScope = TestScope(StandardTestDispatcher(testScheduler))
-        val authFlow = MutableStateFlow<AuthUser?>(AuthUser("user1", false, "user@example.com", "User"))
-        every { authRepo.currentUser } returns authFlow
+        authRepo.setTestUser(AuthUser("user1", false, "user@example.com", "User"))
         
         val adapter = ObservationSchedulingAppLifecycleAdapter(coordinator, authRepo, testScope)
         adapter.start()
         advanceUntilIdle()
         
-        authFlow.value = AuthUser("user2", false, "user2@example.com", "User2") // Still authenticated
+        authRepo.setTestUser(AuthUser("user2", false, "user2@example.com", "User2")) // Still authenticated
         advanceUntilIdle()
         
         coVerify(exactly = 1) { coordinator.handle(ObservationSchedulingLifecycleEvent.AuthenticationAvailable) }
@@ -115,14 +112,13 @@ class ObservationSchedulingLifecycleIntegrationTest {
     @Test
     fun `5 Repeated unauthenticated state does not emit duplicate AuthenticationUnavailable`() = runTest {
         val testScope = TestScope(StandardTestDispatcher(testScheduler))
-        val authFlow = MutableStateFlow<AuthUser?>(null)
-        every { authRepo.currentUser } returns authFlow
+        authRepo.setTestUser(null)
         
         val adapter = ObservationSchedulingAppLifecycleAdapter(coordinator, authRepo, testScope)
         adapter.start()
         advanceUntilIdle()
         
-        authFlow.value = null // Still unauthenticated
+        authRepo.setTestUser(null) // Still unauthenticated
         advanceUntilIdle()
         
         coVerify(exactly = 1) { coordinator.handle(ObservationSchedulingLifecycleEvent.AuthenticationUnavailable) }
@@ -131,8 +127,7 @@ class ObservationSchedulingLifecycleIntegrationTest {
     @Test
     fun `6 Authentication transition null to user emits AuthenticationAvailable exactly once`() = runTest {
         val testScope = TestScope(StandardTestDispatcher(testScheduler))
-        val authFlow = MutableStateFlow<AuthUser?>(null)
-        every { authRepo.currentUser } returns authFlow
+        authRepo.setTestUser(null)
         
         val adapter = ObservationSchedulingAppLifecycleAdapter(coordinator, authRepo, testScope)
         adapter.start()
@@ -140,7 +135,7 @@ class ObservationSchedulingLifecycleIntegrationTest {
         
         coVerify(exactly = 1) { coordinator.handle(ObservationSchedulingLifecycleEvent.AuthenticationUnavailable) }
         
-        authFlow.value = AuthUser("user1", false, "user@example.com", "User")
+        authRepo.setTestUser(AuthUser("user1", false, "user@example.com", "User"))
         advanceUntilIdle()
         
         coVerify(exactly = 1) { coordinator.handle(ObservationSchedulingLifecycleEvent.AuthenticationAvailable) }
@@ -149,8 +144,7 @@ class ObservationSchedulingLifecycleIntegrationTest {
     @Test
     fun `7 Authentication transition user to null emits AuthenticationUnavailable exactly once`() = runTest {
         val testScope = TestScope(StandardTestDispatcher(testScheduler))
-        val authFlow = MutableStateFlow<AuthUser?>(AuthUser("user1", false, "user@example.com", "User"))
-        every { authRepo.currentUser } returns authFlow
+        authRepo.setTestUser(AuthUser("user1", false, "user@example.com", "User"))
         
         val adapter = ObservationSchedulingAppLifecycleAdapter(coordinator, authRepo, testScope)
         adapter.start()
@@ -158,7 +152,7 @@ class ObservationSchedulingLifecycleIntegrationTest {
         
         coVerify(exactly = 1) { coordinator.handle(ObservationSchedulingLifecycleEvent.AuthenticationAvailable) }
         
-        authFlow.value = null
+        authRepo.setTestUser(null)
         advanceUntilIdle()
         
         coVerify(exactly = 1) { coordinator.handle(ObservationSchedulingLifecycleEvent.AuthenticationUnavailable) }
