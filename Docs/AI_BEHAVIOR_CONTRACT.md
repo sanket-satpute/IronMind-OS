@@ -971,7 +971,8 @@ The AI MAY propose a `DiscoveryProposal` to signal its search intent (e.g. limit
 
 **Proposal Semantics:**
 - `observationTypes`: If the AI outputs `null` for this field, it signals an intent to search across **all** observation types without filtering. If the AI outputs an **empty list** (`[]`), it acts as an empty constraint yielding **zero matches**.
-- **Ordering and Limits**: The AI does NOT dictate execution limits or time-based ordering (ASC/DESC). The Domain enforces deterministic cross-source ordering and safe truncation boundaries.
+- `sourceScope`: If the AI outputs an **empty list** (`[]`), it strictly signifies zero authorized sources, yielding **zero matches**.
+- **Ordering and Limits**: The AI does NOT dictate execution limits or time-based ordering (ASC/DESC). The Domain enforces deterministic cross-source ordering (`timestamp` → `sourceId` → `sourceType`) and safe truncation boundaries. The explicit canonical `sourceType` ordering is `EVENT` < `OBSERVATION` < `REFLECTION`, and must not rely on enum ordinal or database string collation.
 
 ---
 

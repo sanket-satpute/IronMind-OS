@@ -5018,7 +5018,11 @@ EvidenceReference[] (Durable provenance pointer)
 - Execution of `DiscoveryCriteria` is bound by a global `limit`.
 - Ordering (`TIMESTAMP_ASC`, `TIMESTAMP_DESC`) determines the truncation boundaries for this limit.
 - **Cross-Source Tie-Breaker**: When evidence timestamps collide, the system mandates a deterministic tie-breaker executed as `timestamp` → `sourceId` → `sourceType`. At the repository level, `id` serves as the authoritative secondary sort key.
+- **Canonical sourceType Order**: The explicit domain contract for cross-source ordering relation is: `EVENT` < `OBSERVATION` < `REFLECTION`. This must not rely on enum ordinal, string collation, or incidental database ordering.
 - Time-bounded queries must natively execute limits and sorting via the persistence layer (database) to prevent unbounded memory fetches.
+
+**SOURCE SCOPE SEMANTICS:**
+- `DiscoveryCriteria.sourceScope = emptyList()` strictly signifies **zero authorized sources**, yielding zero discovered evidence. An empty allow-list must not expand into "all sources".
 
 **OBSERVATION TYPE SEMANTICS:**
 - `DiscoveryCriteria.observationTypes = null` signifies "no filtering", meaning **all observation types** are included. The persistence layer must execute this as a type-agnostic query rather than falling back to iterative enums.
