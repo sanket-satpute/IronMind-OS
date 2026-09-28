@@ -59,6 +59,15 @@ class EventRepositoryImpl(
         }
     }
 
+    override suspend fun getEventForUser(userId: String, id: String): Result<Event?, Exception> = withContext(Dispatchers.IO) {
+        try {
+            val event = dao.getEventForUser(userId, id)?.toDomainModel()
+            Result.Success(event)
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
+
     override suspend fun getEventsForDateRange(userId: String, startTime: Long, endTime: Long): Result<List<Event>, Exception> = withContext(Dispatchers.IO) {
         try {
             val events = dao.getEventsForDateRange(userId, startTime, endTime).map { it.toDomainModel() }

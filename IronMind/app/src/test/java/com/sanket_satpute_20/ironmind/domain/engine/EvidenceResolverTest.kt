@@ -47,10 +47,10 @@ class EvidenceResolverTest {
             subjectId = null, value = "value", context = "context", confidence = 1.0f,
             provenance = ObservationProvenance(ObservationSource.SYSTEM, null, 1000L)
         )
-        coEvery { observationRepository.getObservationById(obsId) } returns Result.Success(mockObservation)
+        coEvery { observationRepository.getObservation("user1", obsId) } returns Result.Success(mockObservation)
 
         val reference = EvidenceReference(obsId, EvidenceSourceType.OBSERVATION)
-        val result = evidenceResolver.resolve(reference)
+        val result = evidenceResolver.resolve("user1", reference)
 
         assertTrue(result is EvidenceResolutionResult.Resolved)
         val resolved = result as EvidenceResolutionResult.Resolved
@@ -62,10 +62,10 @@ class EvidenceResolverTest {
     @Test
     fun `resolve observation returns Missing when not found`() = runBlocking {
         val obsId = "obs-2"
-        coEvery { observationRepository.getObservationById(obsId) } returns Result.Failure(Exception("Not found"))
+        coEvery { observationRepository.getObservation("user1", obsId) } returns Result.Failure(Exception("Not found"))
 
         val reference = EvidenceReference(obsId, EvidenceSourceType.OBSERVATION)
-        val result = evidenceResolver.resolve(reference)
+        val result = evidenceResolver.resolve("user1", reference)
 
         assertTrue(result is EvidenceResolutionResult.Missing)
     }
@@ -77,10 +77,10 @@ class EvidenceResolverTest {
             id = eventId, userId = "user1", type = EventType.TASK_COMPLETED,
             occurredAt = 1000L, recordedAt = 1000L, source = EntitySource.USER
         )
-        coEvery { eventRepository.getEvent(eventId) } returns Result.Success(mockEvent)
+        coEvery { eventRepository.getEventForUser("user1", eventId) } returns Result.Success(mockEvent)
 
         val reference = EvidenceReference(eventId, EvidenceSourceType.EVENT)
-        val result = evidenceResolver.resolve(reference)
+        val result = evidenceResolver.resolve("user1", reference)
 
         assertTrue(result is EvidenceResolutionResult.Resolved)
         val resolved = result as EvidenceResolutionResult.Resolved
@@ -90,10 +90,10 @@ class EvidenceResolverTest {
     @Test
     fun `resolve event returns Missing when null`() = runBlocking {
         val eventId = "evt-2"
-        coEvery { eventRepository.getEvent(eventId) } returns Result.Success(null)
+        coEvery { eventRepository.getEventForUser("user1", eventId) } returns Result.Success(null)
 
         val reference = EvidenceReference(eventId, EvidenceSourceType.EVENT)
-        val result = evidenceResolver.resolve(reference)
+        val result = evidenceResolver.resolve("user1", reference)
 
         assertTrue(result is EvidenceResolutionResult.Missing)
     }
@@ -105,13 +105,51 @@ class EvidenceResolverTest {
             id = refId, userId = "user1", targetEntityId = null, targetEntityType = null,
             content = "test", sentiment = null, createdAt = 1000L
         )
-        coEvery { reflectionRepository.getReflection(refId) } returns Result.Success(mockReflection)
+        coEvery { reflectionRepository.getReflectionForUser("user1", refId) } returns Result.Success(mockReflection)
 
         val reference = EvidenceReference(refId, EvidenceSourceType.REFLECTION)
-        val result = evidenceResolver.resolve(reference)
+        val result = evidenceResolver.resolve("user1", reference)
 
         assertTrue(result is EvidenceResolutionResult.Resolved)
         val resolved = result as EvidenceResolutionResult.Resolved
         assertEquals(mockReflection, resolved.entity)
     }
+    @Test
+    fun `resolve legacy returns Ambiguous immediately without querying repositories`() = runBlocking {
+        val legacyId = "legacy-1"
+
+        val reference = EvidenceReference(legacyId, EvidenceSourceType.LEGACY_AMBIGUOUS)
+        val result = evidenceResolver.resolve("user1", reference)
+
+        assertTrue(result is EvidenceResolutionResult.Ambiguous)
+
+        io.mockk.coVerify(exactly = 0) { observationRepository.getObservation(any(), any()) }
+        io.mockk.coVerify(exactly = 0) { eventRepository.getEventForUser(any(), any()) }
+        io.mockk.coVerify(exactly = 0) { reflectionRepository.getReflectionForUser(any(), any()) }
+    }
+
+
+    @Test
+    fun `resolve observation returns Missing when wrong user requests it`() = runBlocking {
+        val obsId = "obs-wrong-user"
+        coEvery { observationRepository.getObservation("userA", obsId) } returns Result.Failure(Exception("Observation not found"))
+
+        val reference = EvidenceReference(obsId, EvidenceSourceType.OBSERVATION)
+        val result = evidenceResolver.resolve("userA", reference)
+
+        assertTrue(result is EvidenceResolutionResult.Missing)
+    }
+
+    @Test
+    fun `resolve event returns Missing when wrong user requests it`() = runBlocking {
+        val eventId = "evt-wrong-user"
+        coEvery { eventRepository.getEventForUser("userA", eventId) } returns Result.Success(null)
+
+        val reference = EvidenceReference(eventId, EvidenceSourceType.EVENT)
+        val result = evidenceResolver.resolve("userA", reference)
+
+        assertTrue(result is EvidenceResolutionResult.Missing)
+    }
+
+
 }

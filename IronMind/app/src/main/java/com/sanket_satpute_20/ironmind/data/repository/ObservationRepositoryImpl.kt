@@ -60,6 +60,19 @@ class ObservationRepositoryImpl(
         }
     }
 
+    override suspend fun getObservation(userId: String, id: String): Result<Observation, Exception> = withContext(Dispatchers.IO) {
+        try {
+            val entity = observationDao.getObservation(userId, id)
+            if (entity != null) {
+                Result.Success(entity.toDomain())
+            } else {
+                Result.Failure(Exception("Observation not found for id: $id and userId: $userId"))
+            }
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
+
     override suspend fun deleteObservation(id: String): Result<Unit, Exception> = withContext(Dispatchers.IO) {
         try {
             observationDao.deleteObservation(id)

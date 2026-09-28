@@ -2,8 +2,8 @@ package com.sanket_satpute_20.ironmind.domain.model.pattern
 
 /**
  * A typed boundary pointing to an authoritative source record.
- * 
- * It intentionally contains only identifiers to prevent sensitive source content 
+ *
+ * It intentionally contains only identifiers to prevent sensitive source content
  * (like reflection text or raw coordinates) from leaking into pattern descriptions.
  */
 data class EvidenceReference(
@@ -26,16 +26,24 @@ data class EvidenceReference(
          */
         fun deserialize(value: String): EvidenceReference? {
             val parts = value.split("|")
+
+            // Rejects empty ID or malformed strings
             if (parts.size == 2) {
                 val typeStr = parts[0]
-                val id = parts[1]
+                val id = parts[1].trim()
+                if (id.isEmpty()) return null
+
                 val type = runCatching { EvidenceSourceType.valueOf(typeStr) }.getOrNull()
                 if (type != null) {
                     return EvidenceReference(sourceId = id, sourceType = type)
                 }
+            } else if (parts.size == 1) {
+                // Legacy plain ID handling
+                val id = value.trim()
+                if (id.isNotEmpty()) {
+                    return EvidenceReference(sourceId = id, sourceType = EvidenceSourceType.LEGACY_AMBIGUOUS)
+                }
             }
-            // For legacy migration where we only had IDs, assume it's an OBSERVATION or drop it.
-            // Returning null drops it, which is safer if we don't know what it is.
             return null
         }
     }

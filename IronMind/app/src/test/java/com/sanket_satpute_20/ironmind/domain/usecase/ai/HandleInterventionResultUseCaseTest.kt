@@ -38,13 +38,13 @@ class HandleInterventionResultUseCaseTest {
             interventionType = InterventionType.BREAK_DOWN,
             supportingContext = "Observation context"
         )
-        
+
         val result = useCase(recommendation, HandleInterventionResultUseCase.Action.ACCEPT, "user-1")
-        
+
         assertTrue(result is Result.Success)
         assertEquals(1, eventRepository.events.size)
         val event = eventRepository.events.first()
-        
+
         assertEquals(EventType.INTERVENTION_ACCEPTED, event.type)
         assertEquals("user-1", event.userId)
         assertEquals("task-1", event.entityId)
@@ -63,17 +63,17 @@ class HandleInterventionResultUseCaseTest {
             interventionType = InterventionType.RESCHEDULE,
             supportingContext = null
         )
-        
+
         val result = useCase(
-            recommendation, 
-            HandleInterventionResultUseCase.Action.CORRECT, 
-            "user-1", 
+            recommendation,
+            HandleInterventionResultUseCase.Action.CORRECT,
+            "user-1",
             "I will do it tonight instead"
         )
-        
+
         assertTrue(result is Result.Success)
         val event = eventRepository.events.first()
-        
+
         assertEquals(EventType.INTERVENTION_OVERRIDDEN, event.type)
         assertTrue(event.metadata!!.contains("correctedText=I will do it tonight instead"))
     }
@@ -89,6 +89,10 @@ class FakeEventRepository : EventRepository {
 
     override suspend fun getEventsForEntity(entityId: String): Result<List<Event>, Exception> {
         return Result.Success(events.filter { it.entityId == entityId })
+    }
+
+    override suspend fun getEventForUser(userId: String, id: String): Result<Event?, Exception> {
+        return Result.Success(events.find { it.userId == userId && it.id == id })
     }
 
     override suspend fun getEventsForUser(userId: String): Result<List<Event>, Exception> {

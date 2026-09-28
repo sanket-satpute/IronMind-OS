@@ -28,6 +28,27 @@ class EvidenceReferenceTest {
     @Test
     fun `deserialize handles legacy format gracefully`() {
         val result = EvidenceReference.deserialize("just-an-id")
-        assertNull(result)
+        assertEquals(EvidenceSourceType.LEGACY_AMBIGUOUS, result?.sourceType)
+        assertEquals("just-an-id", result?.sourceId)
+    }
+
+    @Test
+    fun `deserialize rejects blank source ID`() {
+        assertNull(EvidenceReference.deserialize(""))
+    }
+
+    @Test
+    fun `deserialize rejects whitespace source ID`() {
+        assertNull(EvidenceReference.deserialize("   "))
+    }
+
+    @Test
+    fun `deserialize rejects TYPE with empty ID`() {
+        assertNull(EvidenceReference.deserialize("OBSERVATION|"))
+    }
+
+    @Test
+    fun `deserialize rejects TYPE with whitespace ID`() {
+        assertNull(EvidenceReference.deserialize("EVENT|   "))
     }
 }

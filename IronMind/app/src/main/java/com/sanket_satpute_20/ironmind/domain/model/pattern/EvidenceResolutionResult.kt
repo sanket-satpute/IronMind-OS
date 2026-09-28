@@ -5,4 +5,6 @@ sealed class EvidenceResolutionResult {
     data class Missing(val sourceId: String, val sourceType: EvidenceSourceType) : EvidenceResolutionResult()
     data class Unsupported(val sourceId: String, val sourceType: EvidenceSourceType) : EvidenceResolutionResult()
     data class Error(val sourceId: String, val sourceType: EvidenceSourceType, val error: Exception) : EvidenceResolutionResult()
+    data class Ambiguous(val sourceId: String, val sourceType: EvidenceSourceType) : EvidenceResolutionResult()
+    data class OwnershipMismatch(val sourceId: String, val sourceType: EvidenceSourceType) : EvidenceResolutionResult()
 }

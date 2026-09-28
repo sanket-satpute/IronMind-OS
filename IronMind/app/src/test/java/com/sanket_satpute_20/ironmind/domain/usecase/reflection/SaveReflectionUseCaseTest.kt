@@ -20,6 +20,11 @@ class FakeReflectionRepository : ReflectionRepository {
         return Result.Success(Unit)
     }
 
+    override suspend fun getReflectionForUser(userId: String, id: String): Result<Reflection?, Exception> {
+        val reflection = reflections.values.find { it.userId == userId && it.id == id }
+        return Result.Success(reflection)
+    }
+
     override suspend fun getReflection(id: String): Result<Reflection?, Exception> {
         return Result.Success(reflections[id])
     }
@@ -55,7 +60,7 @@ class SaveReflectionUseCaseTest {
     @Test
     fun `saveReflection success stores reflection`() = runTest {
         idGenerator.nextId = "ref-1"
-        
+
         val result = useCase(
             userId = "user-1",
             content = "Today was a good day."
@@ -63,7 +68,7 @@ class SaveReflectionUseCaseTest {
 
         assertTrue(result is Result.Success)
         val reflection = (result as Result.Success).data
-        
+
         assertEquals("ref-1", reflection.id)
         assertEquals("user-1", reflection.userId)
         assertEquals("Today was a good day.", reflection.content)

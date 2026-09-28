@@ -53,6 +53,7 @@ class PlanRepositoryImplTest {
         override fun getOutcomeForSource(sourceEntityId: String): OutcomeEntity? = null
         override fun insertReflection(reflection: ReflectionEntity) {}
         override fun getReflection(id: String): ReflectionEntity? = null
+        override fun getReflectionForUser(userId: String, id: String): ReflectionEntity? = null
         override fun getReflectionsForDateRange(userId: String, startTime: Long, endTime: Long): List<ReflectionEntity> = emptyList()
         override fun insertProtectionRule(rule: ProtectionRuleEntity) {}
         override fun getProtectionRule(id: String): ProtectionRuleEntity? = null
@@ -73,6 +74,7 @@ class PlanRepositoryImplTest {
         override fun searchMemories(userId: String, query: String): List<MemoryEntity> = emptyList()
         override fun searchEvents(userId: String, query: String): List<EventEntity> = emptyList()
         override fun getEvent(id: String): EventEntity? = null
+        override fun getEventForUser(userId: String, id: String): EventEntity? = null
         override fun getEventsForDateRange(userId: String, startTime: Long, endTime: Long): List<EventEntity> = emptyList()
         override fun getMemoriesForDateRange(userId: String, startTime: Long, endTime: Long): List<MemoryEntity> = emptyList()
         

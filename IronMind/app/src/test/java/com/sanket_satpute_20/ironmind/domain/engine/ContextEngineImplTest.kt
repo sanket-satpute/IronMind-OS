@@ -60,6 +60,7 @@ class ContextEngineImplTest {
         override suspend fun getEventsForUser(userId: String): Result<List<Event>, Exception> = Result.Success(events)
         override suspend fun getEventsForEntity(entityId: String): Result<List<Event>, Exception> = Result.Success(events)
         override suspend fun getEvent(id: String): Result<Event?, Exception> = Result.Failure(Exception())
+        override suspend fun getEventForUser(userId: String, id: String): Result<Event?, Exception> = Result.Failure(Exception())
         override suspend fun getEventsForDateRange(userId: String, startTime: Long, endTime: Long): Result<List<Event>, Exception> = Result.Success(events)
         override suspend fun saveEvent(event: Event): Result<Event, Exception> = Result.Success(event)
         override suspend fun searchEvents(userId: String, query: String): Result<List<Event>, Exception> = Result.Success(events)
@@ -73,6 +74,7 @@ class ContextEngineImplTest {
             return Result.Success(reflections)
         }
         override suspend fun getReflection(id: String): Result<Reflection?, Exception> = Result.Failure(Exception())
+        override suspend fun getReflectionForUser(userId: String, id: String): Result<Reflection?, Exception> = Result.Failure(Exception())
         override suspend fun saveReflection(reflection: Reflection): Result<Unit, Exception> = Result.Success(Unit)
         override suspend fun searchReflections(userId: String, query: String): Result<List<Reflection>, Exception> = Result.Success(reflections)
     }

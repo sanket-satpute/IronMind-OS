@@ -9,6 +9,7 @@ interface ObservationRepository {
     suspend fun getObservations(userId: String, limit: Int = 50, offset: Int = 0): Result<List<Observation>, Exception>
     suspend fun getObservationsByType(userId: String, type: ObservationType, limit: Int = 50, offset: Int = 0): Result<List<Observation>, Exception>
     suspend fun getObservationById(id: String): Result<Observation, Exception>
+    suspend fun getObservation(userId: String, id: String): Result<Observation, Exception>
     suspend fun deleteObservation(id: String): Result<Unit, Exception>
     suspend fun getObservationsForTimeWindow(userId: String, type: ObservationType, startTimeMs: Long, endTimeMs: Long): Result<List<Observation>, Exception>
 }

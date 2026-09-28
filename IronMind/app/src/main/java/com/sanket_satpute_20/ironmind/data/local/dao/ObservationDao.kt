@@ -34,6 +34,9 @@ interface ObservationDao {
     @Query("SELECT * FROM observations WHERE id = :id")
     fun getObservationById(id: String): ObservationEntity?
 
+    @Query("SELECT * FROM observations WHERE userId = :userId AND id = :id LIMIT 1")
+    fun getObservation(userId: String, id: String): ObservationEntity?
+
     @Query("DELETE FROM observations WHERE id = :id")
     fun deleteObservation(id: String)
 

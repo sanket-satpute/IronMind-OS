@@ -44,7 +44,7 @@ class AutonomousReflectionEngineImplTest {
         patternRepository = AutoRefFakePatternRepository()
         idGenerator = AutoRefFakeIdGenerator()
         clock = AutoRefFakeClock()
-        
+
         engine = AutonomousReflectionEngineImpl(
             reflectionRepository = reflectionRepository,
             ironMindAI = ironMindAI,
@@ -68,7 +68,7 @@ class AutonomousReflectionEngineImplTest {
             createdAt = clock.currentTimeMillis()
         )
         reflectionRepository.reflections.add(reflection)
-        
+
         autonomySettingsRepository.settings = AutonomySettings(
             userId = "user1",
             levels = mapOf(
@@ -78,7 +78,7 @@ class AutonomousReflectionEngineImplTest {
 
         val result = engine.processReflection("r1")
         assertTrue(result is Result.Success)
-        
+
         // AI should not be called
         assertEquals(0, ironMindAI.requests.size)
     }
@@ -95,7 +95,7 @@ class AutonomousReflectionEngineImplTest {
             createdAt = clock.currentTimeMillis()
         )
         reflectionRepository.reflections.add(reflection)
-        
+
         autonomySettingsRepository.settings = AutonomySettings(
             userId = "user1",
             levels = mapOf(
@@ -103,7 +103,7 @@ class AutonomousReflectionEngineImplTest {
                 AutonomyCapability.MEMORY_PATTERN_PROCESSING to AutonomyLevel.FULL_AUTO
             )
         )
-        
+
         ironMindAI.mockResponse = AIOutput.MemoryCandidate(
             candidateContent = "User prefers reading in the morning.",
             confidence = 0.9f
@@ -111,7 +111,7 @@ class AutonomousReflectionEngineImplTest {
 
         val result = engine.processReflection("r2")
         assertTrue(result is Result.Success)
-        
+
         // Check memory is saved and auto-confirmed
         assertEquals(1, memoryRepository.memories.size)
         assertEquals(MemoryConfirmationState.SYSTEM_CONFIRMED, memoryRepository.memories[0].confirmationState)
@@ -130,7 +130,7 @@ class AutonomousReflectionEngineImplTest {
             createdAt = clock.currentTimeMillis()
         )
         reflectionRepository.reflections.add(reflection)
-        
+
         autonomySettingsRepository.settings = AutonomySettings(
             userId = "user1",
             levels = mapOf(
@@ -138,7 +138,7 @@ class AutonomousReflectionEngineImplTest {
                 AutonomyCapability.MEMORY_PATTERN_PROCESSING to AutonomyLevel.ASK_BEFORE_ACTION
             )
         )
-        
+
         ironMindAI.mockResponse = AIOutput.MemoryCandidate(
             candidateContent = "User prefers reading in the morning.",
             confidence = 0.9f
@@ -146,7 +146,7 @@ class AutonomousReflectionEngineImplTest {
 
         val result = engine.processReflection("r3")
         assertTrue(result is Result.Success)
-        
+
         // Check memory is saved but unconfirmed
         assertEquals(1, memoryRepository.memories.size)
         assertEquals(MemoryConfirmationState.UNCONFIRMED, memoryRepository.memories[0].confirmationState)
@@ -164,7 +164,7 @@ class AutonomousReflectionEngineImplTest {
             createdAt = clock.currentTimeMillis()
         )
         reflectionRepository.reflections.add(reflection)
-        
+
         autonomySettingsRepository.settings = AutonomySettings(
             userId = "user1",
             levels = mapOf(
@@ -172,7 +172,7 @@ class AutonomousReflectionEngineImplTest {
                 AutonomyCapability.MEMORY_PATTERN_PROCESSING to AutonomyLevel.FULL_AUTO
             )
         )
-        
+
         val domainCandidate = com.sanket_satpute_20.ironmind.domain.model.pattern.PatternCandidate(
             type = com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType.CONTEXT_PATTERN,
             description = "User experiences afternoon fatigue post-lunch."
@@ -184,7 +184,7 @@ class AutonomousReflectionEngineImplTest {
 
         val result = engine.processReflection("r4")
         assertTrue(result is Result.Success)
-        
+
         // Sprint 11C: Pattern should NOT be saved automatically, even when FULL_AUTO,
         // because the transitional boundary leaves persistence to the future Pattern Engine.
         assertEquals(0, patternRepository.patterns.size)
@@ -202,7 +202,7 @@ class AutonomousReflectionEngineImplTest {
             createdAt = clock.currentTimeMillis()
         )
         reflectionRepository.reflections.add(reflection)
-        
+
         autonomySettingsRepository.settings = AutonomySettings(
             userId = "user1",
             levels = mapOf(
@@ -210,7 +210,7 @@ class AutonomousReflectionEngineImplTest {
                 AutonomyCapability.MEMORY_PATTERN_PROCESSING to AutonomyLevel.SUGGEST_ONLY
             )
         )
-        
+
         val domainCandidate = com.sanket_satpute_20.ironmind.domain.model.pattern.PatternCandidate(
             type = com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType.CONTEXT_PATTERN,
             description = "User experiences afternoon fatigue post-lunch."
@@ -222,7 +222,7 @@ class AutonomousReflectionEngineImplTest {
 
         val result = engine.processReflection("r5")
         assertTrue(result is Result.Success)
-        
+
         // Pattern should not be saved automatically since it's SUGGEST_ONLY
         assertEquals(0, patternRepository.patterns.size)
     }
@@ -244,10 +244,14 @@ class AutoRefFakeReflectionRepository : ReflectionRepository {
         return Result.Success(reflections.find { it.id == id })
     }
 
+    override suspend fun getReflectionForUser(userId: String, id: String): Result<Reflection?, Exception> {
+        return Result.Success(reflections.find { it.userId == userId && it.id == id })
+    }
+
     override suspend fun getReflectionsForDateRange(userId: String, startTime: Long, endTime: Long): Result<List<Reflection>, Exception> {
         return Result.Success(reflections.filter { it.userId == userId && it.createdAt in startTime..endTime })
     }
-    
+
     override suspend fun searchReflections(userId: String, query: String): Result<List<Reflection>, Exception> {
         return Result.Success(reflections.filter { it.userId == userId && it.content.contains(query, ignoreCase = true) })
     }

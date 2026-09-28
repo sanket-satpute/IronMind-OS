@@ -60,6 +60,7 @@ class EventRepositoryImplTest {
         override fun getOutcomeForSource(sourceEntityId: String) = null
         override fun insertReflection(reflection: com.sanket_satpute_20.ironmind.data.local.entity.ReflectionEntity) {}
         override fun getReflection(id: String) = null
+        override fun getReflectionForUser(userId: String, id: String) = null
         override fun getReflectionsForDateRange(userId: String, startTime: Long, endTime: Long) = emptyList<com.sanket_satpute_20.ironmind.data.local.entity.ReflectionEntity>()
         override fun insertProtectionRule(rule: com.sanket_satpute_20.ironmind.data.local.entity.ProtectionRuleEntity) {}
         override fun getProtectionRule(id: String) = null
@@ -82,6 +83,7 @@ class EventRepositoryImplTest {
         override fun searchMemories(userId: String, query: String) = emptyList<com.sanket_satpute_20.ironmind.data.local.entity.MemoryEntity>()
         override fun searchEvents(userId: String, query: String) = emptyList<EventEntity>()
         override fun getEvent(id: String) = null
+        override fun getEventForUser(userId: String, id: String) = null
         override fun getEventsForDateRange(userId: String, startTime: Long, endTime: Long) = emptyList<EventEntity>()
         override fun getMemoriesForDateRange(userId: String, startTime: Long, endTime: Long) = emptyList<com.sanket_satpute_20.ironmind.data.local.entity.MemoryEntity>()
         override fun deleteUserProfile(userId: String) {}

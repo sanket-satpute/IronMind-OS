@@ -30,6 +30,12 @@ class FakeEventRepository : EventRepository {
         return Result.Success(events[id])
     }
 
+    override suspend fun getEventForUser(userId: String, id: String): Result<Event?, Exception> {
+        if (shouldFail) return Result.Failure(Exception("Fake failure"))
+        val event = events[id]
+        return if (event?.userId == userId) Result.Success(event) else Result.Success(null)
+    }
+
     override suspend fun getEventsForDateRange(userId: String, startTime: Long, endTime: Long): Result<List<Event>, Exception> {
         if (shouldFail) return Result.Failure(Exception("Fake failure"))
         return Result.Success(events.values.filter { it.userId == userId && it.occurredAt in startTime..endTime }.sortedBy { it.occurredAt })

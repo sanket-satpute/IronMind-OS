@@ -48,6 +48,11 @@ class ObservationRepositoryImplTest {
             return entities[id]
         }
 
+        override fun getObservation(userId: String, id: String): ObservationEntity? {
+            val obs = entities[id]
+            return if (obs?.userId == userId) obs else null
+        }
+
         override fun deleteObservation(id: String) {
             entities.remove(id)
         }

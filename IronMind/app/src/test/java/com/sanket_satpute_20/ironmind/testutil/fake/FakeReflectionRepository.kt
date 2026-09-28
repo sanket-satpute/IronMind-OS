@@ -19,6 +19,11 @@ class FakeReflectionRepository : ReflectionRepository {
         return Result.Success(reflection)
     }
 
+    override suspend fun getReflectionForUser(userId: String, id: String): Result<Reflection?, Exception> {
+        val reflection = reflections.values.find { it.userId == userId && it.id == id }
+        return Result.Success(reflection)
+    }
+
     override suspend fun getReflectionsForDateRange(userId: String, startTime: Long, endTime: Long): Result<List<Reflection>, Exception> {
         val list = reflections.values.filter { it.userId == userId && it.createdAt in startTime..endTime }
         return Result.Success(list)

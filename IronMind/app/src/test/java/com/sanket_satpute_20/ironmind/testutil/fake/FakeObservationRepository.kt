@@ -49,6 +49,15 @@ class FakeObservationRepository : ObservationRepository {
         }
     }
 
+    override suspend fun getObservation(userId: String, id: String): Result<Observation, Exception> {
+        val observation = observations[id]
+        return if (observation != null && observation.userId == userId) {
+            Result.Success(observation)
+        } else {
+            Result.Failure(Exception("Observation not found for user"))
+        }
+    }
+
     override suspend fun deleteObservation(id: String): Result<Unit, Exception> {
         observations.remove(id)
         return Result.Success(Unit)

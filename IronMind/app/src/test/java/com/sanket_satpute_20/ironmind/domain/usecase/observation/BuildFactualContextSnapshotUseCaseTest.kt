@@ -85,6 +85,7 @@ class BuildFactualContextSnapshotUseCaseTest {
             override suspend fun getObservations(userId: String, limit: Int, offset: Int): Result<List<Observation>, Exception> = Result.Success(emptyList())
             override suspend fun getObservationsByType(userId: String, type: ObservationType, limit: Int, offset: Int): Result<List<Observation>, Exception> = Result.Success(emptyList())
             override suspend fun getObservationById(id: String): Result<Observation, Exception> = Result.Failure(Exception("Not found"))
+            override suspend fun getObservation(userId: String, id: String): Result<Observation, Exception> = Result.Failure(Exception("Not found"))
             override suspend fun deleteObservation(id: String): Result<Unit, Exception> = Result.Success(Unit)
             override suspend fun getObservationsForTimeWindow(userId: String, type: ObservationType, startTimeMs: Long, endTimeMs: Long): Result<List<Observation>, Exception> {
                 if (type == targetType) {
