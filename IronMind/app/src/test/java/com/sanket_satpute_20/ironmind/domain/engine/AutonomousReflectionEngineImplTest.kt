@@ -255,6 +255,8 @@ class AutoRefFakeReflectionRepository : ReflectionRepository {
     override suspend fun searchReflections(userId: String, query: String): Result<List<Reflection>, Exception> {
         return Result.Success(reflections.filter { it.userId == userId && it.content.contains(query, ignoreCase = true) })
     }
+
+    override suspend fun getReflectionsForTimeWindow(userId: String, startTime: Long, endTime: Long, limit: Int, orderAsc: Boolean): com.sanket_satpute_20.ironmind.domain.common.Result<List<com.sanket_satpute_20.ironmind.domain.model.Reflection>, Exception> = com.sanket_satpute_20.ironmind.domain.common.Result.Success(emptyList())
 }
 
 class AutoRefFakeIronMindAI : IronMindAI {

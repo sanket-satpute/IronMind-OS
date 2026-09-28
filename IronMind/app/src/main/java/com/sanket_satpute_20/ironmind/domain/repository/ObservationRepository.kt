@@ -12,4 +12,14 @@ interface ObservationRepository {
     suspend fun getObservation(userId: String, id: String): Result<Observation, Exception>
     suspend fun deleteObservation(id: String): Result<Unit, Exception>
     suspend fun getObservationsForTimeWindow(userId: String, type: ObservationType, startTimeMs: Long, endTimeMs: Long): Result<List<Observation>, Exception>
+
+    // Sprint 11F.2B: Deterministic Evidence Discovery
+    suspend fun getObservationsForTimeWindow(
+        userId: String,
+        startTimeMs: Long,
+        endTimeMs: Long,
+        types: List<ObservationType>?,
+        limit: Int,
+        orderAsc: Boolean
+    ): Result<List<Observation>, Exception>
 }

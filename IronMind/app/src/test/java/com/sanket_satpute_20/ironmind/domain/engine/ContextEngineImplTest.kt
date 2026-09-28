@@ -64,7 +64,9 @@ class ContextEngineImplTest {
         override suspend fun getEventsForDateRange(userId: String, startTime: Long, endTime: Long): Result<List<Event>, Exception> = Result.Success(events)
         override suspend fun saveEvent(event: Event): Result<Event, Exception> = Result.Success(event)
         override suspend fun searchEvents(userId: String, query: String): Result<List<Event>, Exception> = Result.Success(events)
-    }
+    
+    override suspend fun getEventsForTimeWindow(userId: String, startTime: Long, endTime: Long, types: List<com.sanket_satpute_20.ironmind.domain.model.EventType>?, limit: Int, orderAsc: Boolean): com.sanket_satpute_20.ironmind.domain.common.Result<List<com.sanket_satpute_20.ironmind.domain.model.Event>, Exception> = com.sanket_satpute_20.ironmind.domain.common.Result.Success(emptyList())
+}
 
     class FakeReflectionRepository : ReflectionRepository {
         var reflections = emptyList<Reflection>()
@@ -77,7 +79,9 @@ class ContextEngineImplTest {
         override suspend fun getReflectionForUser(userId: String, id: String): Result<Reflection?, Exception> = Result.Failure(Exception())
         override suspend fun saveReflection(reflection: Reflection): Result<Unit, Exception> = Result.Success(Unit)
         override suspend fun searchReflections(userId: String, query: String): Result<List<Reflection>, Exception> = Result.Success(reflections)
-    }
+    
+    override suspend fun getReflectionsForTimeWindow(userId: String, startTime: Long, endTime: Long, limit: Int, orderAsc: Boolean): com.sanket_satpute_20.ironmind.domain.common.Result<List<com.sanket_satpute_20.ironmind.domain.model.Reflection>, Exception> = com.sanket_satpute_20.ironmind.domain.common.Result.Success(emptyList())
+}
     class FakeProtectionRepository : ProtectionRepository {
         var activeSession: ProtectionSession? = null
         override suspend fun getProtectionRule(id: String): Result<com.sanket_satpute_20.ironmind.domain.model.ProtectionRule, Exception> = Result.Failure(Exception())

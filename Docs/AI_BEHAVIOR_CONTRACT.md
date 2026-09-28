@@ -969,6 +969,10 @@ The AI may identify potential contradictions or supporting contexts, but the har
 
 The AI MAY propose a `DiscoveryProposal` to signal its search intent (e.g. limiting the search to specific Event Types). This proposal MUST NOT contain raw search strings, user IDs, or specific evidence IDs. It must rely exclusively on bounded enums. The Domain evaluates this proposal and produces a deterministic `DiscoveryCriteria`.
 
+**Proposal Semantics:**
+- `observationTypes`: If the AI outputs `null` for this field, it signals an intent to search across **all** observation types without filtering.
+- **Ordering and Limits**: The AI does NOT dictate execution limits or time-based ordering (ASC/DESC). The Domain enforces deterministic cross-source ordering and safe truncation boundaries.
+
 ---
 
 # 61. PATTERN CONFIDENCE BOUNDARY

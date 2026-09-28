@@ -77,6 +77,35 @@ class EventRepositoryImpl(
         }
     }
 
+    override suspend fun getEventsForTimeWindow(
+        userId: String,
+        startTime: Long,
+        endTime: Long,
+        types: List<com.sanket_satpute_20.ironmind.domain.model.EventType>?,
+        limit: Int,
+        orderAsc: Boolean
+    ): Result<List<Event>, Exception> = withContext(Dispatchers.IO) {
+        try {
+            val entities = if (types.isNullOrEmpty()) {
+                if (orderAsc) {
+                    dao.getEventsForDateRangeAsc(userId, startTime, endTime, limit)
+                } else {
+                    dao.getEventsForDateRangeDesc(userId, startTime, endTime, limit)
+                }
+            } else {
+                val typeStrings = types.map { it.name }
+                if (orderAsc) {
+                    dao.getEventsForDateRangeWithTypesAsc(userId, typeStrings, startTime, endTime, limit)
+                } else {
+                    dao.getEventsForDateRangeWithTypesDesc(userId, typeStrings, startTime, endTime, limit)
+                }
+            }
+            Result.Success(entities.map { it.toDomainModel() })
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
+
     override suspend fun searchEvents(userId: String, query: String): Result<List<Event>, Exception> = withContext(Dispatchers.IO) {
         try {
             val events = dao.searchEvents(userId, query).map { it.toDomainModel() }

@@ -42,4 +42,19 @@ interface ObservationDao {
 
     @Query("SELECT * FROM observations WHERE userId = :userId AND type = :type AND occurredAt >= :startTimeMs AND occurredAt < :endTimeMs ORDER BY occurredAt ASC")
     fun getObservationsForTimeWindow(userId: String, type: String, startTimeMs: Long, endTimeMs: Long): List<ObservationEntity>
+
+    // Sprint 11F.2B: Deterministic Evidence Discovery
+    // Type-agnostic (All types)
+    @Query("SELECT * FROM observations WHERE userId = :userId AND occurredAt >= :startTimeMs AND occurredAt < :endTimeMs ORDER BY occurredAt ASC, id ASC LIMIT :limit")
+    fun getObservationsForTimeWindowAsc(userId: String, startTimeMs: Long, endTimeMs: Long, limit: Int): List<ObservationEntity>
+
+    @Query("SELECT * FROM observations WHERE userId = :userId AND occurredAt >= :startTimeMs AND occurredAt < :endTimeMs ORDER BY occurredAt DESC, id DESC LIMIT :limit")
+    fun getObservationsForTimeWindowDesc(userId: String, startTimeMs: Long, endTimeMs: Long, limit: Int): List<ObservationEntity>
+
+    // Type-filtered (IN clause)
+    @Query("SELECT * FROM observations WHERE userId = :userId AND type IN (:types) AND occurredAt >= :startTimeMs AND occurredAt < :endTimeMs ORDER BY occurredAt ASC, id ASC LIMIT :limit")
+    fun getObservationsForTimeWindowWithTypesAsc(userId: String, types: List<String>, startTimeMs: Long, endTimeMs: Long, limit: Int): List<ObservationEntity>
+
+    @Query("SELECT * FROM observations WHERE userId = :userId AND type IN (:types) AND occurredAt >= :startTimeMs AND occurredAt < :endTimeMs ORDER BY occurredAt DESC, id DESC LIMIT :limit")
+    fun getObservationsForTimeWindowWithTypesDesc(userId: String, types: List<String>, startTimeMs: Long, endTimeMs: Long, limit: Int): List<ObservationEntity>
 }

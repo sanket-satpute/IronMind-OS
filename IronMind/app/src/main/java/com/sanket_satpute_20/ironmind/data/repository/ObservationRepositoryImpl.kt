@@ -95,4 +95,33 @@ class ObservationRepositoryImpl(
             Result.Failure(e)
         }
     }
+
+    override suspend fun getObservationsForTimeWindow(
+        userId: String,
+        startTimeMs: Long,
+        endTimeMs: Long,
+        types: List<ObservationType>?,
+        limit: Int,
+        orderAsc: Boolean
+    ): Result<List<Observation>, Exception> = withContext(Dispatchers.IO) {
+        try {
+            val entities = if (types.isNullOrEmpty()) {
+                if (orderAsc) {
+                    observationDao.getObservationsForTimeWindowAsc(userId, startTimeMs, endTimeMs, limit)
+                } else {
+                    observationDao.getObservationsForTimeWindowDesc(userId, startTimeMs, endTimeMs, limit)
+                }
+            } else {
+                val typeStrings = types.map { it.name }
+                if (orderAsc) {
+                    observationDao.getObservationsForTimeWindowWithTypesAsc(userId, typeStrings, startTimeMs, endTimeMs, limit)
+                } else {
+                    observationDao.getObservationsForTimeWindowWithTypesDesc(userId, typeStrings, startTimeMs, endTimeMs, limit)
+                }
+            }
+            Result.Success(entities.map { it.toDomain() })
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
 }

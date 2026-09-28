@@ -98,6 +98,37 @@ class ReflectionRepositoryImpl(
         }
     }
 
+    override suspend fun getReflectionsForTimeWindow(
+        userId: String,
+        startTime: Long,
+        endTime: Long,
+        limit: Int,
+        orderAsc: Boolean
+    ): Result<List<Reflection>, Exception> = withContext(Dispatchers.IO) {
+        try {
+            val entities = if (orderAsc) {
+                dao.getReflectionsForDateRangeAsc(userId, startTime, endTime, limit)
+            } else {
+                dao.getReflectionsForDateRangeDesc(userId, startTime, endTime, limit)
+            }
+            val domainModels = entities.map { entity ->
+                Reflection(
+                    id = entity.id,
+                    userId = entity.userId,
+                    targetEntityId = entity.targetEntityId,
+                    targetEntityType = entity.targetEntityType,
+                    content = entity.content,
+                    sentiment = entity.sentiment,
+                    createdAt = entity.createdAt,
+                    schemaVersion = entity.schemaVersion
+                )
+            }
+            Result.Success(domainModels)
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
+
     override suspend fun searchReflections(userId: String, query: String): Result<List<Reflection>, Exception> = withContext(Dispatchers.IO) {
         try {
             val entities = dao.searchReflections(userId, query)

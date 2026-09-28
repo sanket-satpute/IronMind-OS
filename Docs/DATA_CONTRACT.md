@@ -5014,6 +5014,15 @@ EvidenceReference[] (Durable provenance pointer)
 - Invalid criteria (e.g., bad time bounds), unsupported sources, or repository failures result in a system failure (e.g., `Result.Failure`).
 - Valid criteria yielding no matches result in a successful empty list (`Result.Success(emptyList())`).
 
+**DETERMINISTIC ORDERING & LIMIT SEMANTICS:**
+- Execution of `DiscoveryCriteria` is bound by a global `limit`.
+- Ordering (`TIMESTAMP_ASC`, `TIMESTAMP_DESC`) determines the truncation boundaries for this limit.
+- **Cross-Source Tie-Breaker**: When evidence timestamps collide, the system mandates a deterministic tie-breaker executed as `timestamp` → `sourceId` → `sourceType`. At the repository level, `id` serves as the authoritative secondary sort key.
+- Time-bounded queries must natively execute limits and sorting via the persistence layer (database) to prevent unbounded memory fetches.
+
+**OBSERVATION TYPE SEMANTICS:**
+- `DiscoveryCriteria.observationTypes = null` signifies "no filtering", meaning **all observation types** are included. The persistence layer must execute this as a type-agnostic query rather than falling back to iterative enums.
+
 ---
 
 # 267. DATA CONTRACT FOR INTERVENTION

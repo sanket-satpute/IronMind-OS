@@ -45,4 +45,6 @@ class FakeEventRepository : EventRepository {
         if (shouldFail) return Result.Failure(Exception("Fake failure"))
         return Result.Success(events.values.filter { it.userId == userId && (it.type.name.contains(query, ignoreCase = true) || it.metadata?.contains(query, ignoreCase = true) == true) }.sortedByDescending { it.occurredAt })
     }
+
+    override suspend fun getEventsForTimeWindow(userId: String, startTime: Long, endTime: Long, types: List<com.sanket_satpute_20.ironmind.domain.model.EventType>?, limit: Int, orderAsc: Boolean): com.sanket_satpute_20.ironmind.domain.common.Result<List<com.sanket_satpute_20.ironmind.domain.model.Event>, Exception> = com.sanket_satpute_20.ironmind.domain.common.Result.Success(emptyList())
 }

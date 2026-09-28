@@ -110,6 +110,8 @@ class FakeEventRepository : EventRepository {
     override suspend fun searchEvents(userId: String, query: String): Result<List<Event>, Exception> {
         return Result.Success(events.filter { it.userId == userId && it.metadata?.contains(query) == true })
     }
+
+    override suspend fun getEventsForTimeWindow(userId: String, startTime: Long, endTime: Long, types: List<com.sanket_satpute_20.ironmind.domain.model.EventType>?, limit: Int, orderAsc: Boolean): com.sanket_satpute_20.ironmind.domain.common.Result<List<com.sanket_satpute_20.ironmind.domain.model.Event>, Exception> = com.sanket_satpute_20.ironmind.domain.common.Result.Success(emptyList())
 }
 
 class FakeClock : Clock {

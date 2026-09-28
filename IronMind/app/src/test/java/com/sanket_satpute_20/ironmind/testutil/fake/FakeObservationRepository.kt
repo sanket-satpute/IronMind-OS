@@ -74,4 +74,6 @@ class FakeObservationRepository : ObservationRepository {
             .sortedBy { it.occurredAt }
         return Result.Success(result)
     }
+
+    override suspend fun getObservationsForTimeWindow(userId: String, startTimeMs: Long, endTimeMs: Long, types: List<com.sanket_satpute_20.ironmind.domain.model.observation.ObservationType>?, limit: Int, orderAsc: Boolean): com.sanket_satpute_20.ironmind.domain.common.Result<List<com.sanket_satpute_20.ironmind.domain.model.observation.Observation>, Exception> = com.sanket_satpute_20.ironmind.domain.common.Result.Success(emptyList())
 }

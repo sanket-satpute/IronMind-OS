@@ -8,5 +8,15 @@ interface ReflectionRepository : Repository {
     suspend fun getReflection(id: String): Result<Reflection?, Exception>
     suspend fun getReflectionForUser(userId: String, id: String): Result<Reflection?, Exception>
     suspend fun getReflectionsForDateRange(userId: String, startTime: Long, endTime: Long): Result<List<Reflection>, Exception>
+
+    // Sprint 11F.2B: Deterministic Evidence Discovery
+    suspend fun getReflectionsForTimeWindow(
+        userId: String,
+        startTime: Long,
+        endTime: Long,
+        limit: Int,
+        orderAsc: Boolean
+    ): Result<List<Reflection>, Exception>
+
     suspend fun searchReflections(userId: String, query: String): Result<List<Reflection>, Exception>
 }

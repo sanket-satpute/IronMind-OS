@@ -92,6 +92,13 @@ interface IronMindDao {
     @Query("SELECT * FROM reflection WHERE userId = :userId AND createdAt >= :startTime AND createdAt <= :endTime ORDER BY createdAt DESC")
     fun getReflectionsForDateRange(userId: String, startTime: Long, endTime: Long): List<ReflectionEntity>
 
+    // Sprint 11F.2B: Deterministic Evidence Discovery
+    @Query("SELECT * FROM reflection WHERE userId = :userId AND createdAt >= :startTime AND createdAt < :endTime ORDER BY createdAt ASC, id ASC LIMIT :limit")
+    fun getReflectionsForDateRangeAsc(userId: String, startTime: Long, endTime: Long, limit: Int): List<ReflectionEntity>
+
+    @Query("SELECT * FROM reflection WHERE userId = :userId AND createdAt >= :startTime AND createdAt < :endTime ORDER BY createdAt DESC, id DESC LIMIT :limit")
+    fun getReflectionsForDateRangeDesc(userId: String, startTime: Long, endTime: Long, limit: Int): List<ReflectionEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertProtectionRule(rule: ProtectionRuleEntity)
 
@@ -165,6 +172,19 @@ interface IronMindDao {
 
     @Query("SELECT * FROM events WHERE userId = :userId AND occurredAt >= :startTime AND occurredAt <= :endTime ORDER BY occurredAt DESC, id DESC")
     fun getEventsForDateRange(userId: String, startTime: Long, endTime: Long): List<EventEntity>
+
+    // Sprint 11F.2B: Deterministic Evidence Discovery
+    @Query("SELECT * FROM events WHERE userId = :userId AND occurredAt >= :startTime AND occurredAt < :endTime ORDER BY occurredAt ASC, id ASC LIMIT :limit")
+    fun getEventsForDateRangeAsc(userId: String, startTime: Long, endTime: Long, limit: Int): List<EventEntity>
+
+    @Query("SELECT * FROM events WHERE userId = :userId AND occurredAt >= :startTime AND occurredAt < :endTime ORDER BY occurredAt DESC, id DESC LIMIT :limit")
+    fun getEventsForDateRangeDesc(userId: String, startTime: Long, endTime: Long, limit: Int): List<EventEntity>
+
+    @Query("SELECT * FROM events WHERE userId = :userId AND type IN (:types) AND occurredAt >= :startTime AND occurredAt < :endTime ORDER BY occurredAt ASC, id ASC LIMIT :limit")
+    fun getEventsForDateRangeWithTypesAsc(userId: String, types: List<String>, startTime: Long, endTime: Long, limit: Int): List<EventEntity>
+
+    @Query("SELECT * FROM events WHERE userId = :userId AND type IN (:types) AND occurredAt >= :startTime AND occurredAt < :endTime ORDER BY occurredAt DESC, id DESC LIMIT :limit")
+    fun getEventsForDateRangeWithTypesDesc(userId: String, types: List<String>, startTime: Long, endTime: Long, limit: Int): List<EventEntity>
 
     @Query("SELECT * FROM memory WHERE userId = :userId AND createdAt >= :startTime AND createdAt <= :endTime ORDER BY createdAt DESC")
     fun getMemoriesForDateRange(userId: String, startTime: Long, endTime: Long): List<MemoryEntity>

@@ -34,4 +34,6 @@ class FakeReflectionRepository : ReflectionRepository {
         val list = reflections.values.filter { it.userId == userId && it.content.contains(query, ignoreCase = true) }.sortedByDescending { it.createdAt }
         return Result.Success(list)
     }
+
+    override suspend fun getReflectionsForTimeWindow(userId: String, startTime: Long, endTime: Long, limit: Int, orderAsc: Boolean): com.sanket_satpute_20.ironmind.domain.common.Result<List<com.sanket_satpute_20.ironmind.domain.model.Reflection>, Exception> = com.sanket_satpute_20.ironmind.domain.common.Result.Success(emptyList())
 }

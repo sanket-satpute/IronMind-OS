@@ -83,7 +83,12 @@ class ObservationRepositoryImplTest {
                 .filter { it.userId == userId && it.type == type && it.occurredAt >= startTimeMs && it.occurredAt < endTimeMs }
                 .sortedBy { it.occurredAt }
         }
-    }
+    
+    override fun getObservationsForTimeWindowAsc(userId: String, startTimeMs: Long, endTimeMs: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.ObservationEntity> = emptyList()
+    override fun getObservationsForTimeWindowDesc(userId: String, startTimeMs: Long, endTimeMs: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.ObservationEntity> = emptyList()
+    override fun getObservationsForTimeWindowWithTypesAsc(userId: String, types: List<String>, startTimeMs: Long, endTimeMs: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.ObservationEntity> = emptyList()
+    override fun getObservationsForTimeWindowWithTypesDesc(userId: String, types: List<String>, startTimeMs: Long, endTimeMs: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.ObservationEntity> = emptyList()
+}
 
     @Before
     fun setup() {

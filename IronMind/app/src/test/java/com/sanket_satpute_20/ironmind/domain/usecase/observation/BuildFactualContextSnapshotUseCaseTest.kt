@@ -93,6 +93,12 @@ class BuildFactualContextSnapshotUseCaseTest {
                 }
                 return Result.Success(emptyList())
             }
+            override suspend fun getObservationsForTimeWindow(userId: String, startTimeMs: Long, endTimeMs: Long, types: List<ObservationType>?, limit: Int, orderAsc: Boolean): Result<List<Observation>, Exception> {
+                if (types?.contains(targetType) == true) {
+                    return Result.Failure(Exception("$targetType Failed"))
+                }
+                return Result.Success(emptyList())
+            }
         }
     }
 
