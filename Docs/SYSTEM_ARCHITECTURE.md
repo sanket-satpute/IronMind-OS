@@ -1034,6 +1034,19 @@ The Pattern Engine enforces the boundary between AI interpretation and domain le
 
 ---
 
+# 44A. EVIDENCE DISCOVERY PIPELINE
+
+The Pattern Engine discovers supporting evidence through a strict, deterministic boundary to protect privacy and maintain authority:
+
+1. **AI Discovery Proposal**: The AI outputs a `DiscoveryProposal` alongside the `PatternCandidate`. This proposal is strictly bounded to enums (e.g., `EvidenceSourceType`, `EventType`). It MUST NOT contain raw search text, `userId`, or hallucinated evidence IDs.
+2. **Domain Validation**: The Domain evaluates the proposal. If valid, the Domain constructs an executable `DiscoveryCriteria`.
+3. **Discovery Criteria execution**: The Domain executes the `DiscoveryCriteria`, applying an explicit `userId`, mandatory explicit time bounds (`startTimeMs`, `endTimeMs`), maximum `limit`, and deterministic `ordering`.
+4. **Resolution**: The search produces a `List<EvidenceReference>`.
+
+Raw payload text (e.g. `Reflection` bodies, notifications) is excluded from the discovery boundary to prevent sensitive data leakage.
+
+---
+
 # 45. PATTERN CONFIDENCE AND EVIDENCE
 
 A pattern strictly defines its empirical validity:

@@ -4980,6 +4980,42 @@ Emit pattern event
 
 ---
 
+# 266A. DATA CONTRACT FOR EVIDENCE DISCOVERY
+
+```text
+AI Hypothesis
+↓
+DiscoveryProposal (AI-owned, enum-bounded, no raw text)
+↓
+Domain Validation (Requires valid criteria, resolves temporal gaps)
+↓
+DiscoveryCriteria (Domain-owned, deterministic)
+  - userId: Strictly domain-supplied
+  - startTimeMs / endTimeMs: Explicit
+  - limit & ordering: Deterministic bounds
+↓
+Evidence Discovery (Repository query)
+↓
+EvidenceReference[] (Durable provenance pointer)
+```
+
+**AUTHORITY TRANSITION:**
+- AI CANNOT directly create authoritative `EvidenceReference`.
+- AI CANNOT directly choose database records or override `userId`.
+- AI CANNOT bypass `DiscoveryCriteria` validation.
+- AI CANNOT use free-text queries (e.g. searching Reflection content) to fish for evidence.
+- The Domain retains full authority over what evidence is executable and valid.
+
+**TEMPORAL SEMANTICS:**
+- `startTimeMs` is inclusive. `endTimeMs` is exclusive. `startTimeMs` must be strictly less than `endTimeMs`.
+- The temporal vocabulary (e.g., LAST_30_DAYS) is currently undefined and represents a contract gap. AI `DiscoveryProposal` defers providing explicit temporal vocabulary until a policy exists.
+
+**ERROR / VALIDATION SEMANTICS:**
+- Invalid criteria (e.g., bad time bounds), unsupported sources, or repository failures result in a system failure (e.g., `Result.Failure`).
+- Valid criteria yielding no matches result in a successful empty list (`Result.Success(emptyList())`).
+
+---
+
 # 267. DATA CONTRACT FOR INTERVENTION
 
 ```text

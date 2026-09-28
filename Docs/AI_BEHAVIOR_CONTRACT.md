@@ -967,6 +967,8 @@ The AI MUST NOT hallucinate, fabricate, or assign evidence references.
 
 The AI may identify potential contradictions or supporting contexts, but the hard linkage to deterministic evidence (e.g., `evidenceReferences = listOf(EvidenceReference("event-123", EVENT))`) is exclusively the responsibility of the domain layer processing the candidate.
 
+The AI MAY propose a `DiscoveryProposal` to signal its search intent (e.g. limiting the search to specific Event Types). This proposal MUST NOT contain raw search strings, user IDs, or specific evidence IDs. It must rely exclusively on bounded enums. The Domain evaluates this proposal and produces a deterministic `DiscoveryCriteria`.
+
 ---
 
 # 61. PATTERN CONFIDENCE BOUNDARY

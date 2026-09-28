@@ -52,9 +52,11 @@ sealed class AIOutput {
     /**
      * AI proposes a behavioral pattern candidate.
      * Per §78: PATTERN_CANDIDATE category. Must not include identity labels (§26).
+     * Includes an optional [DiscoveryProposal] for bounded evidence search intent.
      */
     data class PatternCandidate(
         val candidate: com.sanket_satpute_20.ironmind.domain.model.pattern.PatternCandidate,
+        val discoveryProposal: com.sanket_satpute_20.ironmind.domain.model.pattern.DiscoveryProposal? = null,
         override val confidence: Float,
         override val reasoning: String? = null,
         override val schemaVersion: Int = 1
