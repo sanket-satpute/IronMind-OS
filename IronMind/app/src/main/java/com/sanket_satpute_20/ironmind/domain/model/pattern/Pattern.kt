@@ -11,7 +11,7 @@ data class Pattern(
     val predictedBehavior: String?,
     val confidence: Float,
     val evidenceCount: Int,
-    val evidenceReferences: List<String>?,
+    val evidenceReferences: List<EvidenceReference>?,
     val firstObservedAt: Long,
     val lastObservedAt: Long,
     val status: PatternStatus,

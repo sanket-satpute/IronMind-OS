@@ -1485,7 +1485,7 @@ Exact decision priority belongs in `AUTONOMY_POLICY.md` and `AI_BEHAVIOR_CONTRAC
 
 # 57. PATTERN
 
-A `Pattern` represents a repeated relationship between behavior and context.
+A `Pattern` represents a learned behavioral relationship owned and managed strictly by the domain.
 
 Conceptual fields:
 
@@ -1496,21 +1496,17 @@ userId
 type
 
 description
-
 conditions
 predictedBehavior
 
-confidence
+confidence          // Domain-owned. Calculated from evidence strength and confirmation.
+evidenceReferences  // Domain-owned typed EvidenceReference pointing to actual IronMind entities (OBSERVATION, EVENT, REFLECTION).
 
-evidenceCount
+status              // Domain-owned (e.g., ACTIVE, EXPIRED). 
+confirmationState   // Domain-owned (e.g., UNCONFIRMED, USER_CONFIRMED, USER_REJECTED).
 
 firstObservedAt
 lastObservedAt
-
-status
-
-confirmationState
-
 createdAt
 updatedAt
 
@@ -1519,30 +1515,23 @@ schemaVersion
 
 ---
 
-# 58. PATTERN EXAMPLE
+# 58. PATTERNCANDIDATE
+
+An AI may propose a pattern via a `PatternCandidate`.
+
+A `PatternCandidate` represents the AI's interpretation of factual context. It is NOT authoritative state.
+
+Conceptual fields:
 
 ```text
-Pattern:
-User tends to postpone solo gym sessions.
-
-Confidence:
-0.86
-
-Evidence:
-14 observations
-
-First observed:
-2026-08-01
-
-Last observed:
-2026-09-10
-
-Status:
-ACTIVE
-
-Confirmation:
-UNCONFIRMED
+type
+description
+conditions
+predictedBehavior
+contradictionSignal // Optional indicator that this candidate contradicts an existing pattern.
 ```
+
+The AI MUST NOT output `id`, `confidence`, `evidenceReferences`, `status`, or `confirmationState`. The domain layer assumes full ownership of these properties during validation and ingestion.
 
 ---
 
@@ -1567,7 +1556,7 @@ SUCCESS_CONDITION_PATTERN
 
 # 60. PATTERN CONFIDENCE
 
-Confidence should represent how strongly current evidence supports the pattern.
+Confidence represents the strength of accumulated empirical evidence, NOT the AI's model certainty.
 
 Conceptually:
 
@@ -1576,45 +1565,40 @@ Conceptually:
 1.0 = very high confidence
 ```
 
-The exact algorithm must be defined separately.
+- **Ownership**: Strictly domain-owned.
+- **Updates**: Calculated deterministically based on evidence recency, volume, and user confirmation.
+- **Contradiction**: Domain logic adjusts confidence based on conflicting evidence. AI cannot arbitrarily set confidence to `0.0`.
 
 ---
 
 # 61. PATTERN EVIDENCE
 
-Patterns should be supported by traceable evidence.
+Patterns must be supported by traceable evidence.
 
-Conceptually:
+Evidence references must be deterministic pointers to real IronMind data (e.g., `Event` IDs, `Reflection` IDs). AI-generated strings (e.g., "User procrastinates") are NOT acceptable evidence references.
 
-```text
-evidenceCount
-evidenceReferences
-```
+The system must definitively answer:
 
-where appropriate.
-
-The system should be able to explain:
-
-> "Why do you believe this pattern?"
+> "What actual data caused this Pattern to exist?"
 
 ---
 
 # 62. PATTERN RECENCY
 
-Every pattern should track:
+Every pattern must track:
 
 ```text
 firstObservedAt
 lastObservedAt
 ```
 
-A pattern that has not appeared recently should lose influence.
+A pattern that has not appeared recently loses influence. `updatedAt` indicates a system modification (e.g., background decay) and MUST NOT be used for recency or current context retrieval.
 
 ---
 
 # 63. PATTERN DECAY
 
-Pattern confidence should eventually decay when evidence becomes stale.
+Pattern confidence must decay when evidence becomes stale.
 
 Conceptually:
 
@@ -1627,16 +1611,18 @@ No supporting evidence
 ↓
 Confidence decreases
 
-Long-term unsupported
+Long-term unsupported (Stale)
 ↓
-INACTIVE
+Status = EXPIRED
 ```
+
+Expired patterns MUST NOT be retrieved as current context. They remain in the repository strictly as historical records.
 
 ---
 
 # 64. PATTERN CONFIRMATION
 
-A user may explicitly confirm:
+A user may explicitly confirm a pattern:
 
 > "Yes, that's true."
 
@@ -1646,22 +1632,27 @@ Then:
 confirmationState = USER_CONFIRMED
 ```
 
-The system may use this as stronger evidence than unconfirmed inference.
+User confirmation is higher-value evidence. The system uses this to elevate authority over unconfirmed inference.
 
 ---
 
 # 65. PATTERN REJECTION
 
-If the user says:
+If the user rejects a pattern:
 
 > "No, that's not true."
 
-then the system should:
+Then:
 
-* mark it rejected or reduce confidence
+```text
+confirmationState = USER_REJECTED
+```
+
+The system must:
 * record the correction
-* avoid treating the old pattern as authoritative
-* learn from the correction
+* prevent the old pattern from acting as authoritative
+* ignore future AI PatternCandidates that identically match the rejected pattern
+* ensure the AI cannot override this explicit user correction
 
 ---
 

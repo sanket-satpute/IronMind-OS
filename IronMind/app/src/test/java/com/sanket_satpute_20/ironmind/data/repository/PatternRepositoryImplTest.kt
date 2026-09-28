@@ -71,7 +71,10 @@ class PatternRepositoryImplTest {
         predictedBehavior = null,
         confidence = 0.8f,
         evidenceCount = 10,
-        evidenceReferences = listOf("obs-1", "obs-2"),
+        evidenceReferences = listOf(
+            com.sanket_satpute_20.ironmind.domain.model.pattern.EvidenceReference("obs-1", com.sanket_satpute_20.ironmind.domain.model.pattern.EvidenceSourceType.OBSERVATION),
+            com.sanket_satpute_20.ironmind.domain.model.pattern.EvidenceReference("obs-2", com.sanket_satpute_20.ironmind.domain.model.pattern.EvidenceSourceType.OBSERVATION)
+        ),
         firstObservedAt = 1000L,
         lastObservedAt = 2000L,
         status = PatternStatus.ACTIVE,
@@ -90,7 +93,10 @@ class PatternRepositoryImplTest {
         assertNotNull(retrieved)
         assertEquals("p1", retrieved?.id)
         assertEquals(0.8f, retrieved?.confidence)
-        assertEquals(listOf("obs-1", "obs-2"), retrieved?.evidenceReferences)
+        assertEquals(listOf(
+            com.sanket_satpute_20.ironmind.domain.model.pattern.EvidenceReference("obs-1", com.sanket_satpute_20.ironmind.domain.model.pattern.EvidenceSourceType.OBSERVATION),
+            com.sanket_satpute_20.ironmind.domain.model.pattern.EvidenceReference("obs-2", com.sanket_satpute_20.ironmind.domain.model.pattern.EvidenceSourceType.OBSERVATION)
+        ), retrieved?.evidenceReferences)
     }
 
     @Test

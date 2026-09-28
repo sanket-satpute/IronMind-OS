@@ -1012,7 +1012,7 @@ This allows the system to know how trustworthy the memory is.
 
 # 44. PATTERN ENGINE
 
-The Pattern Engine looks for repeated relationships.
+The Pattern Engine discovers and manages repeated relationships.
 
 Examples:
 
@@ -1025,43 +1025,35 @@ Intervention
 
 Task Size
 → Completion Probability
-
-Time
-→ Postponement Probability
-
-Social Context
-→ Success Probability
 ```
 
-Patterns are hypotheses supported by evidence.
+The Pattern Engine enforces the boundary between AI interpretation and domain learning:
+1. **AI Proposes**: AI analyzes a `ContextSnapshot` and outputs a `PatternCandidate`.
+2. **Domain Validates**: The Pattern Engine inspects the candidate, ensuring it is grounded in real evidence.
+3. **Domain Owns**: The Pattern Engine converts the candidate into a permanent `Pattern` entity, taking ownership of `confidence`, typed `evidenceReferences`, and `status`.
 
 ---
 
-# 45. PATTERN CONFIDENCE
+# 45. PATTERN CONFIDENCE AND EVIDENCE
 
-A pattern should support:
+A pattern strictly defines its empirical validity:
 
 ```text
 confidence
-evidenceCount
+evidenceReferences
 firstObservedAt
 lastObservedAt
 status
 ```
 
-Potential status:
-
-```text
-ACTIVE
-DECAYING
-INACTIVE
-```
+- **Evidence References**: Must be deterministic, hard links to source data (e.g., `Event` IDs, `Observation` IDs), NOT hallucinated text strings.
+- **Confidence**: Must represent the cumulative strength of the `evidenceReferences` and user confirmation state, NOT the AI model's internal probability on a single prompt.
 
 ---
 
-# 46. PATTERN DECAY
+# 46. PATTERN DECAY AND RECENCY
 
-Patterns should lose influence when no longer supported.
+Patterns must lose influence when no longer supported.
 
 Conceptually:
 
@@ -1076,10 +1068,10 @@ Confidence decay
 
 Long-term unsupported
  ↓
-Inactive
+Status = EXPIRED
 ```
 
-Exact mathematical behavior belongs in the data/intelligence implementation contracts.
+**CRITICAL DECAY RULE**: Pattern decay or status expiration modifies the `updatedAt` timestamp. Therefore, `updatedAt` MUST NOT be used to retrieve the "most recent" patterns. Context engines must query for active patterns and filter out `EXPIRED` patterns, regardless of when their status was last modified.
 
 ---
 

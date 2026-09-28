@@ -946,85 +946,61 @@ User confirmation
 
 ---
 
-# 59. PATTERN GENERATION
+# 59. PATTERN CANDIDATE GENERATION
 
-The AI may propose behavioral patterns.
+The AI may propose behavioral pattern candidates (via `PatternCandidate`). 
 
 Example:
 
 ```text
-Pattern:
+PatternCandidate:
 Large ambiguous tasks appear more likely to be postponed.
-
-Confidence:
-0.78
-
-Evidence:
-8 observations
 ```
+
+The AI MUST NOT authoritatively declare a `Pattern`. The domain layer is responsible for converting a candidate into a permanent Pattern after validating evidence, checking for idempotency, and calculating confidence.
 
 ---
 
-# 60. PATTERN MUST REFERENCE EVIDENCE
+# 60. PATTERN EVIDENCE BOUNDARY
 
-A pattern should be explainable.
+The AI MUST NOT hallucinate, fabricate, or assign evidence references.
 
-The system should know:
-
-```text
-Why does IronMind believe this?
-```
+The AI may identify potential contradictions or supporting contexts, but the hard linkage to deterministic evidence (e.g., `evidenceReferences = listOf(EvidenceReference("event-123", EVENT))`) is exclusively the responsibility of the domain layer processing the candidate.
 
 ---
 
-# 61. PATTERN CREATION THRESHOLD
+# 61. PATTERN CONFIDENCE BOUNDARY
 
-Do not create strong patterns from a single observation unless the observation is exceptionally explicit and the product policy permits it.
+The AI MUST NOT directly set Pattern confidence. 
 
-Initial implementation should favor conservative pattern creation.
+Confidence represents the strength of accumulated empirical evidence over time, not the AI's internal model certainty from a single inference. 
 
 ---
 
 # 62. PATTERN CONFIRMATION
 
-The user may confirm a pattern.
+The user may explicitly confirm a pattern (e.g., "Yes, that happens when the task feels too big.").
 
-Example:
-
-> "Yes, that happens when the task feels too big."
-
-Then the system may elevate confidence and confirmation state.
+This transitions the pattern to `USER_CONFIRMED`. The AI MUST respect user-confirmed patterns as high-authority context, above its own unconfirmed hypotheses.
 
 ---
 
-# 63. PATTERN REJECTION
+# 63. PATTERN REJECTION BOUNDARY
 
-If the user rejects a pattern:
+If the user rejects a pattern (e.g., "No, that's not right."), the domain transitions the pattern to `USER_REJECTED`.
 
-> "No, that's not right."
-
-the system should:
-
-* mark rejection
-* reduce influence
-* record correction
-* avoid repeatedly resurfacing the same rejected explanation
+The AI MUST NOT:
+* Silently override this rejection.
+* Continue to propose identically matching `PatternCandidate`s.
+* Treat the rejected pattern as authoritative context.
 
 ---
 
-# 64. PATTERN DECAY
+# 64. PATTERN DECAY AND STATUS BOUNDARY
 
-AI must respect:
+The AI MUST NOT directly update a Pattern's `status` (e.g., setting it to `EXPIRED`).
 
-```text
-ACTIVE
-DECAYING
-INACTIVE
-```
-
-states where applicable.
-
----
+While the AI may suggest that a pattern is no longer relevant (e.g., via a contradiction signal), the domain layer owns the state machine for decaying confidence and expiring patterns.
 
 # 65. BEHAVIORAL HYPOTHESES
 
