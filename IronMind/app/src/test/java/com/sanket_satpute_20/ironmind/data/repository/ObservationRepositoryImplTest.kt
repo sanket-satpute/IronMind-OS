@@ -84,10 +84,33 @@ class ObservationRepositoryImplTest {
                 .sortedBy { it.occurredAt }
         }
     
-    override fun getObservationsForTimeWindowAsc(userId: String, startTimeMs: Long, endTimeMs: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.ObservationEntity> = emptyList()
-    override fun getObservationsForTimeWindowDesc(userId: String, startTimeMs: Long, endTimeMs: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.ObservationEntity> = emptyList()
-    override fun getObservationsForTimeWindowWithTypesAsc(userId: String, types: List<String>, startTimeMs: Long, endTimeMs: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.ObservationEntity> = emptyList()
-    override fun getObservationsForTimeWindowWithTypesDesc(userId: String, types: List<String>, startTimeMs: Long, endTimeMs: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.ObservationEntity> = emptyList()
+    override fun getObservationsForTimeWindowAsc(userId: String, startTimeMs: Long, endTimeMs: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.ObservationEntity> {
+        return entities.values
+            .filter { it.userId == userId && it.occurredAt >= startTimeMs && it.occurredAt < endTimeMs }
+            .sortedWith(compareBy({ it.occurredAt }, { it.id }))
+            .take(limit)
+    }
+    
+    override fun getObservationsForTimeWindowDesc(userId: String, startTimeMs: Long, endTimeMs: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.ObservationEntity> {
+        return entities.values
+            .filter { it.userId == userId && it.occurredAt >= startTimeMs && it.occurredAt < endTimeMs }
+            .sortedWith(compareByDescending<com.sanket_satpute_20.ironmind.data.local.entity.ObservationEntity>{ it.occurredAt }.thenByDescending { it.id })
+            .take(limit)
+    }
+    
+    override fun getObservationsForTimeWindowWithTypesAsc(userId: String, types: List<String>, startTimeMs: Long, endTimeMs: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.ObservationEntity> {
+        return entities.values
+            .filter { it.userId == userId && it.type in types && it.occurredAt >= startTimeMs && it.occurredAt < endTimeMs }
+            .sortedWith(compareBy({ it.occurredAt }, { it.id }))
+            .take(limit)
+    }
+    
+    override fun getObservationsForTimeWindowWithTypesDesc(userId: String, types: List<String>, startTimeMs: Long, endTimeMs: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.ObservationEntity> {
+        return entities.values
+            .filter { it.userId == userId && it.type in types && it.occurredAt >= startTimeMs && it.occurredAt < endTimeMs }
+            .sortedWith(compareByDescending<com.sanket_satpute_20.ironmind.data.local.entity.ObservationEntity>{ it.occurredAt }.thenByDescending { it.id })
+            .take(limit)
+    }
 }
 
     @Before
@@ -172,6 +195,83 @@ class ObservationRepositoryImplTest {
 
         val retrieveResult = repository.getObservationById("obs-1")
         assertTrue(retrieveResult is Result.Failure)
+    }
+
+    @Test
+    fun `getObservationsForTimeWindow with null types returns all types`() = runTest {
+        repository.insertObservation(createObservation(id = "1", type = ObservationType.APP_OPENED, occurredAt = 1000L))
+        repository.insertObservation(createObservation(id = "2", type = ObservationType.TASK_COMPLETED, occurredAt = 1500L))
+        
+        val result = repository.getObservationsForTimeWindow("user-1", 1000L, 2000L, null, 10, true)
+        assertTrue(result is Result.Success)
+        val data = (result as Result.Success).data
+        assertEquals(2, data.size)
+        assertEquals("1", data[0].id)
+        assertEquals("2", data[1].id)
+    }
+
+    @Test
+    fun `getObservationsForTimeWindow with empty list returns exactly zero matches`() = runTest {
+        repository.insertObservation(createObservation(id = "1", type = ObservationType.APP_OPENED, occurredAt = 1000L))
+        repository.insertObservation(createObservation(id = "2", type = ObservationType.TASK_COMPLETED, occurredAt = 1500L))
+        
+        val result = repository.getObservationsForTimeWindow("user-1", 1000L, 2000L, emptyList(), 10, true)
+        assertTrue(result is Result.Success)
+        val data = (result as Result.Success).data
+        assertEquals(0, data.size)
+    }
+
+    @Test
+    fun `getObservationsForTimeWindow with one type returns only that type`() = runTest {
+        repository.insertObservation(createObservation(id = "1", type = ObservationType.APP_OPENED, occurredAt = 1000L))
+        repository.insertObservation(createObservation(id = "2", type = ObservationType.TASK_COMPLETED, occurredAt = 1500L))
+        
+        val result = repository.getObservationsForTimeWindow("user-1", 1000L, 2000L, listOf(ObservationType.TASK_COMPLETED), 10, true)
+        assertTrue(result is Result.Success)
+        val data = (result as Result.Success).data
+        assertEquals(1, data.size)
+        assertEquals("2", data[0].id)
+    }
+
+    @Test
+    fun `getObservationsForTimeWindow with multiple types returns only those types`() = runTest {
+        repository.insertObservation(createObservation(id = "1", type = ObservationType.APP_OPENED, occurredAt = 1000L))
+        repository.insertObservation(createObservation(id = "2", type = ObservationType.TASK_COMPLETED, occurredAt = 1500L))
+        repository.insertObservation(createObservation(id = "3", type = ObservationType.ACTIVITY_CONTEXT_CHANGED, occurredAt = 1600L))
+        
+        val result = repository.getObservationsForTimeWindow("user-1", 1000L, 2000L, listOf(ObservationType.APP_OPENED, ObservationType.ACTIVITY_CONTEXT_CHANGED), 10, true)
+        assertTrue(result is Result.Success)
+        val data = (result as Result.Success).data
+        assertEquals(2, data.size)
+        assertEquals("1", data[0].id)
+        assertEquals("3", data[1].id)
+    }
+
+    @Test
+    fun `getObservationsForTimeWindow enforces start inclusive and end exclusive boundary`() = runTest {
+        repository.insertObservation(createObservation(id = "1", type = ObservationType.APP_OPENED, occurredAt = 999L))
+        repository.insertObservation(createObservation(id = "2", type = ObservationType.APP_OPENED, occurredAt = 1000L)) // In
+        repository.insertObservation(createObservation(id = "3", type = ObservationType.APP_OPENED, occurredAt = 1999L)) // In
+        repository.insertObservation(createObservation(id = "4", type = ObservationType.APP_OPENED, occurredAt = 2000L)) // Out
+        
+        val result = repository.getObservationsForTimeWindow("user-1", 1000L, 2000L, null, 10, true)
+        assertTrue(result is Result.Success)
+        val data = (result as Result.Success).data
+        assertEquals(2, data.size)
+        assertEquals("2", data[0].id)
+        assertEquals("3", data[1].id)
+    }
+
+    @Test
+    fun `getObservationsForTimeWindow preserves user isolation`() = runTest {
+        repository.insertObservation(createObservation(id = "1", userId = "user-1", type = ObservationType.APP_OPENED, occurredAt = 1500L))
+        repository.insertObservation(createObservation(id = "2", userId = "user-2", type = ObservationType.APP_OPENED, occurredAt = 1500L))
+        
+        val result = repository.getObservationsForTimeWindow("user-1", 1000L, 2000L, null, 10, true)
+        assertTrue(result is Result.Success)
+        val data = (result as Result.Success).data
+        assertEquals(1, data.size)
+        assertEquals("1", data[0].id)
     }
 }
 

@@ -105,12 +105,14 @@ class ObservationRepositoryImpl(
         orderAsc: Boolean
     ): Result<List<Observation>, Exception> = withContext(Dispatchers.IO) {
         try {
-            val entities = if (types.isNullOrEmpty()) {
+            val entities = if (types == null) {
                 if (orderAsc) {
                     observationDao.getObservationsForTimeWindowAsc(userId, startTimeMs, endTimeMs, limit)
                 } else {
                     observationDao.getObservationsForTimeWindowDesc(userId, startTimeMs, endTimeMs, limit)
                 }
+            } else if (types.isEmpty()) {
+                emptyList()
             } else {
                 val typeStrings = types.map { it.name }
                 if (orderAsc) {

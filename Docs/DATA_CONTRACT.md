@@ -5022,6 +5022,8 @@ EvidenceReference[] (Durable provenance pointer)
 
 **OBSERVATION TYPE SEMANTICS:**
 - `DiscoveryCriteria.observationTypes = null` signifies "no filtering", meaning **all observation types** are included. The persistence layer must execute this as a type-agnostic query rather than falling back to iterative enums.
+- `DiscoveryCriteria.observationTypes = emptyList()` strictly signifies **zero matches**. An empty filter constraint means no types are allowed, yielding an empty result set.
+- `DiscoveryCriteria.observationTypes = listOf(...)` (non-empty) strictly filters the results to ONLY the provided types.
 
 ---
 

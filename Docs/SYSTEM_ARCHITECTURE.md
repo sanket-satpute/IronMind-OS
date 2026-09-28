@@ -1042,7 +1042,7 @@ The Pattern Engine discovers supporting evidence through a strict, deterministic
 2. **Domain Validation**: The Domain evaluates the proposal. If valid, the Domain constructs an executable `DiscoveryCriteria`.
 3. **Discovery Criteria execution**: The Domain executes the `DiscoveryCriteria`, applying an explicit `userId`, mandatory explicit time bounds (`startTimeMs`, `endTimeMs`), maximum `limit`, and deterministic `ordering`. 
    - **Ordering and Limit**: To prevent unsafe unbounded memory loads, global discovery executes database-level bounded queries (limit + order). Time-based ordering (`TIMESTAMP_ASC`, `TIMESTAMP_DESC`) resolves collisions using a deterministic secondary key (`sourceId`) at the repository level, merging multiple sources deterministically.
-   - **Type Semantics**: `observationTypes = null` executes as a type-agnostic query for all observation types.
+   - **Type Semantics**: `observationTypes = null` executes as a type-agnostic query for all observation types. `observationTypes = emptyList()` acts as an empty constraint yielding zero matches.
 4. **Resolution**: The search produces a `List<EvidenceReference>`.
 
 Raw payload text (e.g. `Reflection` bodies, notifications) is excluded from the discovery boundary to prevent sensitive data leakage.
