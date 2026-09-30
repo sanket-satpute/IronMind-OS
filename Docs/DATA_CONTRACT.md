@@ -5016,9 +5016,11 @@ EvidenceReference[] (Durable provenance pointer)
 
 **DETERMINISTIC ORDERING & LIMIT SEMANTICS:**
 - Execution of `DiscoveryCriteria` is bound by a global `limit`.
-- Ordering (`TIMESTAMP_ASC`, `TIMESTAMP_DESC`) determines the truncation boundaries for this limit.
-- **Cross-Source Tie-Breaker**: When evidence timestamps collide, the system mandates a deterministic tie-breaker executed as `timestamp` → `sourceId` → `sourceType`. At the repository level, `id` serves as the authoritative secondary sort key.
-- **Canonical sourceType Order**: The explicit domain contract for cross-source ordering relation is: `EVENT` < `OBSERVATION` < `REFLECTION`. This must not rely on enum ordinal, string collation, or incidental database ordering.
+- Ordering determines the truncation boundaries for this limit. The explicit tie-breaker contract is `timestamp` → `sourceId` → `sourceType`.
+- **TIMESTAMP_ASC**: `timestamp` ASC → `sourceId` ASC → `sourceType` canonical ASC.
+- **TIMESTAMP_DESC**: `timestamp` DESC → `sourceId` ASC → `sourceType` canonical ASC.
+- Therefore, only the primary timestamp direction changes. `sourceId` direction is ALWAYS ASC. `sourceType` direction is ALWAYS canonical ASC.
+- **Canonical sourceType Order**: The explicit domain contract is `EVENT` < `OBSERVATION` < `REFLECTION`. This must not rely on enum ordinal, string collation, or incidental database ordering. At the repository level, `id` serves as the authoritative secondary sort key (always ASC).
 - Time-bounded queries must natively execute limits and sorting via the persistence layer (database) to prevent unbounded memory fetches.
 
 **SOURCE SCOPE SEMANTICS:**
