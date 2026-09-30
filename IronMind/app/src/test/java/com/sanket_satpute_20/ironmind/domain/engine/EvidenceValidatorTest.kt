@@ -82,7 +82,7 @@ class EvidenceValidatorTest {
         assertTrue(result is Result.Success)
         val data = (result as Result.Success).data
         assertEquals(1, data.size)
-        assertEquals(EvidenceReference(obs.id, EvidenceSourceType.OBSERVATION), data[0])
+        assertEquals(EvidenceReference(obs.id, EvidenceSourceType.OBSERVATION), data[0].reference)
     }
 
     @Test
@@ -104,9 +104,9 @@ class EvidenceValidatorTest {
         assertTrue(result is Result.Success)
         val data = (result as Result.Success).data
         assertEquals(3, data.size)
-        assertTrue(data.any { it.sourceId == "1" })
-        assertTrue(data.any { it.sourceId == "2" })
-        assertTrue(data.any { it.sourceId == "3" })
+        assertTrue(data.any { it.reference.sourceId == "1" })
+        assertTrue(data.any { it.reference.sourceId == "2" })
+        assertTrue(data.any { it.reference.sourceId == "3" })
         // 4 and 5 are excluded
     }
 
@@ -136,7 +136,7 @@ class EvidenceValidatorTest {
         assertTrue(result is Result.Success)
         val data = (result as Result.Success).data
         assertEquals(1, data.size)
-        assertEquals("1", data[0].sourceId)
+        assertEquals("1", data[0].reference.sourceId)
     }
 
     @Test
@@ -189,7 +189,7 @@ class EvidenceValidatorTest {
         assertTrue(result is Result.Success)
         val data = (result as Result.Success).data
         assertEquals(1, data.size)
-        assertEquals("dup", data[0].sourceId)
+        assertEquals("dup", data[0].reference.sourceId)
     }
 
     @Test

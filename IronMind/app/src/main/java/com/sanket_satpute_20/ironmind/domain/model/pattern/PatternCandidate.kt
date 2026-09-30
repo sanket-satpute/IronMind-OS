@@ -12,5 +12,6 @@ data class PatternCandidate(
     val description: String,
     val conditions: String? = null,
     val predictedBehavior: String? = null,
-    val contradictionSignal: String? = null // e.g. an obsoletePatternId it thinks it contradicts
+    val contradictionSignal: String? = null, // e.g. an obsoletePatternId it thinks it contradicts
+    val discoveryProposal: DiscoveryProposal? = null
 )
