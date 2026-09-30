@@ -308,6 +308,16 @@ class AutoRefFakePatternRepository : PatternRepository {
         return Result.Success(Unit)
     }
 
+    override suspend fun updatePattern(pattern: Pattern): Result<Unit, Exception> {
+        val index = patterns.indexOfFirst { it.id == pattern.id }
+        if (index != -1) patterns[index] = pattern else patterns.add(pattern)
+        return Result.Success(Unit)
+    }
+
+    override suspend fun getPatternByFingerprint(userId: String, fingerprint: String): Result<Pattern?, Exception> {
+        return Result.Success(patterns.find { it.fingerprint == fingerprint && it.userId == userId })
+    }
+
     override suspend fun getPattern(id: String): Result<Pattern?, Exception> = Result.Success(patterns.find { it.id == id })
     override suspend fun getPatternsForUser(userId: String): Result<List<Pattern>, Exception> = Result.Success(patterns.filter { it.userId == userId })
     override suspend fun getPatternsByType(userId: String, type: com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType): Result<List<Pattern>, Exception> = Result.Success(patterns.filter { it.type == type })

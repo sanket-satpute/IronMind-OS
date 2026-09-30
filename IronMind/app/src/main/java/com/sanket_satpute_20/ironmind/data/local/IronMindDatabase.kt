@@ -40,7 +40,7 @@ import com.sanket_satpute_20.ironmind.data.local.entity.*
         ActivityObservationSettingsEntity::class,
         com.sanket_satpute_20.ironmind.data.local.entity.ExperimentRecordEntity::class
     ],
-    version = 17,
+    version = 18,
     exportSchema = false
 )
 abstract class IronMindDatabase : RoomDatabase() {
@@ -374,6 +374,21 @@ abstract class IronMindDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
                 println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=17")
+            }
+        }
+
+        val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Add column
+                db.execSQL("ALTER TABLE `patterns` ADD COLUMN `fingerprint` TEXT NOT NULL DEFAULT ''")
+                
+                // Backfill deterministic fingerprint
+                db.execSQL("UPDATE `patterns` SET `fingerprint` = `userId` || '_' || `type` || '_' || lower(trim(`description`))")
+                
+                // Add unique index
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_patterns_fingerprint` ON `patterns` (`fingerprint`)")
+                
+                println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=18")
             }
         }
     }

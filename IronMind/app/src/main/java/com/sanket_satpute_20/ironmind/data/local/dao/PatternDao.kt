@@ -9,6 +9,9 @@ interface PatternDao {
     @Query("SELECT * FROM patterns WHERE id = :id")
     fun getPatternById(id: String): PatternEntity?
 
+    @Query("SELECT * FROM patterns WHERE userId = :userId AND fingerprint = :fingerprint")
+    fun getPatternByFingerprint(userId: String, fingerprint: String): PatternEntity?
+
     @Query("SELECT * FROM patterns WHERE userId = :userId ORDER BY lastObservedAt DESC")
     fun getPatternsForUser(userId: String): List<PatternEntity>
 
@@ -20,6 +23,9 @@ interface PatternDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertPattern(pattern: PatternEntity)
+
+    @Update
+    fun updatePattern(pattern: PatternEntity)
 
     @Query("UPDATE patterns SET confidence = :confidence, lastObservedAt = :lastObservedAt, updatedAt = :updatedAt WHERE id = :id")
     fun updatePatternConfidence(id: String, confidence: Float, lastObservedAt: Long, updatedAt: Long)

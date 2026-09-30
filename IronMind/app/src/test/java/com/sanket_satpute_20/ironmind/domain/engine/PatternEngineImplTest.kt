@@ -42,6 +42,15 @@ class PatternEngineImplTest {
             return Result.Success(Unit)
         }
 
+        override suspend fun updatePattern(pattern: Pattern): Result<Unit, Exception> {
+            store[pattern.id] = pattern
+            return Result.Success(Unit)
+        }
+
+        override suspend fun getPatternByFingerprint(userId: String, fingerprint: String): Result<Pattern?, Exception> {
+            return Result.Success(store.values.find { it.fingerprint == fingerprint && it.userId == userId })
+        }
+
         override suspend fun updatePatternConfidence(id: String, confidence: Float, lastObservedAt: Long): Result<Unit, Exception> {
             store[id]?.let { store[id] = it.copy(confidence = confidence, lastObservedAt = lastObservedAt) }
             return Result.Success(Unit)
@@ -68,6 +77,7 @@ class PatternEngineImplTest {
     ) = Pattern(
         id = id,
         userId = "user-1",
+        fingerprint = "user-1_POSTPONEMENT_PATTERN_test pattern",
         type = PatternType.POSTPONEMENT_PATTERN,
         description = "Test pattern",
         conditions = null,

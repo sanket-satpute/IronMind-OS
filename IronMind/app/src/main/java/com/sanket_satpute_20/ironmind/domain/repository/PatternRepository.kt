@@ -11,6 +11,8 @@ interface PatternRepository {
     suspend fun getPatternsByType(userId: String, type: PatternType): Result<List<Pattern>, Exception>
     suspend fun getPatternsByStatus(userId: String, status: PatternStatus): Result<List<Pattern>, Exception>
     suspend fun savePattern(pattern: Pattern): Result<Unit, Exception>
+    suspend fun updatePattern(pattern: Pattern): Result<Unit, Exception>
     suspend fun updatePatternConfidence(id: String, confidence: Float, lastObservedAt: Long): Result<Unit, Exception>
     suspend fun deletePattern(id: String): Result<Unit, Exception>
+    suspend fun getPatternByFingerprint(userId: String, fingerprint: String): Result<Pattern?, Exception>
 }

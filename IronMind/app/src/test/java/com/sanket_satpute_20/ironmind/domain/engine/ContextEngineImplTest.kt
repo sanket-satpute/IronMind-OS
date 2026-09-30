@@ -106,6 +106,8 @@ class ContextEngineImplTest {
         override suspend fun getPatternsByType(userId: String, type: com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType): Result<List<com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern>, Exception> = Result.Success(patterns)
         override suspend fun getPatternsByStatus(userId: String, status: com.sanket_satpute_20.ironmind.domain.model.pattern.PatternStatus): Result<List<com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern>, Exception> = Result.Success(patterns)
         override suspend fun savePattern(pattern: com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern): Result<Unit, Exception> = Result.Success(Unit)
+        override suspend fun updatePattern(pattern: com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern): Result<Unit, Exception> = Result.Success(Unit)
+        override suspend fun getPatternByFingerprint(userId: String, fingerprint: String): Result<com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern?, Exception> = Result.Success(null)
         override suspend fun updatePatternConfidence(id: String, confidence: Float, lastObservedAt: Long): Result<Unit, Exception> = Result.Success(Unit)
         override suspend fun deletePattern(id: String): Result<Unit, Exception> = Result.Success(Unit)
     }

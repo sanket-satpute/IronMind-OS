@@ -24,6 +24,15 @@ class PatternRepositoryImpl(
         }
     }
 
+    override suspend fun getPatternByFingerprint(userId: String, fingerprint: String): Result<Pattern?, Exception> = withContext(Dispatchers.IO) {
+        try {
+            val entity = dao.getPatternByFingerprint(userId, fingerprint)
+            Result.Success(entity?.toDomain())
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
+
     override suspend fun getPatternsForUser(userId: String): Result<List<Pattern>, Exception> = withContext(Dispatchers.IO) {
         try {
             Result.Success(dao.getPatternsForUser(userId).map { it.toDomain() })
@@ -57,6 +66,15 @@ class PatternRepositoryImpl(
         }
     }
 
+    override suspend fun updatePattern(pattern: Pattern): Result<Unit, Exception> = withContext(Dispatchers.IO) {
+        try {
+            dao.updatePattern(pattern.toEntity())
+            Result.Success(Unit)
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
+
     override suspend fun updatePatternConfidence(id: String, confidence: Float, lastObservedAt: Long): Result<Unit, Exception> = withContext(Dispatchers.IO) {
         try {
             dao.updatePatternConfidence(id, confidence, lastObservedAt, System.currentTimeMillis())
@@ -78,6 +96,7 @@ class PatternRepositoryImpl(
     private fun PatternEntity.toDomain() = Pattern(
         id = id,
         userId = userId,
+        fingerprint = fingerprint,
         type = PatternType.valueOf(type),
         description = description,
         conditions = conditions,
@@ -96,6 +115,7 @@ class PatternRepositoryImpl(
     private fun Pattern.toEntity() = PatternEntity(
         id = id,
         userId = userId,
+        fingerprint = fingerprint,
         type = type.name,
         description = description,
         conditions = conditions,

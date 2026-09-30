@@ -5,6 +5,7 @@ import com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState
 data class Pattern(
     val id: String,
     val userId: String,
+    val fingerprint: String,
     val type: PatternType,
     val description: String,
     val conditions: String?,

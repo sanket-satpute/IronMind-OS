@@ -4361,6 +4361,15 @@ Evidence Sufficiency operates strictly within the Domain Layer and enforces the 
 
 ---
 
+# 221. PATTERN ACCEPTANCE ARCHITECTURE
+
+Pattern Acceptance operates as a pure domain function separating candidate evaluation from database persistence:
+1. **Separation of Concerns:** A `PatternAcceptanceEvaluator` returns a deterministic `PatternAcceptanceResult` (Accepted, Rejected, Error). Orchestration code consumes this result to persist changes.
+2. **Concurrency/Idempotency:** The evaluation and subsequent repository mutations MUST run inside an explicit transaction or synchronization mechanism to prevent race conditions from duplicate candidates.
+3. **Identity Separation:** Pattern Identity (derived from candidate semantic fields) is strictly separated from Evidence Identity (source id and type).
+
+---
+
 # END OF SYSTEM ARCHITECTURE
 
 ````

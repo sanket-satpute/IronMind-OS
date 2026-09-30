@@ -88,6 +88,16 @@ class FakePatternRepository : PatternRepository {
         return Result.Success(Unit)
     }
 
+    override suspend fun updatePattern(pattern: Pattern): Result<Unit, Exception> {
+        val index = savedPatterns.indexOfFirst { it.id == pattern.id }
+        if (index != -1) savedPatterns[index] = pattern else savedPatterns.add(pattern)
+        return Result.Success(Unit)
+    }
+
+    override suspend fun getPatternByFingerprint(userId: String, fingerprint: String): Result<Pattern?, Exception> {
+        return Result.Success(savedPatterns.find { it.fingerprint == fingerprint && it.userId == userId })
+    }
+
     override suspend fun getPattern(id: String): Result<Pattern?, Exception> {
         return Result.Success(null)
     }

@@ -37,6 +37,13 @@ class PatternRepositoryImplTest {
             store[pattern.id] = pattern
         }
 
+        override fun updatePattern(pattern: PatternEntity) {
+            store[pattern.id] = pattern
+        }
+
+        override fun getPatternByFingerprint(userId: String, fingerprint: String): PatternEntity? =
+            store.values.find { it.fingerprint == fingerprint && it.userId == userId }
+
         override fun updatePatternConfidence(id: String, confidence: Float, lastObservedAt: Long, updatedAt: Long) {
             store[id]?.let { store[id] = it.copy(confidence = confidence, lastObservedAt = lastObservedAt, updatedAt = updatedAt) }
         }
@@ -65,6 +72,7 @@ class PatternRepositoryImplTest {
     private fun makePattern(id: String = "p1", userId: String = "user-1") = Pattern(
         id = id,
         userId = userId,
+        fingerprint = "${userId}_POSTPONEMENT_PATTERN_tends to postpone gym",
         type = PatternType.POSTPONEMENT_PATTERN,
         description = "Tends to postpone gym",
         conditions = null,

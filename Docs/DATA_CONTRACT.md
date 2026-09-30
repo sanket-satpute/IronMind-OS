@@ -6114,6 +6114,22 @@ The authoritative V1 Sufficiency Policy is:
 
 ---
 
+# 332. V1 PATTERN CONFIDENCE & LIFECYCLE POLICY
+
+The authoritative V1 Pattern Confidence, Lifecycle, and Deduplication Policy is:
+1. **Confidence Semantics:** Pattern confidence represents the domain reliability and empirical reinforcement state, NOT a statistical probability or AI model certainty.
+2. **Initial Confidence:** A newly accepted Pattern that passes Evidence Sufficiency receives a fixed baseline confidence of `0.8f`.
+3. **Confidence Reinforcement:** If an existing Pattern receives new valid evidence, its confidence is updated to `max(existingConfidence, 0.8f)`.
+4. **Pattern Lifecycle:** A newly accepted Pattern is created with `PatternStatus.ACTIVE` and `MemoryConfirmationState.UNCONFIRMED`.
+5. **Pattern Identity:** Pattern identity is deterministically defined by `userId`, `type`, and normalized `description`. It is strictly independent of Evidence Identity.
+6. **Candidate Idempotency & Deduplication:** When a PatternCandidate matches the fingerprint of an existing Pattern:
+   - If the candidate brings new valid evidence: The existing Pattern is UPDATED (evidence appended, timestamps updated, confidence revived).
+   - If the candidate brings identical evidence: The operation is a NO-OP.
+   - If the existing Pattern is EXPIRED: It is revived to `ACTIVE` with confidence reset to `0.8f`.
+   - If the existing Pattern was deleted: A NEW Pattern is created.
+
+---
+
 # END OF DATA CONTRACT
 
 ````
