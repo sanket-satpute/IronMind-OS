@@ -68,7 +68,7 @@ class DiscoveryDaoTest {
         val results = ironMindDao.getEventsForDateRangeDesc("user", 1000L, 3000L, 2)
         assertEquals(2, results.size)
         assertEquals("3", results[0].id)
-        assertEquals("2", results[1].id) // id DESC
+        assertEquals("1", results[1].id) // id ASC
     }
 
     // --- OBSERVATION TESTS ---
@@ -101,27 +101,29 @@ class DiscoveryDaoTest {
 
         val results = observationDao.getObservationsForTimeWindowWithTypesDesc("user", listOf("TYPE_A", "TYPE_B"), 100L, 300L, 2)
         assertEquals(2, results.size)
-        assertEquals("2", results[0].id) // 100L, id=2 DESC
-        assertEquals("1", results[1].id) // 100L, id=1 DESC
+        assertEquals("1", results[0].id) // 100L, id=1 ASC
+        assertEquals("2", results[1].id) // 100L, id=2 ASC
     }
 
     // --- REFLECTION TESTS ---
     @Test
     fun `reflections date range DESC limit boundary`() = runTest {
         val r1 = ref("1", 10L) // Excluded (start)
-        val r2 = ref("2", 100L)
+        val r2a = ref("2a", 100L) // tie
         val r3 = ref("3", 200L)
         val r4 = ref("4", 300L) // Excluded (end boundary exclusive)
 
         ironMindDao.insertReflection(r1)
+        ironMindDao.insertReflection(r2a)
         ironMindDao.insertReflection(r2)
         ironMindDao.insertReflection(r3)
         ironMindDao.insertReflection(r4)
 
         val results = ironMindDao.getReflectionsForDateRangeDesc("user", 100L, 300L, 5)
-        assertEquals(2, results.size)
+        assertEquals(3, results.size)
         assertEquals("3", results[0].id)
-        assertEquals("2", results[1].id)
+        assertEquals("2", results[1].id) // 100L, 2 before 2a
+        assertEquals("2a", results[2].id)
     }
 
     private fun event(id: String, occurredAt: Long) = EventEntity(

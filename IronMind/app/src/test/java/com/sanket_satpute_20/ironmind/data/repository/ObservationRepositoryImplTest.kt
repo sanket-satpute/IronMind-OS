@@ -94,7 +94,7 @@ class ObservationRepositoryImplTest {
     override fun getObservationsForTimeWindowDesc(userId: String, startTimeMs: Long, endTimeMs: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.ObservationEntity> {
         return entities.values
             .filter { it.userId == userId && it.occurredAt >= startTimeMs && it.occurredAt < endTimeMs }
-            .sortedWith(compareByDescending<com.sanket_satpute_20.ironmind.data.local.entity.ObservationEntity>{ it.occurredAt }.thenByDescending { it.id })
+            .sortedWith(compareByDescending<com.sanket_satpute_20.ironmind.data.local.entity.ObservationEntity>{ it.occurredAt }.thenBy { it.id })
             .take(limit)
     }
     
@@ -108,7 +108,7 @@ class ObservationRepositoryImplTest {
     override fun getObservationsForTimeWindowWithTypesDesc(userId: String, types: List<String>, startTimeMs: Long, endTimeMs: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.ObservationEntity> {
         return entities.values
             .filter { it.userId == userId && it.type in types && it.occurredAt >= startTimeMs && it.occurredAt < endTimeMs }
-            .sortedWith(compareByDescending<com.sanket_satpute_20.ironmind.data.local.entity.ObservationEntity>{ it.occurredAt }.thenByDescending { it.id })
+            .sortedWith(compareByDescending<com.sanket_satpute_20.ironmind.data.local.entity.ObservationEntity>{ it.occurredAt }.thenBy { it.id })
             .take(limit)
     }
 }
