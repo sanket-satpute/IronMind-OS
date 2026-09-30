@@ -109,8 +109,6 @@ class AutonomousReflectionEngineImpl(
                     // Sprint 11C: AI outputs PatternCandidates, not Patterns.
                     // DO NOT directly persist these candidates into Pattern Repository.
                     // The future Pattern Engine will validate evidence, calculate confidence, and manage state.
-                    
-                    println("IronMindLifecycle [ReflectionEngine] [CANDIDATE_LOGGED] type=${candidate.type} description=${candidate.description} contradictionSignal=${candidate.contradictionSignal}")
                 }
             }
             else -> {

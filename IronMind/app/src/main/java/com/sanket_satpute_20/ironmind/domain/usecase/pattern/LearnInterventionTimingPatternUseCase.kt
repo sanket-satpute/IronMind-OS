@@ -96,7 +96,6 @@ class LearnInterventionTimingPatternUseCase(
             // DO NOT directly persist these candidates.
 
             val candidate = aiOutput.candidate
-            println("IronMindLifecycle [InterventionLearning] [TIMING_CANDIDATE_LOGGED] type=${candidate.type} description=${candidate.description}")
 
             Result.Success(candidate)
         } catch (e: Exception) {

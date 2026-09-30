@@ -67,9 +67,7 @@ class EvolvePersonalModelUseCase(
             // Temporary transitional behavior: Log candidates instead of blindly saving
             println("IronMindLifecycle [PatternLearning] [CANDIDATES_RECEIVED] userId=$userId candidateCount=${candidates.size}")
 
-            for (candidate in candidates) {
-                println("IronMindLifecycle [PatternLearning] [CANDIDATE_LOGGED] type=${candidate.type} description=${candidate.description} contradictionSignal=${candidate.contradictionSignal}")
-            }
+
             Result.Success(Unit)
 
         } catch (e: Exception) {

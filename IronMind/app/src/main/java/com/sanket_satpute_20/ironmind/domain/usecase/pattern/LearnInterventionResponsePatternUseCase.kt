@@ -98,7 +98,6 @@ class LearnInterventionResponsePatternUseCase(
             // The future Pattern Engine will validate evidence, calculate confidence, and manage state.
 
             val candidate = aiOutput.candidate
-            println("IronMindLifecycle [InterventionLearning] [CANDIDATE_LOGGED] type=${candidate.type} description=${candidate.description}")
 
             Result.Success(candidate)
         } catch (e: Exception) {
