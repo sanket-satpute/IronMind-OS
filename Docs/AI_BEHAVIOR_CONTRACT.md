@@ -5785,6 +5785,17 @@ LEARN FROM WHAT ACTUALLY HAPPENED
 
 ---
 
+# 280. EVIDENCE SUFFICIENCY & AI HYPOTHESES
+
+The AI generates `PatternCandidate` hypotheses. The domain validates these against Evidence Sufficiency.
+
+The authoritative V1 Policy for AI:
+1. **Contradiction Signal:** `PatternCandidate.contradictionSignal` remains an AI-generated hypothesis. It MUST NOT independently block Evidence Sufficiency, nor mutate, expire, reject, or modify a Pattern.
+2. **AI Confidence:** AI-generated confidence MUST NOT contribute to Evidence Sufficiency. It remains hypothesis metadata only and MUST NOT become authoritative Pattern confidence.
+3. **Timezone Authority:** Calendar-day evaluation for sufficiency MUST NOT use an implicitly selected timezone from the AI. It is strictly supplied by the domain execution context.
+
+---
+
 # END OF AI BEHAVIOR CONTRACT
 
 ````

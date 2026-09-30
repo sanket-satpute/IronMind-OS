@@ -6099,6 +6099,21 @@ WHAT SHOULD CHANGE NEXT
 
 ---
 
+# 331. V1 EVIDENCE SUFFICIENCY POLICY
+
+Evidence Sufficiency answers whether a validated evidence set quantitatively and structurally supports a PatternCandidate.
+
+The authoritative V1 Sufficiency Policy is:
+1. **Minimum Unique Evidence:** At least 3 unique valid EvidenceReferences. Identity is `(sourceId, sourceType)`. Duplicate references do not increase evidence count.
+2. **Temporal Requirement:** Valid evidence must span at least 2 distinct calendar days. This is based on calendar date, not an arbitrary millisecond delta.
+3. **Calendar Timezone Authority:** The timezone used to determine calendar-day boundaries must be supplied by the domain execution context. It is NOT AI-controlled.
+4. **Source Diversity:** Not required for V1. EVENT, OBSERVATION, and REFLECTION may independently satisfy the requirement. No source-type weighting.
+5. **Pattern Persistence:** Evidence Sufficiency MUST NOT persist Pattern. It yields an evaluation result (SUFFICIENT, INSUFFICIENT, ERROR) consumed by acceptance flows.
+6. **Error Semantics:** A repository/system failure is an ERROR. Valid evidence below threshold is an INSUFFICIENT result. Infrastructure failure must not be converted into "insufficient evidence".
+7. **Existing Pattern Decay:** Remains separate from Sufficiency. Decay applies only to an already-authoritative Pattern (30 days threshold, 0.5 factor, < 0.1 expiration threshold).
+
+---
+
 # END OF DATA CONTRACT
 
 ````

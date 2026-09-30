@@ -4337,6 +4337,30 @@ That cycle is the technical embodiment of IronMind's product mission.
 
 ---
 
+# 220. EVIDENCE SUFFICIENCY ARCHITECTURE
+
+Evidence Sufficiency operates strictly within the Domain Layer and enforces the following architectural boundaries:
+
+1. **Required Contract Separation:**
+   - Evidence Discovery
+   - Evidence Validation
+   - Evidence Sufficiency
+   - Pattern Acceptance
+   - Pattern Confidence
+   - Pattern Lifecycle / Decay
+   These concepts must not be combined.
+
+2. **Sufficiency Result Concept:**
+   Evidence Sufficiency yields a structured domain result (SUFFICIENT, INSUFFICIENT, ERROR). Structured deterministic reasons for INSUFFICIENT should be allowed without requiring raw evidence payloads.
+   
+3. **Pattern Confidence:**
+   V1 Evidence Sufficiency MUST NOT calculate Pattern confidence. Initial Pattern confidence is explicitly DEFERRED to a separate future Pattern Confidence contract. No confidence formulas or constants should be invented here.
+
+4. **Privacy Boundary:**
+   Sufficiency operates on validated evidence identity (`sourceId`, `sourceType`) and the minimum metadata required (like timestamps). It must not require or log raw payload text, reflection content, calendar titles, or location coordinates.
+
+---
+
 # END OF SYSTEM ARCHITECTURE
 
 ````
