@@ -212,6 +212,16 @@ interface AppContainer {
     val experimentRepository: ExperimentRepository
     val taskRepository: com.sanket_satpute_20.ironmind.domain.repository.TaskRepository
     val interventionExecutionPipeline: com.sanket_satpute_20.ironmind.domain.engine.InterventionExecutionPipeline
+    
+    val patternAcceptanceUseCase: com.sanket_satpute_20.ironmind.domain.usecase.pattern.PatternAcceptanceUseCase
+    val evaluatePatternCandidateUseCase: com.sanket_satpute_20.ironmind.domain.usecase.pattern.EvaluatePatternCandidateUseCase
+    val evaluatePatternCandidatesUseCase: com.sanket_satpute_20.ironmind.domain.usecase.pattern.EvaluatePatternCandidatesUseCase
+    val evidenceDiscovery: com.sanket_satpute_20.ironmind.domain.engine.EvidenceDiscovery
+    val evidenceResolver: com.sanket_satpute_20.ironmind.domain.engine.EvidenceResolver
+    val evidenceValidator: com.sanket_satpute_20.ironmind.domain.engine.EvidenceValidator
+    val evidenceSufficiencyEvaluator: com.sanket_satpute_20.ironmind.domain.engine.EvidenceSufficiencyEvaluator
+    val patternAcceptanceEvaluator: com.sanket_satpute_20.ironmind.domain.engine.PatternAcceptanceEvaluator
+
     // V4.1 App Usage Observation
     val appUsageObservationSettingsRepository: AppUsageObservationSettingsRepository
     val appUsageObservationProvider: AppUsageObservationProvider
@@ -499,7 +509,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     override val saveReflectionUseCase: SaveReflectionUseCase by lazy {
-        SaveReflectionUseCase(reflectionRepository, idGenerator, clock, eventRepository)
+        SaveReflectionUseCase(reflectionRepository, idGenerator, clock, eventRepository, backgroundExecutor)
     }
 
     override val editGoalUseCase: EditGoalUseCase by lazy {
@@ -637,6 +647,54 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         PatternEngineImpl(
             clock = clock,
             patternRepository = patternRepository
+        )
+    }
+
+    override val evidenceDiscovery: com.sanket_satpute_20.ironmind.domain.engine.EvidenceDiscovery by lazy {
+        com.sanket_satpute_20.ironmind.domain.engine.EvidenceDiscovery(eventRepository, observationRepository, reflectionRepository, logger)
+    }
+
+    override val evidenceResolver: com.sanket_satpute_20.ironmind.domain.engine.EvidenceResolver by lazy {
+        com.sanket_satpute_20.ironmind.domain.engine.EvidenceResolver(observationRepository, eventRepository, reflectionRepository)
+    }
+
+    override val evidenceValidator: com.sanket_satpute_20.ironmind.domain.engine.EvidenceValidator by lazy {
+        com.sanket_satpute_20.ironmind.domain.engine.EvidenceValidator()
+    }
+
+    override val evidenceSufficiencyEvaluator: com.sanket_satpute_20.ironmind.domain.engine.EvidenceSufficiencyEvaluator by lazy {
+        com.sanket_satpute_20.ironmind.domain.engine.EvidenceSufficiencyEvaluator()
+    }
+
+    override val patternAcceptanceEvaluator: com.sanket_satpute_20.ironmind.domain.engine.PatternAcceptanceEvaluator by lazy {
+        com.sanket_satpute_20.ironmind.domain.engine.PatternAcceptanceEvaluator(
+            evidenceSufficiencyEvaluator = evidenceSufficiencyEvaluator
+        )
+    }
+
+    override val patternAcceptanceUseCase: com.sanket_satpute_20.ironmind.domain.usecase.pattern.PatternAcceptanceUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.pattern.PatternAcceptanceUseCase(
+            evaluator = patternAcceptanceEvaluator,
+            patternRepository = patternRepository,
+            idGenerator = { java.util.UUID.randomUUID().toString() }
+        )
+    }
+
+    override val evaluatePatternCandidateUseCase: com.sanket_satpute_20.ironmind.domain.usecase.pattern.EvaluatePatternCandidateUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.pattern.EvaluatePatternCandidateUseCase(
+            clock = clock,
+            evidenceDiscovery = evidenceDiscovery,
+            evidenceResolver = evidenceResolver,
+            evidenceValidator = evidenceValidator,
+            patternAcceptanceUseCase = patternAcceptanceUseCase,
+            logger = logger
+        )
+    }
+
+    override val evaluatePatternCandidatesUseCase: com.sanket_satpute_20.ironmind.domain.usecase.pattern.EvaluatePatternCandidatesUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.pattern.EvaluatePatternCandidatesUseCase(
+            evaluatePatternCandidateUseCase = evaluatePatternCandidateUseCase,
+            logger = logger
         )
     }
 

@@ -1261,6 +1261,26 @@ SUMMARY
 CLARIFICATION_REQUEST
 NO_ACTION
 ```
+---
+
+# 78A. PATTERN CANDIDATE CONSTRAINTS
+
+When generating a `PATTERN_CANDIDATE` (or `MODEL_EVOLUTION`), the AI may propose a `DiscoveryProposal`. 
+**TEMPORAL RESTRICTION:** The AI MUST NOT provide evaluation time, `startTimeMs`, `endTimeMs`, duration, or any temporal vocabulary (e.g., "LAST_30_DAYS") for Pattern Evidence Discovery. The Domain strictly owns and calculates the evaluation time and the fixed 30-day historical horizon.
+
+---
+
+# 78B. REFLECTION PROCESSING PIPELINE SEMANTICS
+
+Reflection processing may produce zero or more PatternCandidates.
+
+- `NoAction`: Evaluates to `Success(emptyList())` and passes through without error.
+- **AI/provider failure**: Results in a `producer Failure`.
+- **Producer failure**: Results in a Worker retry according to existing Worker policy.
+
+Candidate evaluation is a separate downstream boundary. Candidate-level evaluation failures must not be represented as AI success/failure semantics.
+
+Pattern acceptance remains passive knowledge generation. No task, goal, commitment, notification, or protection action is created by this pipeline.
 
 ---
 

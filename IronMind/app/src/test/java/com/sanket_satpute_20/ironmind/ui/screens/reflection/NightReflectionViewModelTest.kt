@@ -53,7 +53,7 @@ class NightReflectionViewModelTest {
         }
 
         getCommitmentsForDateRangeUseCase = GetCommitmentsForDateRangeUseCase(commitmentRepository)
-        saveReflectionUseCase = SaveReflectionUseCase(reflectionRepository, idGenerator, clock, eventRepository)
+        saveReflectionUseCase = SaveReflectionUseCase(reflectionRepository, idGenerator, clock, eventRepository, com.sanket_satpute_20.ironmind.testutil.fake.FakeBackgroundExecutor())
     }
 
     private suspend fun createCommitment(id: String, status: CommitmentStatus) {

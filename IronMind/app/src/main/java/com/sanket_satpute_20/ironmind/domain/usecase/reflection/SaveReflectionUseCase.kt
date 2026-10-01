@@ -9,12 +9,14 @@ import com.sanket_satpute_20.ironmind.domain.repository.EventRepository
 import com.sanket_satpute_20.ironmind.domain.model.Event
 import com.sanket_satpute_20.ironmind.domain.model.EventType
 import com.sanket_satpute_20.ironmind.domain.model.EntitySource
+import com.sanket_satpute_20.ironmind.execution.background.BackgroundExecutor
 
 class SaveReflectionUseCase(
     private val repository: ReflectionRepository,
     private val idGenerator: IdGenerator,
     private val clock: Clock,
-    private val eventRepository: EventRepository
+    private val eventRepository: EventRepository,
+    private val backgroundExecutor: BackgroundExecutor
 ) {
     suspend operator fun invoke(
         userId: String,
@@ -52,6 +54,13 @@ class SaveReflectionUseCase(
             )
             eventRepository.saveEvent(event)
             println("IronMindLifecycle [Reflection] [SAVED] reflectionId=${reflection.id}")
+            
+            try {
+                backgroundExecutor.scheduleReflectionProcessing(reflection.id)
+            } catch (e: Exception) {
+                println("IronMindLifecycle [Reflection] [reflection_processing_schedule_failed] reflectionId=${reflection.id}")
+            }
+            
             Result.Success(reflection)
         } else {
             Result.Failure((result as Result.Failure).error)

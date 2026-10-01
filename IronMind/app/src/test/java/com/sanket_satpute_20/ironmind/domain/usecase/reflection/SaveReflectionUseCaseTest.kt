@@ -6,6 +6,7 @@ import com.sanket_satpute_20.ironmind.domain.model.Reflection
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
 import com.sanket_satpute_20.ironmind.domain.repository.ReflectionRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeEventRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeBackgroundExecutor
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -48,6 +49,7 @@ class SaveReflectionUseCaseTest {
     private lateinit var idGenerator: FakeIdGenerator
     private lateinit var clock: FakeClock
     private lateinit var eventRepository: FakeEventRepository
+    private lateinit var backgroundExecutor: FakeBackgroundExecutor
     private lateinit var useCase: SaveReflectionUseCase
 
     @Before
@@ -56,7 +58,8 @@ class SaveReflectionUseCaseTest {
         idGenerator = FakeIdGenerator()
         clock = FakeClock()
         eventRepository = FakeEventRepository()
-        useCase = SaveReflectionUseCase(repository, idGenerator, clock, eventRepository)
+        backgroundExecutor = FakeBackgroundExecutor()
+        useCase = SaveReflectionUseCase(repository, idGenerator, clock, eventRepository, backgroundExecutor)
     }
 
     @Test
@@ -78,6 +81,9 @@ class SaveReflectionUseCaseTest {
 
         val saved = (repository.getReflection("ref-1") as Result.Success).data
         assertEquals(reflection, saved)
+
+        assertTrue(backgroundExecutor.scheduleReflectionProcessingCalled)
+        assertEquals("ref-1", backgroundExecutor.scheduledReflectionId)
     }
 
     @Test
@@ -89,5 +95,24 @@ class SaveReflectionUseCaseTest {
 
         assertTrue(result is Result.Failure)
         assertTrue((result as Result.Failure).error is IllegalArgumentException)
+        assertTrue(!backgroundExecutor.scheduleReflectionProcessingCalled)
+    }
+
+    @Test
+    fun `saveReflection succeeds even if scheduling throws`() = runTest {
+        idGenerator.nextId = "ref-2"
+        backgroundExecutor.shouldThrowException = true
+
+        val result = useCase(
+            userId = "user-1",
+            content = "This should save."
+        )
+
+        assertTrue(result is Result.Success)
+        val reflection = (result as Result.Success).data
+        assertEquals("ref-2", reflection.id)
+
+        val saved = (repository.getReflection("ref-2") as Result.Success).data
+        assertEquals(reflection, saved)
     }
 }

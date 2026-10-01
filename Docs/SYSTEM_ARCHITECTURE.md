@@ -1027,10 +1027,11 @@ Task Size
 → Completion Probability
 ```
 
-The Pattern Engine enforces the boundary between AI interpretation and domain learning:
-1. **AI Proposes**: AI analyzes a `ContextSnapshot` and outputs a `PatternCandidate`.
-2. **Domain Validates**: The Pattern Engine inspects the candidate, ensuring it is grounded in real evidence.
-3. **Domain Owns**: The Pattern Engine converts the candidate into a permanent `Pattern` entity, taking ownership of `confidence`, typed `evidenceReferences`, and `status`.
+The Pattern Engine and Orchestration layer enforce the boundary between AI interpretation and domain learning:
+
+- **Pattern Engine / Pattern Domain** owns: Pattern-domain maintenance, decay, expiration, and lifecycle maintenance of persisted `Pattern` entities.
+- **EvaluatePatternCandidateUseCase** owns: `PatternCandidate` evaluation orchestration, `DiscoveryProposal` → `DiscoveryCriteria` mapping, evidence discovery, resolution, validation, sufficiency evaluation, and delegation to `PatternAcceptanceUseCase`.
+- **PatternAcceptanceUseCase** owns: The explicit Pattern acceptance/persistence boundary.
 
 ---
 
@@ -1039,8 +1040,8 @@ The Pattern Engine enforces the boundary between AI interpretation and domain le
 The Pattern Engine discovers supporting evidence through a strict, deterministic boundary to protect privacy and maintain authority:
 
 1. **AI Discovery Proposal**: The AI outputs a `DiscoveryProposal` alongside the `PatternCandidate`. This proposal is strictly bounded to enums (e.g., `EvidenceSourceType`, `EventType`). It MUST NOT contain raw search text, `userId`, or hallucinated evidence IDs.
-2. **Domain Validation**: The Domain evaluates the proposal. If valid, the Domain constructs an executable `DiscoveryCriteria`.
-3. **Discovery Criteria execution**: The Domain executes the `DiscoveryCriteria`, applying an explicit `userId`, mandatory explicit time bounds (`startTimeMs`, `endTimeMs`), maximum `limit`, and deterministic `ordering`. 
+2. **Domain Validation (EvaluatePatternCandidateUseCase)**: The Domain evaluates the proposal. If valid, the `EvaluatePatternCandidateUseCase` constructs an executable `DiscoveryCriteria`. It strictly owns and derives the explicit time bounds (`startTimeMs`, `endTimeMs`) directly from the domain `Clock` using a fixed 30-calendar-day lookback. The AI CANNOT supply these temporal bounds.
+3. **Discovery Criteria execution**: The Domain executes the `DiscoveryCriteria`, applying an explicit `userId`, the domain-derived explicit time bounds, maximum `limit`, and deterministic `ordering`. 
    - **Ordering and Limit**: To prevent unsafe unbounded memory loads, global discovery executes database-level bounded queries (limit + order). The primary ordering is time-based (`TIMESTAMP_ASC` or `TIMESTAMP_DESC`). Collisions are resolved using a deterministic secondary key (`sourceId`) at the repository level, and finally a canonical `sourceType` relation (`EVENT` < `OBSERVATION` < `REFLECTION`). Only the primary timestamp direction changes based on the requested order. The secondary (`sourceId`) and tertiary (`sourceType`) tie-breakers ALWAYS remain strictly ascending. This explicit domain contract must not rely on enum ordinal or string collation.
    - **Type Semantics**: `observationTypes = null` executes as a type-agnostic query for all observation types. `observationTypes = emptyList()` acts as an empty constraint yielding zero matches. `sourceScope = emptyList()` strictly signifies zero authorized sources, yielding zero matches.
 4. **Resolution**: The search produces a `List<EvidenceReference>`.
@@ -1048,6 +1049,30 @@ The Pattern Engine discovers supporting evidence through a strict, deterministic
 Raw payload text (e.g. `Reflection` bodies, notifications) is excluded from the discovery boundary to prevent sensitive data leakage.
 
 ---
+
+# 44B. PATTERN ACCEPTANCE ORCHESTRATION PIPELINE
+
+The `EvaluatePatternCandidateUseCase` fully owns the 8-step integration pipeline for Pattern learning. This logic is NOT part of `PatternEngineImpl` (which handles domain maintenance like decay).
+
+**The Pipeline:**
+1. **Input**: `PatternCandidate` (must include optional `DiscoveryProposal`).
+2. **Temporal Policy**: Derived directly from `Clock` (fixed 30-day lookback).
+3. **Criteria Construction**: Orchestrator maps Proposal + Time + `userId` into `DiscoveryCriteria`.
+4. **Evidence Discovery**: `EvidenceDiscovery` queries bounded `EvidenceReference`s.
+5. **Evidence Resolution**: `EvidenceResolver` hydrates actual entities.
+6. **Evidence Validation**: `EvidenceValidator` verifies domain rules and extracts authoritative timestamps, outputting `ValidatedEvidence`.
+7. **Sufficiency Evaluation**: `EvidenceSufficiencyEvaluator` verifies the 3-evidence/2-calendar-day threshold.
+8. **Acceptance**: `PatternAcceptanceUseCase` persists the `Pattern`.
+
+**Failure Semantics:**
+- **Expected Rejection:** Missing proposal, zero evidence, insufficient evidence, invalid candidate, or acceptance rejection/duplicate. Behavior: No user-facing intervention. Structural lifecycle logging permitted. Candidate is skipped. Remaining independent candidates continue.
+- **System Failure:** Repository failure, resolution error, sufficiency error, or persistence failure. Behavior: No user-facing intervention. Error/lifecycle logging required. Failure category must remain observable. Candidate is skipped. Remaining independent candidates continue where safe. System failures MUST NOT become empirical rejection.
+
+**Multiple Candidates:** Evaluated sequentially, independently, and in deterministic list order. Identical fingerprints are serialized by a Mutex (Candidate A = AcceptedNew, Candidate B = UpdatedExisting).
+
+**Autonomy Boundary:** Accepted Pattern persistence is passive domain-state learning. It NEVER automatically triggers interventions, tasks, goals, or notifications.
+
+**Privacy Logging:** Standard lifecycle logs MUST NOT contain `candidate.description`, conditions, predicted behavior, contradiction signals, or raw evidence payloads. Logs may contain structural metadata such as `PatternType`, candidate result, evidence count, and failure category.
 
 # 45. PATTERN CONFIDENCE AND EVIDENCE
 
@@ -4354,7 +4379,7 @@ Evidence Sufficiency operates strictly within the Domain Layer and enforces the 
    Evidence Sufficiency yields a structured domain result (SUFFICIENT, INSUFFICIENT, ERROR). Structured deterministic reasons for INSUFFICIENT should be allowed without requiring raw evidence payloads.
    
 3. **Pattern Confidence:**
-   V1 Evidence Sufficiency MUST NOT calculate Pattern confidence. Initial Pattern confidence is explicitly DEFERRED to a separate future Pattern Confidence contract. No confidence formulas or constants should be invented here.
+   `EvidenceSufficiencyEvaluator` MUST NOT calculate Pattern confidence. `PatternAcceptanceUseCase` strictly owns the approved Pattern confidence rules: New Pattern initial confidence = 0.8, and Existing Pattern reinforcement = max(existingConfidence, 0.8). Confidence represents empirical/domain reliability, not AI probability. AI confidence is NOT authoritative Pattern confidence.
 
 4. **Privacy Boundary:**
    Sufficiency operates on validated evidence identity (`sourceId`, `sourceType`) and the minimum metadata required (like timestamps). It must not require or log raw payload text, reflection content, calendar titles, or location coordinates.
@@ -4364,9 +4389,46 @@ Evidence Sufficiency operates strictly within the Domain Layer and enforces the 
 # 221. PATTERN ACCEPTANCE ARCHITECTURE
 
 Pattern Acceptance operates as a pure domain function separating candidate evaluation from database persistence:
-1. **Separation of Concerns:** A `PatternAcceptanceEvaluator` returns a deterministic `PatternAcceptanceResult` (Accepted, Rejected, Error). Orchestration code consumes this result to persist changes.
+1. **Separation of Concerns:** A `PatternAcceptanceEvaluator` returns a deterministic `PatternAcceptanceResult` (`AcceptedNew`, `UpdatedExisting`, `NoOp`, `Rejected`). Orchestration code consumes this result to persist changes. `AcceptedNew` = new Pattern accepted; `UpdatedExisting` = existing Pattern reinforced with new valid evidence; `NoOp` = same Pattern identity with no new valid evidence; `Rejected` = candidate does not satisfy acceptance rules. Repository or persistence failures are SYSTEM FAILURES managed by the use-case/orchestrator boundary and are NOT represented as an empirical `Error` result in the evaluator.
 2. **Concurrency/Idempotency:** The evaluation and subsequent repository mutations MUST run inside an explicit transaction or synchronization mechanism to prevent race conditions from duplicate candidates.
 3. **Identity Separation:** Pattern Identity (derived from candidate semantic fields) is strictly separated from Evidence Identity (source id and type).
+
+---
+
+# 222. REFLECTION PROCESSING BACKGROUND ARCHITECTURE
+
+The processing of Reflections operates through a strict lifecycle separated across UI, Background Scheduling, Worker, and Domain orchestration boundaries.
+
+1. **Reflection persistence:** The `SaveReflectionUseCase` persists the `Reflection` entity to the local database.
+2. **Background scheduling:** Only upon successful persistence, `scheduleReflectionProcessing(reflectionId)` is invoked on `BackgroundExecutor`. The scheduling result must be caught; if scheduling fails, the Reflection persistence remains successful (resulting in a `reflection_processing_schedule_failed` structural log).
+3. **ReflectionProcessingWorker:** The `WorkManager` execution layer running in the background.
+4. **Execution-time Reflection → userId resolution:** The Worker receives a reflectionId-only input via `Data`. It uses this to query the repository for the Reflection to extract `userId`.
+5. **Execution-time UserProfile → ZoneId resolution:** The Worker resolves the latest `UserProfile` for that `userId` to obtain the user's explicit timezone. `ZoneId` is NOT passed through WorkManager input, nor derived from system defaults.
+6. **AutonomousReflectionEngine processing:** The `AutonomousReflectionEngine` delegates to the AI provider.
+7. **PatternCandidate list:** Processing produces zero or more `PatternCandidate`s.
+8. **EvaluatePatternCandidatesUseCase:** The orchestration use case which takes the candidate list, user, and timezone.
+9. **Pattern acceptance:** Each candidate is evaluated through the `PatternAcceptanceUseCase` pipeline.
+10. **Pattern persistence:** Successfully accepted Patterns are persisted to the database.
+
+**WORKMANAGER AND KEEP IDEMPOTENCY SEMANTICS**
+
+The background scheduling for Reflection processing is configured using:
+- **unique work name:** `ProcessReflection_<reflectionId>`
+- **ExistingWorkPolicy:** `KEEP`
+
+**CRITICAL LIMITATION ON IDEMPOTENCY:**
+ExistingWorkPolicy.KEEP prevents another instance from being enqueued while the existing unique work is ENQUEUED or RUNNING.
+
+KEEP does NOT guarantee:
+- permanent exactly-once processing
+- protection against re-enqueue after completion
+- database-level idempotency
+
+The current architecture has no permanent Reflection processing idempotency state. Do NOT claim exactly-once processing.
+
+**FAILURE BOUNDARIES**
+- **Producer failure:** Infrastructure exceptions (network error, rate limit, parse error) result in a Worker retry (e.g., `Result.retry()`).
+- **Candidate evaluation failure:** Domain rejection (insufficient evidence, invalid rules) is absorbed by the `EvaluatePatternCandidatesUseCase`. This does not fail the Worker; candidate evaluation remains passive knowledge generation.
 
 ---
 

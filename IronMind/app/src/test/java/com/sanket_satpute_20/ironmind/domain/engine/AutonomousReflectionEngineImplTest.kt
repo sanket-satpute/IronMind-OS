@@ -78,6 +78,7 @@ class AutonomousReflectionEngineImplTest {
 
         val result = engine.processReflection("r1")
         assertTrue(result is Result.Success)
+        assertEquals(emptyList<com.sanket_satpute_20.ironmind.domain.model.pattern.PatternCandidate>(), (result as Result.Success).data)
 
         // AI should not be called
         assertEquals(0, ironMindAI.requests.size)
@@ -111,6 +112,7 @@ class AutonomousReflectionEngineImplTest {
 
         val result = engine.processReflection("r2")
         assertTrue(result is Result.Success)
+        assertEquals(emptyList<com.sanket_satpute_20.ironmind.domain.model.pattern.PatternCandidate>(), (result as Result.Success).data)
 
         // Check memory is saved and auto-confirmed
         assertEquals(1, memoryRepository.memories.size)
@@ -146,6 +148,7 @@ class AutonomousReflectionEngineImplTest {
 
         val result = engine.processReflection("r3")
         assertTrue(result is Result.Success)
+        assertEquals(emptyList<com.sanket_satpute_20.ironmind.domain.model.pattern.PatternCandidate>(), (result as Result.Success).data)
 
         // Check memory is saved but unconfirmed
         assertEquals(1, memoryRepository.memories.size)
@@ -184,6 +187,9 @@ class AutonomousReflectionEngineImplTest {
 
         val result = engine.processReflection("r4")
         assertTrue(result is Result.Success)
+        val returnedCandidates = (result as Result.Success).data
+        assertEquals(1, returnedCandidates.size)
+        assertEquals(domainCandidate, returnedCandidates[0])
 
         // Sprint 11C: Pattern should NOT be saved automatically, even when FULL_AUTO,
         // because the transitional boundary leaves persistence to the future Pattern Engine.
@@ -222,6 +228,7 @@ class AutonomousReflectionEngineImplTest {
 
         val result = engine.processReflection("r5")
         assertTrue(result is Result.Success)
+        assertEquals(emptyList<com.sanket_satpute_20.ironmind.domain.model.pattern.PatternCandidate>(), (result as Result.Success).data)
 
         // Pattern should not be saved automatically since it's SUGGEST_ONLY
         assertEquals(0, patternRepository.patterns.size)

@@ -2,6 +2,8 @@ package com.sanket_satpute_20.ironmind.domain.engine
 
 import com.sanket_satpute_20.ironmind.domain.common.Result
 
+import com.sanket_satpute_20.ironmind.domain.model.pattern.PatternCandidate
+
 /**
  * Autonomous Reflection Engine
  * 
@@ -17,7 +19,7 @@ interface AutonomousReflectionEngine {
      * modifying the original reflection.
      * 
      * @param reflectionId The ID of the reflection to process.
-     * @return Result.Success on successful processing, or Result.Failure on error.
+     * @return Result.Success containing a list of pattern candidates, or Result.Failure on error.
      */
-    suspend fun processReflection(reflectionId: String): Result<Unit, Exception>
+    suspend fun processReflection(reflectionId: String): Result<List<PatternCandidate>, Exception>
 }

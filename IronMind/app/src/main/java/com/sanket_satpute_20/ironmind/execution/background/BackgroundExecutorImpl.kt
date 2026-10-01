@@ -8,6 +8,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.sanket_satpute_20.ironmind.infrastructure.worker.EventProcessingWorker
 import com.sanket_satpute_20.ironmind.infrastructure.worker.PatternUpdateWorker
+import com.sanket_satpute_20.ironmind.infrastructure.worker.ReflectionProcessingWorker
 import com.sanket_satpute_20.ironmind.infrastructure.worker.SyncWorker
 
 class BackgroundExecutorImpl(
@@ -62,6 +63,27 @@ class BackgroundExecutorImpl(
 
         workManager.enqueueUniqueWork(
             "EventProcessingWorker",
+            ExistingWorkPolicy.KEEP,
+            request
+        )
+    }
+
+    override fun scheduleReflectionProcessing(reflectionId: String) {
+        val inputData = androidx.work.Data.Builder()
+            .putString(ReflectionProcessingWorker.KEY_REFLECTION_ID, reflectionId)
+            .build()
+
+        val constraints = Constraints.Builder()
+            .setRequiresBatteryNotLow(true)
+            .build()
+
+        val request = OneTimeWorkRequestBuilder<ReflectionProcessingWorker>()
+            .setInputData(inputData)
+            .setConstraints(constraints)
+            .build()
+
+        workManager.enqueueUniqueWork(
+            "ProcessReflection_$reflectionId",
             ExistingWorkPolicy.KEEP,
             request
         )

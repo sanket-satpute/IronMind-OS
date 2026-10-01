@@ -16,7 +16,14 @@ class IronMindWorkerFactory(
         workerParameters: WorkerParameters
     ): ListenableWorker? {
         return when (workerClassName) {
-            ReflectionProcessingWorker::class.java.name -> ReflectionProcessingWorker(appContext, workerParameters, appContainer.autonomousReflectionEngine)
+            ReflectionProcessingWorker::class.java.name -> ReflectionProcessingWorker(
+                appContext,
+                workerParameters,
+                appContainer.reflectionRepository,
+                appContainer.userProfileRepository,
+                appContainer.autonomousReflectionEngine,
+                appContainer.evaluatePatternCandidatesUseCase
+            )
             SyncWorker::class.java.name -> SyncWorker(appContext, workerParameters, appContainer.syncUseCase)
             EventProcessingWorker::class.java.name -> EventProcessingWorker(appContext, workerParameters, appContainer.eventRepository) // Placeholder for now
             PatternUpdateWorker::class.java.name -> PatternUpdateWorker(appContext, workerParameters, appContainer.patternEngine)

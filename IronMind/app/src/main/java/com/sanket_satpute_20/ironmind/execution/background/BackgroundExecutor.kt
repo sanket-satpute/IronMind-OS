@@ -6,4 +6,5 @@ package com.sanket_satpute_20.ironmind.execution.background
  * from the tasks themselves.
  */
 interface BackgroundExecutor {
+    fun scheduleReflectionProcessing(reflectionId: String)
 }

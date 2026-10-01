@@ -33,7 +33,7 @@ class AutonomousReflectionEngineImpl(
     private val clock: Clock
 ) : AutonomousReflectionEngine {
 
-    override suspend fun processReflection(reflectionId: String): Result<Unit, Exception> {
+    override suspend fun processReflection(reflectionId: String): Result<List<com.sanket_satpute_20.ironmind.domain.model.pattern.PatternCandidate>, Exception> {
         val reflectionResult = reflectionRepository.getReflection(reflectionId)
         if (reflectionResult is Result.Failure) {
             return Result.Failure(reflectionResult.error)
@@ -55,7 +55,7 @@ class AutonomousReflectionEngineImpl(
         // If OFF, we do not autonomously process this reflection
         if (reflectionProcessingLevel == AutonomyLevel.OFF) {
             println("IronMindLifecycle [Reflection] [SKIPPED_POLICY_OFF] reflectionId=$reflectionId")
-            return Result.Success(Unit)
+            return Result.Success(emptyList())
         }
 
         // Process through AI
@@ -73,6 +73,8 @@ class AutonomousReflectionEngineImpl(
 
         val aiOutput = (aiResult as Result.Success).data
         val now = clock.currentTimeMillis()
+
+        var returnedCandidates: List<com.sanket_satpute_20.ironmind.domain.model.pattern.PatternCandidate> = emptyList()
 
         // Handle candidates based on autonomy policy
         when (aiOutput) {
@@ -105,10 +107,7 @@ class AutonomousReflectionEngineImpl(
             }
             is AIOutput.PatternCandidate -> {
                 if (memoryPatternProcessingLevel == AutonomyLevel.FULL_AUTO || memoryPatternProcessingLevel == AutonomyLevel.ASK_BEFORE_ACTION) {
-                    val candidate = aiOutput.candidate
-                    // Sprint 11C: AI outputs PatternCandidates, not Patterns.
-                    // DO NOT directly persist these candidates into Pattern Repository.
-                    // The future Pattern Engine will validate evidence, calculate confidence, and manage state.
+                    returnedCandidates = listOf(aiOutput.candidate)
                 }
             }
             else -> {
@@ -119,6 +118,6 @@ class AutonomousReflectionEngineImpl(
         }
 
         println("IronMindLifecycle [Reflection] [PROCESSED] reflectionId=$reflectionId")
-        return Result.Success(Unit)
+        return Result.Success(returnedCandidates)
     }
 }
