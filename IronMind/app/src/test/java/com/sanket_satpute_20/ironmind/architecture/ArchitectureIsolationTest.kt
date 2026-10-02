@@ -8,7 +8,7 @@ class ArchitectureIsolationTest {
 
     @Test
     fun `domain layer must not depend on android framework`() {
-        val projectDir = File(System.getProperty("user.dir"))
+        val projectDir = File(System.getProperty("user.dir") ?: "")
         val domainDir = File(projectDir, "src/main/java/com/sanket_satpute_20/ironmind/domain")
 
         if (!domainDir.exists()) {

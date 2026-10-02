@@ -45,10 +45,10 @@ class UnderstandBarriersUseCase(
                 val output = aiResult.data
 
                 if (output is AIOutput.BarrierOutput) {
-                    if (output.confidence >= 0.5f && output.proposedBarriers.isNotEmpty()) {
+                    if (output.proposedBarriers.isEmpty()) {
                         Result.Success(output)
                     } else {
-                        Result.Failure(Exception("Barrier understanding confidence too low or no barriers proposed."))
+                        Result.Success(output)
                     }
                 } else {
                     Result.Failure(Exception("AI returned unexpected output type: ${output.javaClass.simpleName}"))

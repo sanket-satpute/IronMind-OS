@@ -30,13 +30,11 @@ class UnderstandBarriersUseCaseTest {
         barriers: List<BarrierCandidate> = listOf(
             BarrierCandidate(
                 category = BarrierCategory.LACK_OF_CLARITY,
-                description = "I've noticed you often pause at the start of this task. Could it be unclear where to begin?",
-                isConfirmed = false
+                description = "I've noticed you often pause at the start of this task. Could it be unclear where to begin?"
             ),
             BarrierCandidate(
                 category = BarrierCategory.LOW_ENERGY,
-                description = "You tend to schedule this in the afternoon. Could energy levels be a factor?",
-                isConfirmed = false
+                description = "You tend to schedule this in the afternoon. Could energy levels be a factor?"
             )
         )
     ) = AIOutput.BarrierOutput(
@@ -58,39 +56,27 @@ class UnderstandBarriersUseCaseTest {
         assertEquals(2, output.proposedBarriers.size)
     }
 
-    @Test
-    fun `invoke returns barriers with isConfirmed always false`() = runBlocking {
-        val fakeAi = FakeIronMindAI(Result.Success(validBarrierOutput()))
-        val useCase = UnderstandBarriersUseCase(fakeAi)
-
-        val result = useCase("I keep putting off writing the report", "user-1")
-
-        val output = (result as Result.Success).data
-        output.proposedBarriers.forEach { barrier ->
-            assertFalse("Barrier from AI must never be confirmed", barrier.isConfirmed)
-        }
-    }
 
     @Test
-    fun `invoke returns failure when AI confidence is too low`() = runBlocking {
+    fun `invoke ignores AI confidence and returns success when barriers are present`() = runBlocking {
         val fakeAi = FakeIronMindAI(Result.Success(validBarrierOutput(confidence = 0.3f)))
         val useCase = UnderstandBarriersUseCase(fakeAi)
 
         val result = useCase("Some input", "user-1")
 
-        assertTrue(result is Result.Failure)
-        assertTrue((result as Result.Failure).error.message?.contains("confidence too low") == true)
+        assertTrue(result is Result.Success)
     }
 
     @Test
-    fun `invoke returns failure when AI returns empty barriers list`() = runBlocking {
+    fun `invoke returns success when AI returns empty barriers list`() = runBlocking {
         val fakeAi = FakeIronMindAI(Result.Success(validBarrierOutput(barriers = emptyList())))
         val useCase = UnderstandBarriersUseCase(fakeAi)
 
         val result = useCase("Some input", "user-1")
 
-        assertTrue(result is Result.Failure)
-        assertTrue((result as Result.Failure).error.message?.contains("no barriers proposed") == true)
+        assertTrue(result is Result.Success)
+        val output = (result as Result.Success).data
+        assertTrue(output.proposedBarriers.isEmpty())
     }
 
     @Test

@@ -10,6 +10,7 @@ import com.sanket_satpute_20.ironmind.data.local.dao.OutboxDao
 import com.sanket_satpute_20.ironmind.data.local.dao.AutonomySettingsDao
 import com.sanket_satpute_20.ironmind.data.local.dao.DecisionRecordDao
 import com.sanket_satpute_20.ironmind.data.local.dao.NotificationRecordDao
+import com.sanket_satpute_20.ironmind.data.local.dao.BarrierDao
 import com.sanket_satpute_20.ironmind.data.local.entity.*
 
 @Database(
@@ -38,9 +39,10 @@ import com.sanket_satpute_20.ironmind.data.local.entity.*
         CalendarObservationSettingsEntity::class,
         LocationObservationSettingsEntity::class,
         ActivityObservationSettingsEntity::class,
-        com.sanket_satpute_20.ironmind.data.local.entity.ExperimentRecordEntity::class
+        com.sanket_satpute_20.ironmind.data.local.entity.ExperimentRecordEntity::class,
+        BarrierHypothesisEntity::class
     ],
-    version = 18,
+    version = 19,
     exportSchema = false
 )
 abstract class IronMindDatabase : RoomDatabase() {
@@ -59,6 +61,7 @@ abstract class IronMindDatabase : RoomDatabase() {
     abstract fun locationObservationSettingsDao(): com.sanket_satpute_20.ironmind.data.local.dao.LocationObservationSettingsDao
     abstract fun activityObservationSettingsDao(): com.sanket_satpute_20.ironmind.data.local.dao.ActivityObservationSettingsDao
     abstract fun experimentDao(): com.sanket_satpute_20.ironmind.data.local.dao.ExperimentDao
+    abstract fun barrierDao(): BarrierDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -389,6 +392,27 @@ abstract class IronMindDatabase : RoomDatabase() {
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_patterns_fingerprint` ON `patterns` (`fingerprint`)")
                 
                 println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=18")
+            }
+        }
+        val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `barrier_hypotheses` (
+                        `id` TEXT NOT NULL,
+                        `userId` TEXT NOT NULL,
+                        `category` TEXT NOT NULL,
+                        `description` TEXT NOT NULL,
+                        `confirmationState` TEXT NOT NULL,
+                        `status` TEXT NOT NULL,
+                        `sourceReflectionId` TEXT NOT NULL,
+                        `firstObservedAt` INTEGER NOT NULL,
+                        `lastObservedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=19")
             }
         }
     }

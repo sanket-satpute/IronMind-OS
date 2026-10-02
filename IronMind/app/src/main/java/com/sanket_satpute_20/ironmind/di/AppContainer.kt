@@ -98,6 +98,9 @@ import com.sanket_satpute_20.ironmind.domain.usecase.ai.GeneratePlanUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.HandleInterventionResultUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.RecommendInterventionUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.UnderstandBarriersUseCase
+import com.sanket_satpute_20.ironmind.domain.repository.BarrierRepository
+import com.sanket_satpute_20.ironmind.data.repository.BarrierRepositoryImpl
+import com.sanket_satpute_20.ironmind.domain.engine.BarrierUnderstandingOrchestrator
 import com.sanket_satpute_20.ironmind.domain.repository.AutonomySettingsRepository
 import com.sanket_satpute_20.ironmind.data.repository.AutonomySettingsRepositoryImpl
 import com.sanket_satpute_20.ironmind.domain.repository.DecisionRecordRepository
@@ -212,6 +215,9 @@ interface AppContainer {
     val experimentRepository: ExperimentRepository
     val taskRepository: com.sanket_satpute_20.ironmind.domain.repository.TaskRepository
     val interventionExecutionPipeline: com.sanket_satpute_20.ironmind.domain.engine.InterventionExecutionPipeline
+    
+    val barrierRepository: BarrierRepository
+    val barrierUnderstandingOrchestrator: BarrierUnderstandingOrchestrator
     
     val patternAcceptanceUseCase: com.sanket_satpute_20.ironmind.domain.usecase.pattern.PatternAcceptanceUseCase
     val evaluatePatternCandidateUseCase: com.sanket_satpute_20.ironmind.domain.usecase.pattern.EvaluatePatternCandidateUseCase
@@ -752,6 +758,19 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val interventionRepository: com.sanket_satpute_20.ironmind.domain.repository.InterventionRepository by lazy {
         com.sanket_satpute_20.ironmind.data.repository.InterventionRepositoryImpl(database.interventionDao())
+    }
+
+    override val barrierRepository: BarrierRepository by lazy {
+        BarrierRepositoryImpl(database.barrierDao())
+    }
+
+    override val barrierUnderstandingOrchestrator: BarrierUnderstandingOrchestrator by lazy {
+        BarrierUnderstandingOrchestrator(
+            understandBarriersUseCase = understandBarriersUseCase,
+            barrierRepository = barrierRepository,
+            idGenerator = idGenerator,
+            clock = clock
+        )
     }
 
     override val experimentRepository: ExperimentRepository by lazy {

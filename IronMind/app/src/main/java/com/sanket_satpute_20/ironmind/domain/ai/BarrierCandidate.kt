@@ -16,6 +16,5 @@ package com.sanket_satpute_20.ironmind.domain.ai
  */
 data class BarrierCandidate(
     val category: BarrierCategory,
-    val description: String,
-    val isConfirmed: Boolean = false
+    val description: String
 )

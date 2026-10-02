@@ -22,7 +22,8 @@ class IronMindWorkerFactory(
                 appContainer.reflectionRepository,
                 appContainer.userProfileRepository,
                 appContainer.autonomousReflectionEngine,
-                appContainer.evaluatePatternCandidatesUseCase
+                appContainer.evaluatePatternCandidatesUseCase,
+                appContainer.barrierUnderstandingOrchestrator
             )
             SyncWorker::class.java.name -> SyncWorker(appContext, workerParameters, appContainer.syncUseCase)
             EventProcessingWorker::class.java.name -> EventProcessingWorker(appContext, workerParameters, appContainer.eventRepository) // Placeholder for now

@@ -261,8 +261,7 @@ class GeminiIronMindAI(
                                 barriers.add(
                                     BarrierCandidate(
                                         category = category,
-                                        description = barrierObj.optString("description", ""),
-                                        isConfirmed = false // Always false from AI layer
+                                        description = barrierObj.optString("description", "")
                                     )
                                 )
                             }
