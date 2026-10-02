@@ -48,6 +48,7 @@ class ContextEngineImplTest {
         override suspend fun getCommitment(id: String): Result<Commitment?, Exception> = Result.Failure(Exception())
         override suspend fun getCommitmentsForUser(userId: String): Result<List<Commitment>, Exception> = Result.Success(commitments)
         override suspend fun getActiveCommitmentsForUser(userId: String, statuses: List<CommitmentStatus>): Result<List<Commitment>, Exception> = Result.Success(commitments)
+        override suspend fun getActiveCommitmentsForUser(userId: String, statuses: List<CommitmentStatus>, limit: Int): Result<List<Commitment>, Exception> = Result.Success(commitments.take(limit))
         override suspend fun getCommitmentsForDateRange(userId: String, startTime: Long, endTime: Long): Result<List<Commitment>, Exception> = Result.Success(commitments)
         override suspend fun getCommitmentsForGoal(goalId: String): Result<List<Commitment>, Exception> = Result.Success(commitments)
         override suspend fun getCommitmentsForPlan(planId: String): Result<List<Commitment>, Exception> = Result.Success(commitments)
@@ -98,6 +99,7 @@ class ContextEngineImplTest {
         override suspend fun getGoal(id: String): Result<Goal?, Exception> = Result.Failure(Exception())
         override suspend fun saveGoal(goal: Goal): Result<Unit, Exception> = Result.Success(Unit)
         override suspend fun searchGoals(userId: String, query: String): Result<List<Goal>, Exception> = Result.Success(goals)
+        override suspend fun getActiveGoalsForUser(userId: String, limit: Int): Result<List<Goal>, Exception> = Result.Success(goals.take(limit))
     }
     class FakePatternRepository : PatternRepository {
         var patterns = emptyList<com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern>()
@@ -105,6 +107,7 @@ class ContextEngineImplTest {
         override suspend fun getPattern(id: String): Result<com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern?, Exception> = Result.Failure(Exception())
         override suspend fun getPatternsByType(userId: String, type: com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType): Result<List<com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern>, Exception> = Result.Success(patterns)
         override suspend fun getPatternsByStatus(userId: String, status: com.sanket_satpute_20.ironmind.domain.model.pattern.PatternStatus): Result<List<com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern>, Exception> = Result.Success(patterns)
+        override suspend fun getPatternsByStatus(userId: String, status: com.sanket_satpute_20.ironmind.domain.model.pattern.PatternStatus, limit: Int): Result<List<com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern>, Exception> = Result.Success(patterns.take(limit))
         override suspend fun savePattern(pattern: com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern): Result<Unit, Exception> = Result.Success(Unit)
         override suspend fun updatePattern(pattern: com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern): Result<Unit, Exception> = Result.Success(Unit)
         override suspend fun getPatternByFingerprint(userId: String, fingerprint: String): Result<com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern?, Exception> = Result.Success(null)

@@ -37,6 +37,20 @@ class FakeCommitmentRepository : CommitmentRepository {
         )
     }
 
+    override suspend fun getActiveCommitmentsForUser(
+        userId: String,
+        statuses: List<CommitmentStatus>,
+        limit: Int
+    ): Result<List<Commitment>, Exception> {
+        if (shouldFail) return Result.Failure(Exception("Fake failure"))
+        return Result.Success(
+            commitments.values
+                .filter { it.userId == userId && it.status in statuses }
+                .sortedWith(compareByDescending<Commitment> { it.priority }.thenBy { it.createdAt })
+                .take(limit)
+        )
+    }
+
     override suspend fun getCommitmentsForGoal(goalId: String): Result<List<Commitment>, Exception> {
         if (shouldFail) return Result.Failure(Exception("Fake failure"))
         return Result.Success(commitments.values.filter { it.goalId == goalId }.sortedByDescending { it.createdAt })

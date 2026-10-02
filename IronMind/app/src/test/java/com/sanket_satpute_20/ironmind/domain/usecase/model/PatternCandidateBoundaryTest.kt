@@ -114,6 +114,10 @@ class FakePatternRepository : PatternRepository {
         return Result.Success(emptyList())
     }
 
+    override suspend fun getPatternsByStatus(userId: String, status: PatternStatus, limit: Int): Result<List<Pattern>, Exception> {
+        return Result.Success(emptyList())
+    }
+
     override suspend fun updatePatternConfidence(id: String, confidence: Float, lastObservedAt: Long): Result<Unit, Exception> {
         return Result.Success(Unit)
     }

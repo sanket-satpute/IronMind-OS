@@ -112,6 +112,7 @@ class FakeGoalRepository : GoalRepository {
     override suspend fun getGoal(id: String): Result<Goal?, Exception> = Result.Success(goals.find { it.id == id })
     override suspend fun getGoalsForUser(userId: String): Result<List<Goal>, Exception> = Result.Success(goals.filter { it.userId == userId })
     override suspend fun searchGoals(userId: String, query: String): Result<List<Goal>, Exception> = Result.Success(emptyList())
+    override suspend fun getActiveGoalsForUser(userId: String, limit: Int): Result<List<Goal>, Exception> = Result.Success(goals.filter { it.userId == userId && it.status == GoalStatus.ACTIVE }.take(limit))
 }
 
 class FakeTaskRepository : TaskRepository {

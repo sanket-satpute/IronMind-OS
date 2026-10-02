@@ -37,6 +37,9 @@ class PatternEngineImplTest {
         override suspend fun getPatternsByStatus(userId: String, status: PatternStatus): Result<List<Pattern>, Exception> =
             Result.Success(store.values.filter { it.userId == userId && it.status == status })
 
+        override suspend fun getPatternsByStatus(userId: String, status: PatternStatus, limit: Int): Result<List<Pattern>, Exception> =
+            Result.Success(store.values.filter { it.userId == userId && it.status == status }.take(limit))
+
         override suspend fun savePattern(pattern: Pattern): Result<Unit, Exception> {
             store[pattern.id] = pattern
             return Result.Success(Unit)

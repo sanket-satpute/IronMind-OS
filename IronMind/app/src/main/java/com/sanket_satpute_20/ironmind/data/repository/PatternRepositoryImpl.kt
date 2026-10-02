@@ -57,6 +57,14 @@ class PatternRepositoryImpl(
         }
     }
 
+    override suspend fun getPatternsByStatus(userId: String, status: PatternStatus, limit: Int): Result<List<Pattern>, Exception> = withContext(Dispatchers.IO) {
+        try {
+            Result.Success(dao.getPatternsByStatus(userId, status.name, limit).map { it.toDomain() })
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
+
     override suspend fun savePattern(pattern: Pattern): Result<Unit, Exception> = withContext(Dispatchers.IO) {
         try {
             dao.insertPattern(pattern.toEntity())

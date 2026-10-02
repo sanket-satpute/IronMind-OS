@@ -33,6 +33,9 @@ class PatternRepositoryImplTest {
         override fun getPatternsByStatus(userId: String, status: String): List<PatternEntity> =
             store.values.filter { it.userId == userId && it.status == status }
 
+        override fun getPatternsByStatus(userId: String, status: String, limit: Int): List<PatternEntity> =
+            store.values.filter { it.userId == userId && it.status == status }.take(limit)
+
         override fun insertPattern(pattern: PatternEntity) {
             store[pattern.id] = pattern
         }

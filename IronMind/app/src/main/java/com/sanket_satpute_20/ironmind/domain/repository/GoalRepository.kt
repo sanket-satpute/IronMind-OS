@@ -7,5 +7,6 @@ interface GoalRepository : Repository {
     suspend fun saveGoal(goal: Goal): Result<Unit, Exception>
     suspend fun getGoal(id: String): Result<Goal?, Exception>
     suspend fun getGoalsForUser(userId: String): Result<List<Goal>, Exception>
+    suspend fun getActiveGoalsForUser(userId: String, limit: Int): Result<List<Goal>, Exception>
     suspend fun searchGoals(userId: String, query: String): Result<List<Goal>, Exception>
 }

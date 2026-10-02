@@ -26,6 +26,9 @@ interface IronMindDao {
     @Query("SELECT * FROM goal WHERE userId = :userId ORDER BY createdAt DESC")
     fun getGoalsForUser(userId: String): List<GoalEntity>
 
+    @Query("SELECT * FROM goal WHERE userId = :userId AND status = 'ACTIVE' ORDER BY createdAt DESC LIMIT :limit")
+    fun getActiveGoalsForUser(userId: String, limit: Int): List<GoalEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertPlan(plan: PlanEntity)
 
@@ -58,6 +61,9 @@ interface IronMindDao {
 
     @Query("SELECT * FROM commitment WHERE userId = :userId AND status IN (:statuses) ORDER BY priority DESC, createdAt ASC")
     fun getActiveCommitmentsForUser(userId: String, statuses: List<String>): List<CommitmentEntity>
+
+    @Query("SELECT * FROM commitment WHERE userId = :userId AND status IN (:statuses) ORDER BY priority DESC, createdAt ASC LIMIT :limit")
+    fun getActiveCommitmentsForUser(userId: String, statuses: List<String>, limit: Int): List<CommitmentEntity>
 
     @Query("SELECT * FROM commitment WHERE goalId = :goalId ORDER BY createdAt DESC")
     fun getCommitmentsForGoal(goalId: String): List<CommitmentEntity>

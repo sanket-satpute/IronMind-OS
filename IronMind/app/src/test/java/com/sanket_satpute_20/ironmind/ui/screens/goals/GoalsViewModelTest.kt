@@ -40,6 +40,11 @@ class FakeGoalRepository : GoalRepository {
         return Result.Success(goals.filter { it.userId == userId })
     }
 
+    override suspend fun getActiveGoalsForUser(userId: String, limit: Int): Result<List<Goal>, Exception> {
+        if (shouldFail) return Result.Failure(Exception("Simulated load failure"))
+        return Result.Success(goals.filter { it.userId == userId && it.status == GoalStatus.ACTIVE }.take(limit))
+    }
+
     override suspend fun searchGoals(userId: String, query: String): Result<List<Goal>, Exception> {
         return Result.Success(goals.filter { it.userId == userId && it.title.contains(query, ignoreCase = true) })
     }

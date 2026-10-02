@@ -329,6 +329,7 @@ class AutoRefFakePatternRepository : PatternRepository {
     override suspend fun getPatternsForUser(userId: String): Result<List<Pattern>, Exception> = Result.Success(patterns.filter { it.userId == userId })
     override suspend fun getPatternsByType(userId: String, type: com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType): Result<List<Pattern>, Exception> = Result.Success(patterns.filter { it.type == type })
     override suspend fun getPatternsByStatus(userId: String, status: PatternStatus): Result<List<Pattern>, Exception> = Result.Success(patterns.filter { it.status == status })
+    override suspend fun getPatternsByStatus(userId: String, status: PatternStatus, limit: Int): Result<List<Pattern>, Exception> = Result.Success(patterns.filter { it.status == status }.take(limit))
     override suspend fun updatePatternConfidence(id: String, confidence: Float, lastObservedAt: Long): Result<Unit, Exception> = Result.Success(Unit)
     override suspend fun deletePattern(id: String): Result<Unit, Exception> = Result.Success(Unit)
 }

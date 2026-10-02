@@ -10,6 +10,7 @@ interface PatternRepository {
     suspend fun getPatternsForUser(userId: String): Result<List<Pattern>, Exception>
     suspend fun getPatternsByType(userId: String, type: PatternType): Result<List<Pattern>, Exception>
     suspend fun getPatternsByStatus(userId: String, status: PatternStatus): Result<List<Pattern>, Exception>
+    suspend fun getPatternsByStatus(userId: String, status: PatternStatus, limit: Int): Result<List<Pattern>, Exception>
     suspend fun savePattern(pattern: Pattern): Result<Unit, Exception>
     suspend fun updatePattern(pattern: Pattern): Result<Unit, Exception>
     suspend fun updatePatternConfidence(id: String, confidence: Float, lastObservedAt: Long): Result<Unit, Exception>

@@ -56,4 +56,26 @@ class BarrierRepositoryImpl(
             Result.Failure(e)
         }
     }
+
+    override suspend fun getActiveBarriersForUser(userId: String, excludedStates: List<BarrierConfirmationState>, limit: Int): Result<List<BarrierHypothesis>, Exception> = withContext(Dispatchers.IO) {
+        try {
+            val entities = barrierDao.getActiveBarriersForUser(userId, excludedStates.map { it.name }, limit)
+            val hypotheses = entities.map {
+                BarrierHypothesis(
+                    id = it.id,
+                    userId = it.userId,
+                    category = BarrierCategory.valueOf(it.category),
+                    description = it.description,
+                    confirmationState = BarrierConfirmationState.valueOf(it.confirmationState),
+                    status = BarrierStatus.valueOf(it.status),
+                    sourceReflectionId = it.sourceReflectionId,
+                    firstObservedAt = it.firstObservedAt,
+                    lastObservedAt = it.lastObservedAt
+                )
+            }
+            Result.Success(hypotheses)
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
 }

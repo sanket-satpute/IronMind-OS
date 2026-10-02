@@ -21,6 +21,9 @@ interface PatternDao {
     @Query("SELECT * FROM patterns WHERE userId = :userId AND status = :status ORDER BY lastObservedAt DESC")
     fun getPatternsByStatus(userId: String, status: String): List<PatternEntity>
 
+    @Query("SELECT * FROM patterns WHERE userId = :userId AND status = :status ORDER BY lastObservedAt DESC LIMIT :limit")
+    fun getPatternsByStatus(userId: String, status: String, limit: Int): List<PatternEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertPattern(pattern: PatternEntity)
 

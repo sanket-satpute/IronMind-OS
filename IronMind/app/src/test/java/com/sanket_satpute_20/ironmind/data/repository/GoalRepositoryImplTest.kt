@@ -31,6 +31,7 @@ class GoalRepositoryImplTest {
         }
         override fun getGoal(id: String): GoalEntity? = returnedGoal
         override fun getGoalsForUser(userId: String): List<GoalEntity> = emptyList()
+        override fun getActiveGoalsForUser(userId: String, limit: Int): List<GoalEntity> = emptyList()
         
         override fun insertPlan(plan: PlanEntity) {}
         override fun getPlan(id: String): PlanEntity? = null
@@ -44,6 +45,7 @@ class GoalRepositoryImplTest {
         override fun getCommitment(id: String): CommitmentEntity? = null
         override fun getCommitmentsForUser(userId: String): List<CommitmentEntity> = emptyList()
         override fun getActiveCommitmentsForUser(userId: String, statuses: List<String>): List<CommitmentEntity> = emptyList()
+        override fun getActiveCommitmentsForUser(userId: String, statuses: List<String>, limit: Int): List<CommitmentEntity> = emptyList()
         override fun getCommitmentsForGoal(goalId: String): List<CommitmentEntity> = emptyList()
         override fun getCommitmentsForDateRange(userId: String, startTime: Long, endTime: Long): List<CommitmentEntity> {
             return emptyList()

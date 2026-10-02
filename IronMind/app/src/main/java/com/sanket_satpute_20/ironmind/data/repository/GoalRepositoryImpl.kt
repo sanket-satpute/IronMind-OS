@@ -46,6 +46,17 @@ class GoalRepositoryImpl(
         }
     }
 
+    override suspend fun getActiveGoalsForUser(userId: String, limit: Int): Result<List<Goal>, Exception> {
+        return try {
+            val entities = withContext(Dispatchers.IO) {
+                dao.getActiveGoalsForUser(userId, limit)
+            }
+            Result.Success(entities.map { it.toDomain() })
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
+
     override suspend fun searchGoals(userId: String, query: String): Result<List<Goal>, Exception> {
         return try {
             val entities = withContext(Dispatchers.IO) {

@@ -24,6 +24,15 @@ class FakeGoalRepository : GoalRepository {
         return Result.Success(goals.values.filter { it.userId == userId }.sortedByDescending { it.createdAt })
     }
 
+    override suspend fun getActiveGoalsForUser(userId: String, limit: Int): Result<List<Goal>, Exception> {
+        if (shouldFail) return Result.Failure(Exception("Fake failure"))
+        return Result.Success(
+            goals.values.filter { it.userId == userId && it.status == com.sanket_satpute_20.ironmind.domain.model.GoalStatus.ACTIVE }
+                .sortedByDescending { it.createdAt }
+                .take(limit)
+        )
+    }
+
     override suspend fun searchGoals(userId: String, query: String): Result<List<Goal>, Exception> {
         if (shouldFail) return Result.Failure(Exception("Fake failure"))
         return Result.Success(goals.values.filter { it.userId == userId && (it.title.contains(query, ignoreCase = true) || it.description?.contains(query, ignoreCase = true) == true) }.sortedByDescending { it.createdAt })
