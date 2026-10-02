@@ -40,9 +40,10 @@ import com.sanket_satpute_20.ironmind.data.local.entity.*
         LocationObservationSettingsEntity::class,
         ActivityObservationSettingsEntity::class,
         com.sanket_satpute_20.ironmind.data.local.entity.ExperimentRecordEntity::class,
-        BarrierHypothesisEntity::class
+        BarrierHypothesisEntity::class,
+        com.sanket_satpute_20.ironmind.data.local.entity.InterventionRecommendationEntity::class
     ],
-    version = 19,
+    version = 20,
     exportSchema = false
 )
 abstract class IronMindDatabase : RoomDatabase() {
@@ -62,6 +63,7 @@ abstract class IronMindDatabase : RoomDatabase() {
     abstract fun activityObservationSettingsDao(): com.sanket_satpute_20.ironmind.data.local.dao.ActivityObservationSettingsDao
     abstract fun experimentDao(): com.sanket_satpute_20.ironmind.data.local.dao.ExperimentDao
     abstract fun barrierDao(): BarrierDao
+    abstract fun interventionRecommendationDao(): com.sanket_satpute_20.ironmind.data.local.dao.InterventionRecommendationDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -413,6 +415,29 @@ abstract class IronMindDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
                 println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=19")
+            }
+        }
+        
+        val MIGRATION_19_20 = object : Migration(19, 20) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `intervention_recommendations` (
+                        `id` TEXT NOT NULL,
+                        `userId` TEXT NOT NULL,
+                        `interventionType` TEXT NOT NULL,
+                        `targetEntityId` TEXT,
+                        `targetEntityType` TEXT,
+                        `rationale` TEXT NOT NULL,
+                        `suggestedAction` TEXT NOT NULL,
+                        `status` TEXT NOT NULL,
+                        `createdAt` INTEGER NOT NULL,
+                        `expiresAt` INTEGER,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=20")
             }
         }
     }

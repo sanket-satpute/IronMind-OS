@@ -212,6 +212,7 @@ interface AppContainer {
     val autoProtectionEngine: com.sanket_satpute_20.ironmind.domain.engine.AutoProtectionEngine
     val autonomousReflectionEngine: com.sanket_satpute_20.ironmind.domain.engine.AutonomousReflectionEngine
     val interventionRepository: com.sanket_satpute_20.ironmind.domain.repository.InterventionRepository
+    val interventionRecommendationRepository: com.sanket_satpute_20.ironmind.domain.repository.InterventionRecommendationRepository
     val experimentRepository: ExperimentRepository
     val taskRepository: com.sanket_satpute_20.ironmind.domain.repository.TaskRepository
     val interventionExecutionPipeline: com.sanket_satpute_20.ironmind.domain.engine.InterventionExecutionPipeline
@@ -310,7 +311,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             IronMindDatabase.MIGRATION_13_14,
             IronMindDatabase.MIGRATION_14_15,
             IronMindDatabase.MIGRATION_15_16,
-            IronMindDatabase.MIGRATION_16_17
+            IronMindDatabase.MIGRATION_16_17,
+            IronMindDatabase.MIGRATION_17_18,
+            IronMindDatabase.MIGRATION_18_19,
+            IronMindDatabase.MIGRATION_19_20
         ).build()
     }
 
@@ -758,6 +762,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val interventionRepository: com.sanket_satpute_20.ironmind.domain.repository.InterventionRepository by lazy {
         com.sanket_satpute_20.ironmind.data.repository.InterventionRepositoryImpl(database.interventionDao())
+    }
+
+    override val interventionRecommendationRepository: com.sanket_satpute_20.ironmind.domain.repository.InterventionRecommendationRepository by lazy {
+        com.sanket_satpute_20.ironmind.data.repository.InterventionRecommendationRepositoryImpl(database.interventionRecommendationDao())
     }
 
     override val barrierRepository: BarrierRepository by lazy {
