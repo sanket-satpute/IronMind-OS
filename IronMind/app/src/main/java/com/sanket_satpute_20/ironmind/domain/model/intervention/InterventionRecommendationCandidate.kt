@@ -11,5 +11,6 @@ data class InterventionRecommendationCandidate(
     val rationale: String,
     val suggestedAction: String,
     val targetEntityId: String?,
+    val targetEntityType: String?,
     val confidence: Float
 )

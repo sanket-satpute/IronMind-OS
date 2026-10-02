@@ -40,9 +40,11 @@ class EventRepositoryImplTest {
         override fun insertGoal(goal: com.sanket_satpute_20.ironmind.data.local.entity.GoalEntity) {}
         override fun getGoal(id: String) = null
         override fun getGoalsForUser(userId: String) = emptyList<com.sanket_satpute_20.ironmind.data.local.entity.GoalEntity>()
+        override fun getActiveGoalsForUser(userId: String, limit: Int) = emptyList<com.sanket_satpute_20.ironmind.data.local.entity.GoalEntity>()
         override fun insertPlan(plan: com.sanket_satpute_20.ironmind.data.local.entity.PlanEntity) {}
         override fun getPlan(id: String) = null
         override fun getPlansForGoal(goalId: String) = emptyList<com.sanket_satpute_20.ironmind.data.local.entity.PlanEntity>()
+        override fun getActiveCommitmentsForUser(userId: String, statuses: List<String>, limit: Int) = emptyList<com.sanket_satpute_20.ironmind.data.local.entity.CommitmentEntity>()
         override fun insertTask(task: com.sanket_satpute_20.ironmind.data.local.entity.TaskEntity) {}
         override fun getTask(id: String) = null
         override fun getTasksForPlan(planId: String) = emptyList<com.sanket_satpute_20.ironmind.data.local.entity.TaskEntity>()

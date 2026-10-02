@@ -52,6 +52,7 @@ class PatternAcceptanceUseCaseTest {
             override suspend fun getPatternsForUser(userId: String) = Result.Success(emptyList<Pattern>())
             override suspend fun getPatternsByType(userId: String, type: PatternType) = Result.Success(emptyList<Pattern>())
             override suspend fun getPatternsByStatus(userId: String, status: PatternStatus) = Result.Success(emptyList<Pattern>())
+            override suspend fun getPatternsByStatus(userId: String, status: PatternStatus, limit: Int) = Result.Success(emptyList<Pattern>())
             override suspend fun updatePatternConfidence(id: String, confidence: Float, lastObservedAt: Long) = Result.Success(Unit)
             override suspend fun deletePattern(id: String) = Result.Success(Unit)
         }
@@ -108,6 +109,7 @@ class PatternAcceptanceUseCaseTest {
             override suspend fun getPatternsForUser(userId: String) = Result.Success(emptyList<Pattern>())
             override suspend fun getPatternsByType(userId: String, type: PatternType) = Result.Success(emptyList<Pattern>())
             override suspend fun getPatternsByStatus(userId: String, status: PatternStatus) = Result.Success(emptyList<Pattern>())
+            override suspend fun getPatternsByStatus(userId: String, status: PatternStatus, limit: Int) = Result.Success(emptyList<Pattern>())
             override suspend fun updatePatternConfidence(id: String, confidence: Float, lastObservedAt: Long) = Result.Success(Unit)
             override suspend fun deletePattern(id: String) = Result.Success(Unit)
         }

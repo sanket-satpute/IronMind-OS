@@ -12,6 +12,7 @@ fun AIOutput.InterventionRecommendation.toCandidate(): InterventionRecommendatio
         rationale = this.reason,
         suggestedAction = this.recommendation,
         targetEntityId = this.targetEntityId,
+        targetEntityType = this.targetEntityType,
         confidence = this.confidence
     )
 }

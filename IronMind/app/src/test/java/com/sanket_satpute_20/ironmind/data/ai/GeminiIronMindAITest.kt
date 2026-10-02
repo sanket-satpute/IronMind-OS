@@ -52,6 +52,32 @@ class GeminiIronMindAITest {
     }
 
     @Test
+    fun `parseAndValidateOutput parses valid INTERVENTION_RECOMMENDATION json correctly`() {
+        val json = """
+            {
+                "type": "INTERVENTION_RECOMMENDATION",
+                "confidence": 0.8,
+                "schemaVersion": 2,
+                "interventionType": "PROTECT",
+                "recommendation": "Block distraction",
+                "reason": "User is distracted",
+                "targetEntityId": "goal-1",
+                "targetEntityType": "GOAL"
+            }
+        """.trimIndent()
+        
+        val output = GeminiIronMindAI.parseAndValidateOutput(json, AIRequestType.INTERVENTION_SUGGESTION)
+        assertTrue(output is AIOutput.InterventionRecommendation)
+        val intervention = output as AIOutput.InterventionRecommendation
+        assertEquals(com.sanket_satpute_20.ironmind.domain.ai.InterventionType.PROTECT, intervention.interventionType)
+        assertEquals("Block distraction", intervention.recommendation)
+        assertEquals("goal-1", intervention.targetEntityId)
+        assertEquals("GOAL", intervention.targetEntityType)
+        assertEquals(0.8f, intervention.confidence)
+        assertEquals(2, intervention.schemaVersion)
+    }
+
+    @Test
     fun `parseAndValidateOutput returns NoAction for unknown type`() {
         val json = """
             {

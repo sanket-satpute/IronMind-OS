@@ -823,7 +823,11 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     override val recommendInterventionUseCase: RecommendInterventionUseCase by lazy {
-        RecommendInterventionUseCase(ironMindAI)
+        RecommendInterventionUseCase(
+            ironMindAI = ironMindAI,
+            clock = clock,
+            idGenerator = idGenerator
+        )
     }
 
     override val handleInterventionResultUseCase: HandleInterventionResultUseCase by lazy {

@@ -92,9 +92,10 @@ sealed class AIOutput {
         val reason: String,
         val supportingContext: String? = null,
         val targetEntityId: String? = null,
+        val targetEntityType: String? = null,
         override val confidence: Float,
         override val reasoning: String? = null,
-        override val schemaVersion: Int = 1
+        override val schemaVersion: Int = 2
     ) : AIOutput() {
         override val type: AIOutputType = AIOutputType.INTERVENTION_RECOMMENDATION
     }

@@ -115,7 +115,9 @@ class GeminiIronMindAI(
                   interventionType (one of the types above),
                   recommendation (short actionable suggestion),
                   reason (why this intervention is suggested),
-                  supportingContext (optional: observable evidence that supports this recommendation).
+                  supportingContext (optional: observable evidence that supports this recommendation),
+                  targetEntityId (optional ID of the target from context),
+                  targetEntityType (optional, one of: GOAL, COMMITMENT, REFLECTION, if targetEntityId is provided).
             """.trimIndent()
             else -> "Match the output type to the request type. Return relevant fields for that type."
         }
@@ -216,7 +218,8 @@ class GeminiIronMindAI(
                             recommendation = jsonObject.optString("recommendation", ""),
                             reason = jsonObject.optString("reason", ""),
                             supportingContext = if (jsonObject.has("supportingContext") && !jsonObject.isNull("supportingContext")) jsonObject.getString("supportingContext") else null,
-                            targetEntityId = if (jsonObject.has("targetEntityId")) jsonObject.getString("targetEntityId") else null,
+                            targetEntityId = if (jsonObject.has("targetEntityId") && !jsonObject.isNull("targetEntityId")) jsonObject.getString("targetEntityId") else null,
+                            targetEntityType = if (jsonObject.has("targetEntityType") && !jsonObject.isNull("targetEntityType")) jsonObject.getString("targetEntityType") else null,
                             confidence = confidence,
                             reasoning = reasoning,
                             schemaVersion = schemaVersion
