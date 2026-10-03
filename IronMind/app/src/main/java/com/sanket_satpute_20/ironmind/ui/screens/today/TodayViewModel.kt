@@ -10,6 +10,9 @@ import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.Commitment
 import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
 import com.sanket_satpute_20.ironmind.domain.model.ResultStatus
+import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendation
+import com.sanket_satpute_20.ironmind.domain.usecase.ai.GetPendingInterventionRecommendationsUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.ai.HandleInterventionResultUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetActiveCommitmentsUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.UpdateCommitmentStatusUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.ScheduleCommitmentUseCase
@@ -17,12 +20,14 @@ import com.sanket_satpute_20.ironmind.domain.usecase.commitment.CancelCommitment
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 
 sealed interface TodayUiState {
     data object Loading : TodayUiState
     data class Success(
-        val activeCommitments: List<Commitment>
+        val activeCommitments: List<Commitment>,
+        val pendingRecommendations: List<InterventionRecommendation> = emptyList()
     ) : TodayUiState
     data class Error(val message: String) : TodayUiState
 }
@@ -31,7 +36,9 @@ class TodayViewModel(
     private val getActiveCommitmentsUseCase: GetActiveCommitmentsUseCase,
     private val updateCommitmentStatusUseCase: UpdateCommitmentStatusUseCase,
     private val scheduleCommitmentUseCase: ScheduleCommitmentUseCase,
-    private val cancelCommitmentScheduleUseCase: CancelCommitmentScheduleUseCase
+    private val cancelCommitmentScheduleUseCase: CancelCommitmentScheduleUseCase,
+    private val getPendingInterventionRecommendationsUseCase: GetPendingInterventionRecommendationsUseCase,
+    private val handleInterventionResultUseCase: HandleInterventionResultUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<TodayUiState>(TodayUiState.Loading)
@@ -41,24 +48,37 @@ class TodayViewModel(
     private val currentUserId = "user-1"
 
     init {
-        loadCommitments()
+        loadData()
     }
 
-    fun loadCommitments() {
+    private fun loadData() {
         viewModelScope.launch {
             _uiState.value = TodayUiState.Loading
             when (val result = getActiveCommitmentsUseCase(currentUserId)) {
                 is Result.Success -> {
                     val commitments = result.data
-                    _uiState.value = TodayUiState.Success(
-                        activeCommitments = commitments
-                    )
+                    
+                    // Observe pending recommendations and update state
+                    getPendingInterventionRecommendationsUseCase(currentUserId, System.currentTimeMillis())
+                        .catch { e ->
+                            _uiState.value = TodayUiState.Error(e.message ?: "Failed to load recommendations")
+                        }
+                        .collect { recommendations ->
+                            _uiState.value = TodayUiState.Success(
+                                activeCommitments = commitments,
+                                pendingRecommendations = recommendations
+                            )
+                        }
                 }
                 is Result.Failure -> {
                     _uiState.value = TodayUiState.Error(result.error.message ?: "Failed to load commitments")
                 }
             }
         }
+    }
+
+    fun loadCommitments() {
+        loadData() // Alias loadCommitments to loadData since we combined them
     }
 
     fun updateCommitmentStatus(
@@ -70,10 +90,10 @@ class TodayViewModel(
         viewModelScope.launch {
             when (val result = updateCommitmentStatusUseCase(commitmentId, newStatus, resultStatus, actualDurationMinutes)) {
                 is Result.Success -> {
-                    loadCommitments() // Refresh the list
+                    loadData() // Refresh the list
                 }
                 is Result.Failure -> {
-                    loadCommitments()
+                    loadData()
                 }
             }
         }
@@ -84,7 +104,7 @@ class TodayViewModel(
     fun scheduleCommitment(commitmentId: String, timeInMillis: Long) {
         viewModelScope.launch {
             when (val result = scheduleCommitmentUseCase(currentUserId, commitmentId, timeInMillis)) {
-                is Result.Success -> loadCommitments()
+                is Result.Success -> loadData()
                 is Result.Failure -> {
                     // Show error state
                     _uiState.value = TodayUiState.Error(result.error.message ?: "Failed to schedule reminder")
@@ -96,11 +116,31 @@ class TodayViewModel(
     fun cancelSchedule(commitmentId: String) {
         viewModelScope.launch {
             when (val result = cancelCommitmentScheduleUseCase(currentUserId, commitmentId)) {
-                is Result.Success -> loadCommitments()
+                is Result.Success -> loadData()
                 is Result.Failure -> {
                     _uiState.value = TodayUiState.Error(result.error.message ?: "Failed to cancel schedule")
                 }
             }
+        }
+    }
+
+    fun handleInterventionResponse(
+        recommendation: InterventionRecommendation,
+        action: HandleInterventionResultUseCase.Action,
+        correctedText: String?
+    ) {
+        viewModelScope.launch {
+            handleInterventionResultUseCase(
+                recommendation = recommendation,
+                action = action,
+                userId = currentUserId,
+                correctedText = correctedText
+            )
+            // No need to reload data explicitly here because GetPendingInterventionRecommendationsUseCase 
+            // returns a Flow. When the status is updated, the Flow will emit a new list 
+            // (if the database implementation supports Flow updates, Room does). 
+            // If Room isn't reacting properly due to how it's queried, we might need a manual refresh,
+            // but standard Room Flow implementation handles this automatically.
         }
     }
 
@@ -113,7 +153,9 @@ class TodayViewModel(
                     getActiveCommitmentsUseCase = container.getActiveCommitmentsUseCase,
                     updateCommitmentStatusUseCase = container.updateCommitmentStatusUseCase,
                     scheduleCommitmentUseCase = container.scheduleCommitmentUseCase,
-                    cancelCommitmentScheduleUseCase = container.cancelCommitmentScheduleUseCase
+                    cancelCommitmentScheduleUseCase = container.cancelCommitmentScheduleUseCase,
+                    getPendingInterventionRecommendationsUseCase = container.getPendingInterventionRecommendationsUseCase,
+                    handleInterventionResultUseCase = container.handleInterventionResultUseCase
                 )
             }
         }

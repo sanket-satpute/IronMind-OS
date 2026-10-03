@@ -6,7 +6,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.sanket_satpute_20.ironmind.domain.ai.AIOutput
+import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendation
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.HandleInterventionResultUseCase.Action
 
 /**
@@ -17,7 +17,7 @@ import com.sanket_satpute_20.ironmind.domain.usecase.ai.HandleInterventionResult
  */
 @Composable
 fun InterventionSuggestionCard(
-    recommendation: AIOutput.InterventionRecommendation,
+    recommendation: InterventionRecommendation,
     onAction: (Action, String?) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -38,7 +38,7 @@ fun InterventionSuggestionCard(
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
             Text(
-                text = recommendation.supportingContext ?: recommendation.reason,
+                text = recommendation.rationale,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(bottom = 12.dp),
                 color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -50,28 +50,14 @@ fun InterventionSuggestionCard(
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
             Text(
-                text = recommendation.recommendation,
+                text = recommendation.suggestedAction,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 12.dp),
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
 
-            if (recommendation.supportingContext != null) {
-                Text(
-                    text = "Why:",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Text(
-                    text = recommendation.reason,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(bottom = 16.dp),
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            } else {
-                Spacer(modifier = Modifier.height(16.dp))
-            }
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Interactive Actions
             Row(

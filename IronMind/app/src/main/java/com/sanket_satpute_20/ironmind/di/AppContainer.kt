@@ -98,6 +98,8 @@ import com.sanket_satpute_20.ironmind.domain.usecase.ai.GeneratePlanUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.HandleInterventionResultUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.RecommendInterventionUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.UnderstandBarriersUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.ai.GetPendingInterventionRecommendationsUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.ai.UpdateInterventionRecommendationStatusUseCase
 import com.sanket_satpute_20.ironmind.domain.repository.BarrierRepository
 import com.sanket_satpute_20.ironmind.data.repository.BarrierRepositoryImpl
 import com.sanket_satpute_20.ironmind.domain.engine.BarrierUnderstandingOrchestrator
@@ -198,6 +200,8 @@ interface AppContainer {
     val generatePlanUseCase: GeneratePlanUseCase
     val understandBarriersUseCase: UnderstandBarriersUseCase
     val recommendInterventionUseCase: RecommendInterventionUseCase
+    val getPendingInterventionRecommendationsUseCase: GetPendingInterventionRecommendationsUseCase
+    val updateInterventionRecommendationStatusUseCase: UpdateInterventionRecommendationStatusUseCase
     val handleInterventionResultUseCase: HandleInterventionResultUseCase
     val ironMindAI: IronMindAI
     val autonomySettingsRepository: AutonomySettingsRepository
@@ -841,8 +845,21 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     override val handleInterventionResultUseCase: HandleInterventionResultUseCase by lazy {
         HandleInterventionResultUseCase(
             eventRepository = eventRepository,
+            updateInterventionRecommendationStatusUseCase = updateInterventionRecommendationStatusUseCase,
             clock = clock,
             idGenerator = idGenerator
+        )
+    }
+
+    override val getPendingInterventionRecommendationsUseCase: GetPendingInterventionRecommendationsUseCase by lazy {
+        GetPendingInterventionRecommendationsUseCase(
+            repository = interventionRecommendationRepository
+        )
+    }
+
+    override val updateInterventionRecommendationStatusUseCase: UpdateInterventionRecommendationStatusUseCase by lazy {
+        UpdateInterventionRecommendationStatusUseCase(
+            repository = interventionRecommendationRepository
         )
     }
 

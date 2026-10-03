@@ -14,6 +14,15 @@ import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeOutcomeRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeReminderScheduler
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeEventRepository
+import com.sanket_satpute_20.ironmind.domain.usecase.ai.GetPendingInterventionRecommendationsUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.ai.HandleInterventionResultUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.ai.UpdateInterventionRecommendationStatusUseCase
+import com.sanket_satpute_20.ironmind.domain.repository.InterventionRecommendationRepository
+import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendation
+import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendationStatus
+import com.sanket_satpute_20.ironmind.domain.ai.InterventionType
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -40,6 +49,11 @@ class TodayViewModelTest {
     private lateinit var idGenerator: FakeIdGenerator
     private lateinit var reminderScheduler: FakeReminderScheduler
     private lateinit var eventRepository: FakeEventRepository
+    
+    private lateinit var recommendationRepository: FakeInterventionRecommendationRepository
+    private lateinit var getPendingRecommendationsUseCase: GetPendingInterventionRecommendationsUseCase
+    private lateinit var updateRecommendationStatusUseCase: UpdateInterventionRecommendationStatusUseCase
+    private lateinit var handleInterventionResultUseCase: HandleInterventionResultUseCase
 
     private lateinit var viewModel: TodayViewModel
 
@@ -57,6 +71,11 @@ class TodayViewModelTest {
         createCommitmentUseCase = CreateCommitmentUseCase(repository, reminderScheduler, idGenerator, clock, eventRepository)
         scheduleCommitmentUseCase = ScheduleCommitmentUseCase(repository, reminderScheduler, clock, idGenerator, eventRepository)
         cancelCommitmentScheduleUseCase = CancelCommitmentScheduleUseCase(repository, reminderScheduler, clock, idGenerator, eventRepository)
+        
+        recommendationRepository = FakeInterventionRecommendationRepository()
+        getPendingRecommendationsUseCase = GetPendingInterventionRecommendationsUseCase(recommendationRepository)
+        updateRecommendationStatusUseCase = UpdateInterventionRecommendationStatusUseCase(recommendationRepository)
+        handleInterventionResultUseCase = HandleInterventionResultUseCase(eventRepository, updateRecommendationStatusUseCase, clock, idGenerator)
     }
 
     private fun createViewModel() {
@@ -64,7 +83,9 @@ class TodayViewModelTest {
             getActiveCommitmentsUseCase,
             updateCommitmentStatusUseCase,
             scheduleCommitmentUseCase,
-            cancelCommitmentScheduleUseCase
+            cancelCommitmentScheduleUseCase,
+            getPendingRecommendationsUseCase,
+            handleInterventionResultUseCase
         )
     }
 
@@ -129,6 +150,57 @@ class TodayViewModelTest {
 
         val updatedState = viewModel.uiState.value as TodayUiState.Success
         assertEquals(0, updatedState.activeCommitments.size)
+    }
+
+    @Test
+    fun `loadCommitments success updates state with pending recommendations`() = runTest {
+        val rec = InterventionRecommendation(
+            id = "rec-1",
+            userId = "user-1",
+            interventionType = InterventionType.BREAK_DOWN,
+            targetEntityId = "task-1",
+            targetEntityType = "Task",
+            suggestedAction = "Take a break",
+            rationale = "You have been working for 2 hours.",
+            status = InterventionRecommendationStatus.PENDING,
+            createdAt = 1000L,
+            expiresAt = 2000L
+        )
+        recommendationRepository.recommendations["rec-1"] = rec
+        
+        createViewModel()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is TodayUiState.Success)
+        
+        val successState = state as TodayUiState.Success
+        assertEquals(1, successState.pendingRecommendations.size)
+        assertEquals("Take a break", successState.pendingRecommendations[0].suggestedAction)
+    }
+}
+
+class FakeInterventionRecommendationRepository : InterventionRecommendationRepository {
+    val recommendations = mutableMapOf<String, InterventionRecommendation>()
+    
+    override suspend fun saveRecommendation(recommendation: InterventionRecommendation): Result<Unit, Exception> {
+        recommendations[recommendation.id] = recommendation
+        return Result.Success(Unit)
+    }
+
+    override suspend fun getRecommendation(id: String): Result<InterventionRecommendation?, Exception> {
+        return Result.Success(recommendations[id])
+    }
+
+    override fun getPendingRecommendations(userId: String, currentTime: Long): Flow<List<InterventionRecommendation>> {
+        return MutableStateFlow(recommendations.values.filter { it.userId == userId && it.status == InterventionRecommendationStatus.PENDING })
+    }
+
+    override suspend fun updateRecommendationStatus(id: String, status: InterventionRecommendationStatus): Result<Unit, Exception> {
+        val rec = recommendations[id] ?: return Result.Failure(Exception("Not found"))
+        recommendations[id] = rec.copy(status = status)
+        // Refresh Flow if it was a real DB. We'll just update map.
+        return Result.Success(Unit)
     }
 }
 

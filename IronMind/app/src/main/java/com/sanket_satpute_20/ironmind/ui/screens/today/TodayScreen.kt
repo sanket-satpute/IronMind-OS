@@ -16,7 +16,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sanket_satpute_20.ironmind.domain.model.Commitment
 import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
 import com.sanket_satpute_20.ironmind.domain.model.ResultStatus
+import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendation
+import com.sanket_satpute_20.ironmind.domain.usecase.ai.HandleInterventionResultUseCase
 import com.sanket_satpute_20.ironmind.ui.components.CommitmentStatusControls
+import com.sanket_satpute_20.ironmind.ui.components.InterventionSuggestionCard
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.DateRange
@@ -44,7 +47,8 @@ fun TodayScreen(
         onNavigateToProtection = onNavigateToProtection,
         onNavigateToReflection = onNavigateToReflection,
         onScheduleClick = { id, time -> viewModel.scheduleCommitment(id, time) },
-        onCancelScheduleClick = { id -> viewModel.cancelSchedule(id) }
+        onCancelScheduleClick = { id -> viewModel.cancelSchedule(id) },
+        onInterventionResponse = viewModel::handleInterventionResponse
     )
 }
 
@@ -57,7 +61,8 @@ fun TodayScreenContent(
     onNavigateToProtection: () -> Unit,
     onNavigateToReflection: () -> Unit,
     onScheduleClick: (String, Long) -> Unit,
-    onCancelScheduleClick: (String) -> Unit
+    onCancelScheduleClick: (String) -> Unit,
+    onInterventionResponse: (InterventionRecommendation, HandleInterventionResultUseCase.Action, String?) -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -96,9 +101,11 @@ fun TodayScreenContent(
                     Column(modifier = Modifier.fillMaxSize()) {
                         TodayContent(
                             commitments = state.activeCommitments,
+                            pendingRecommendations = state.pendingRecommendations,
                             onStatusChange = onStatusChange,
                             onScheduleClick = onScheduleClick,
-                            onCancelScheduleClick = onCancelScheduleClick
+                            onCancelScheduleClick = onCancelScheduleClick,
+                            onInterventionResponse = onInterventionResponse
                         )
                     }
                 }
@@ -110,11 +117,13 @@ fun TodayScreenContent(
 @Composable
 fun TodayContent(
     commitments: List<Commitment>,
+    pendingRecommendations: List<InterventionRecommendation>,
     onStatusChange: (String, CommitmentStatus, ResultStatus?) -> Unit,
     onScheduleClick: (String, Long) -> Unit,
-    onCancelScheduleClick: (String) -> Unit
+    onCancelScheduleClick: (String) -> Unit,
+    onInterventionResponse: (InterventionRecommendation, HandleInterventionResultUseCase.Action, String?) -> Unit
 ) {
-    if (commitments.isEmpty()) {
+    if (commitments.isEmpty() && pendingRecommendations.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(text = "No active commitments for today.", style = MaterialTheme.typography.bodyLarge)
         }
@@ -130,44 +139,59 @@ fun TodayContent(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        item {
-            Text(
-                text = "Next Action",
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-        }
         
-        if (nextAction != null) {
-            item {
-                CommitmentCard(
-                    commitment = nextAction,
-                    isNextAction = true,
-                    onStatusChange = { newStatus, outcome -> onStatusChange(nextAction.id, newStatus, outcome) },
-                    onScheduleClick = { time -> onScheduleClick(nextAction.id, time) },
-                    onCancelScheduleClick = { onCancelScheduleClick(nextAction.id) }
+        if (pendingRecommendations.isNotEmpty()) {
+            items(pendingRecommendations, key = { it.id }) { recommendation ->
+                InterventionSuggestionCard(
+                    recommendation = recommendation,
+                    onAction = { action, text -> onInterventionResponse(recommendation, action, text) }
                 )
             }
-        }
-        
-        val otherCommitments = commitments.filter { it.id != nextAction?.id }
-        if (otherCommitments.isNotEmpty()) {
             item {
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+        }
+
+        if (commitments.isNotEmpty()) {
+            item {
                 Text(
-                    text = "Later Today",
-                    style = MaterialTheme.typography.titleMedium,
+                    text = "Next Action",
+                    style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
             }
-            items(otherCommitments, key = { it.id }) { commitment ->
-                CommitmentCard(
-                    commitment = commitment,
-                    isNextAction = false,
-                    onStatusChange = { newStatus, outcome -> onStatusChange(commitment.id, newStatus, outcome) },
-                    onScheduleClick = { time -> onScheduleClick(commitment.id, time) },
-                    onCancelScheduleClick = { onCancelScheduleClick(commitment.id) }
-                )
+            
+            if (nextAction != null) {
+                item {
+                    CommitmentCard(
+                        commitment = nextAction,
+                        isNextAction = true,
+                        onStatusChange = { newStatus, outcome -> onStatusChange(nextAction.id, newStatus, outcome) },
+                        onScheduleClick = { time -> onScheduleClick(nextAction.id, time) },
+                        onCancelScheduleClick = { onCancelScheduleClick(nextAction.id) }
+                    )
+                }
+            }
+            
+            val otherCommitments = commitments.filter { it.id != nextAction?.id }
+            if (otherCommitments.isNotEmpty()) {
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Later Today",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+                items(otherCommitments, key = { it.id }) { commitment ->
+                    CommitmentCard(
+                        commitment = commitment,
+                        isNextAction = false,
+                        onStatusChange = { newStatus, outcome -> onStatusChange(commitment.id, newStatus, outcome) },
+                        onScheduleClick = { time -> onScheduleClick(commitment.id, time) },
+                        onCancelScheduleClick = { onCancelScheduleClick(commitment.id) }
+                    )
+                }
             }
         }
     }

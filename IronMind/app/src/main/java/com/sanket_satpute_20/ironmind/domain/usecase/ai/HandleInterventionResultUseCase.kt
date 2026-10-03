@@ -1,12 +1,13 @@
 package com.sanket_satpute_20.ironmind.domain.usecase.ai
 
-import com.sanket_satpute_20.ironmind.domain.ai.AIOutput
 import com.sanket_satpute_20.ironmind.domain.common.Clock
 import com.sanket_satpute_20.ironmind.domain.common.IdGenerator
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.EntitySource
 import com.sanket_satpute_20.ironmind.domain.model.Event
 import com.sanket_satpute_20.ironmind.domain.model.EventType
+import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendation
+import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendationStatus
 import com.sanket_satpute_20.ironmind.domain.repository.EventRepository
 
 /**
@@ -18,6 +19,7 @@ import com.sanket_satpute_20.ironmind.domain.repository.EventRepository
  */
 class HandleInterventionResultUseCase(
     private val eventRepository: EventRepository,
+    private val updateInterventionRecommendationStatusUseCase: UpdateInterventionRecommendationStatusUseCase,
     private val clock: Clock,
     private val idGenerator: IdGenerator
 ) {
@@ -29,7 +31,7 @@ class HandleInterventionResultUseCase(
     }
 
     suspend operator fun invoke(
-        recommendation: AIOutput.InterventionRecommendation,
+        recommendation: InterventionRecommendation,
         action: Action,
         userId: String,
         correctedText: String? = null
@@ -41,9 +43,16 @@ class HandleInterventionResultUseCase(
             Action.IGNORE -> EventType.INTERVENTION_IGNORED
         }
 
+        val mappedStatus = when (action) {
+            Action.ACCEPT -> InterventionRecommendationStatus.ACCEPTED
+            Action.REJECT -> InterventionRecommendationStatus.REJECTED
+            Action.IGNORE -> InterventionRecommendationStatus.IGNORED
+            Action.CORRECT -> null // Do not map CORRECT. Leave status unchanged (undefined handling per contract).
+        }
+
         val metadata = buildString {
             append("type=${recommendation.interventionType}")
-            append(",recommendation=${recommendation.recommendation}")
+            append(",recommendation=${recommendation.suggestedAction}")
             if (correctedText != null) {
                 append(",correctedText=$correctedText")
             }
@@ -61,11 +70,19 @@ class HandleInterventionResultUseCase(
             metadata = metadata
         )
 
-        val result = eventRepository.saveEvent(event)
+        val eventResult = eventRepository.saveEvent(event)
         
-        return when (result) {
-            is Result.Success -> Result.Success(Unit)
-            is Result.Failure -> Result.Failure(result.error)
+        if (eventResult is Result.Failure) {
+            return eventResult
         }
+
+        if (mappedStatus != null) {
+            val statusResult = updateInterventionRecommendationStatusUseCase(recommendation.id, mappedStatus)
+            if (statusResult is Result.Failure) {
+                return statusResult
+            }
+        }
+        
+        return Result.Success(Unit)
     }
 }
