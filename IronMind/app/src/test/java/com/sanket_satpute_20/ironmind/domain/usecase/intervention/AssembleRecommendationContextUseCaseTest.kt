@@ -22,6 +22,7 @@ class AssembleRecommendationContextUseCaseTest {
     private lateinit var patternRepo: PatternRepository
     private lateinit var barrierRepo: BarrierRepository
     private lateinit var reflectionRepo: ReflectionRepository
+    private lateinit var eventRepo: EventRepository
     private lateinit var useCase: AssembleRecommendationContextUseCase
     
     private val timeProvider: () -> Long = { 10000000L }
@@ -34,6 +35,7 @@ class AssembleRecommendationContextUseCaseTest {
         patternRepo = mockk()
         barrierRepo = mockk()
         reflectionRepo = mockk()
+        eventRepo = mockk()
 
         useCase = AssembleRecommendationContextUseCase(
             goalRepository = goalRepo,
@@ -42,6 +44,7 @@ class AssembleRecommendationContextUseCaseTest {
             patternRepository = patternRepo,
             barrierRepository = barrierRepo,
             reflectionRepository = reflectionRepo,
+            eventRepository = eventRepo,
             timeProvider = timeProvider
         )
     }
@@ -71,6 +74,10 @@ class AssembleRecommendationContextUseCaseTest {
         val reflection = Reflection("r1", userId, null, null, "Content", null, 0L)
         coEvery { reflectionRepo.getReflectionsForTimeWindow(userId, any(), any(), AssembleRecommendationContextUseCase.MAX_REFLECTIONS, false) } returns Result.Success(listOf(reflection))
 
+        val event = Event(id = "e1", userId = userId, type = EventType.INTERVENTION_OVERRIDDEN, entityType = "Intervention", entityId = "t1", occurredAt = 0L, recordedAt = 0L, source = EntitySource.SYSTEM, metadata = "type=BREAK_DOWN,recommendation=Do jumping jacks,correctedText=I have a broken leg")
+        val malformedEvent = Event(id = "e2", userId = userId, type = EventType.INTERVENTION_OVERRIDDEN, entityType = "Intervention", entityId = "t2", occurredAt = 0L, recordedAt = 0L, source = EntitySource.SYSTEM, metadata = "invalidMetadataString")
+        coEvery { eventRepo.getEventsForTimeWindow(userId, any(), any(), listOf(EventType.INTERVENTION_OVERRIDDEN), AssembleRecommendationContextUseCase.MAX_CORRECTIONS, false) } returns Result.Success(listOf(event, malformedEvent))
+
         // Act
         val result = useCase(userId)
         
@@ -99,6 +106,33 @@ class AssembleRecommendationContextUseCaseTest {
         
         assertEquals(1, context.recentReflections.size)
         assertEquals("r1", context.recentReflections.first().id)
+        
+        // Corrections
+        assertEquals(1, context.recentCorrections.size)
+        val correction = context.recentCorrections.first()
+        assertEquals("e1", correction.eventId)
+        assertEquals("t1", correction.targetEntityId)
+        assertEquals("BREAK_DOWN", correction.interventionType)
+        assertEquals("Do jumping jacks", correction.recommendation)
+        assertEquals("I have a broken leg", correction.correctedText)
+    }
+
+    @Test
+    fun `assemble context fails if event query fails`() = runBlocking {
+        val userId = "user1"
+        
+        coEvery { goalRepo.getActiveGoalsForUser(any(), any()) } returns Result.Success(emptyList())
+        coEvery { commitmentRepo.getActiveCommitmentsForUser(any(), any(), any()) } returns Result.Success(emptyList())
+        coEvery { observationRepo.getObservationsForTimeWindow(any(), any(), any(), any(), any(), any()) } returns Result.Success(emptyList())
+        coEvery { patternRepo.getPatternsByStatus(any(), any(), any()) } returns Result.Success(emptyList())
+        coEvery { barrierRepo.getActiveBarriersForUser(any(), any(), any()) } returns Result.Success(emptyList())
+        coEvery { reflectionRepo.getReflectionsForTimeWindow(any(), any(), any(), any(), any()) } returns Result.Success(emptyList())
+        
+        coEvery { eventRepo.getEventsForTimeWindow(any(), any(), any(), any(), any(), any()) } returns Result.Failure(Exception("DB error"))
+        
+        val result = useCase(userId)
+        assertTrue(result is Result.Failure)
+        assertEquals("DB error", (result as Result.Failure).error.message)
     }
     
     @Test

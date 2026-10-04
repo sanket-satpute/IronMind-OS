@@ -847,6 +847,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             patternRepository = patternRepository,
             barrierRepository = barrierRepository,
             reflectionRepository = reflectionRepository,
+            eventRepository = eventRepository,
             timeProvider = { clock.currentTimeMillis() }
         )
     }

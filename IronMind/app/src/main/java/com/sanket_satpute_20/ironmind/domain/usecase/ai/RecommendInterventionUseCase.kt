@@ -205,6 +205,7 @@ class RecommendInterventionUseCase(
             Active Patterns: ${context.activePatterns.size}
             Active Barriers: ${context.activeBarriers.size}
             Recent Reflections: ${context.recentReflections.size}
+            Recent Corrections: ${context.recentCorrections.size}
             
             ${context.activeGoals.joinToString("\n") { "GOAL [${it.id}]: ${it.title} (${it.status})" }}
             ${context.activeCommitments.joinToString("\n") { "COMMITMENT [${it.id}]: ${it.title} (${it.status})" }}
@@ -212,6 +213,7 @@ class RecommendInterventionUseCase(
             ${context.activePatterns.joinToString("\n") { "PATTERN [${it.id}]: ${it.type} - ${it.description}" }}
             ${context.activeBarriers.joinToString("\n") { "BARRIER [${it.id}]: ${it.category} - ${it.description}" }}
             ${context.recentReflections.joinToString("\n") { "REFLECTION [${it.id}]: ${it.content}" }}
+            ${context.recentCorrections.joinToString("\n") { "CORRECTION [${it.eventId}]: User explicitly corrected recommendation '${it.recommendation}' (Target: ${it.targetEntityId ?: "None"}, Type: ${it.interventionType}). Corrected Text: ${it.correctedText ?: "None provided"}" }}
         """.trimIndent()
     }
 }

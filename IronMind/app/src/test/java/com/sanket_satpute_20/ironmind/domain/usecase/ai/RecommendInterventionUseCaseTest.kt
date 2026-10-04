@@ -58,7 +58,8 @@ class RecommendInterventionUseCaseTest {
         recentObservations = emptyList(),
         activePatterns = emptyList(),
         activeBarriers = emptyList(),
-        recentReflections = emptyList()
+        recentReflections = emptyList(),
+        recentCorrections = emptyList()
     )
 
     private fun validAIOutput(
@@ -637,5 +638,45 @@ class RecommendInterventionUseCaseTest {
 
         assertTrue(result is Result.Success)
         assertTrue((result as Result.Success).data is InterventionRecommendationResult.Recommended)
+    }
+
+    @Test
+    fun `ai request successfully serializes correction evidence into context string`() = runBlocking {
+        // Arrange
+        setupAutonomy(AutonomyLevel.FULL_AUTO)
+        setupAI(validAIOutput())
+        setupHistory()
+        setupTargetCompletion(TargetCompletionResult.NOT_COMPLETED)
+        setupSaveSuccess()
+
+        val correction = com.sanket_satpute_20.ironmind.domain.model.intervention.ContextCorrection(
+            eventId = "evt-123",
+            targetEntityId = "goal-99",
+            occurredAt = currentTime,
+            interventionType = "BREAK_DOWN",
+            recommendation = "Do x",
+            correctedText = "I disagree"
+        )
+        
+        val contextWithCorrection = defaultContext().copy(
+            recentCorrections = listOf(correction)
+        )
+
+        val requestSlot = io.mockk.slot<AIRequest>()
+        coEvery { ironMindAI.process(capture(requestSlot)) } returns Result.Success(validAIOutput())
+
+        // Act
+        val result = useCase(contextWithCorrection)
+
+        // Assert
+        assertTrue(result is Result.Success)
+        
+        val capturedRequest = requestSlot.captured
+        val capturedContextString = capturedRequest.input
+        
+        assertTrue("Context string should not be null", capturedContextString != null)
+        assertTrue("Context string should contain the correction", 
+            capturedContextString!!.contains("CORRECTION [evt-123]: User explicitly corrected recommendation 'Do x' (Target: goal-99, Type: BREAK_DOWN). Corrected Text: I disagree")
+        )
     }
 }

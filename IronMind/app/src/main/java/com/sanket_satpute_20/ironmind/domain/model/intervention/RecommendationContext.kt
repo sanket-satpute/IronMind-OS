@@ -14,7 +14,8 @@ data class RecommendationContext(
     val recentObservations: List<ContextObservation>,
     val activePatterns: List<ContextPattern>,
     val activeBarriers: List<ContextBarrier>,
-    val recentReflections: List<ContextReflection>
+    val recentReflections: List<ContextReflection>,
+    val recentCorrections: List<ContextCorrection>
 )
 
 data class ContextGoal(
@@ -59,4 +60,13 @@ data class ContextReflection(
     val id: String,
     val content: String,
     val createdAt: Long
+)
+
+data class ContextCorrection(
+    val eventId: String,
+    val targetEntityId: String?,
+    val occurredAt: Long,
+    val interventionType: String,
+    val recommendation: String,
+    val correctedText: String?
 )

@@ -14,6 +14,7 @@ class AssembleRecommendationContextUseCase(
     private val patternRepository: PatternRepository,
     private val barrierRepository: BarrierRepository,
     private val reflectionRepository: ReflectionRepository,
+    private val eventRepository: EventRepository,
     private val timeProvider: () -> Long
 ) {
     companion object {
@@ -24,6 +25,7 @@ class AssembleRecommendationContextUseCase(
         const val MAX_PATTERNS = 10
         const val MAX_BARRIERS = 10
         const val MAX_REFLECTIONS = 10
+        const val MAX_CORRECTIONS = 10
         
         val ACTIVE_COMMITMENT_STATUSES = listOf(
             CommitmentStatus.PLANNED,
@@ -105,6 +107,41 @@ class AssembleRecommendationContextUseCase(
             ContextReflection(it.id, it.content, it.createdAt)
         }
         
+        // 7. Bounded Corrections
+        val correctionsResult = eventRepository.getEventsForTimeWindow(
+            userId = userId,
+            startTime = windowStartMs,
+            endTime = referenceTimeMs,
+            types = listOf(com.sanket_satpute_20.ironmind.domain.model.EventType.INTERVENTION_OVERRIDDEN),
+            limit = MAX_CORRECTIONS,
+            orderAsc = false // newest first
+        )
+        if (correctionsResult is Result.Failure) return Result.Failure(correctionsResult.error)
+        
+        val contextCorrections = (correctionsResult as Result.Success).data.mapNotNull { event ->
+            val metadataMap = event.metadata?.split(",")?.associate { 
+                val parts = it.split("=", limit = 2)
+                if (parts.size == 2) parts[0] to parts[1] else parts[0] to ""
+            } ?: emptyMap()
+            
+            val type = metadataMap["type"]
+            val recommendation = metadataMap["recommendation"]
+            val correctedText = metadataMap["correctedText"]
+            
+            if (type == null || recommendation == null) {
+                null
+            } else {
+                ContextCorrection(
+                    eventId = event.id,
+                    targetEntityId = event.entityId,
+                    occurredAt = event.occurredAt,
+                    interventionType = type,
+                    recommendation = recommendation,
+                    correctedText = correctedText?.takeIf { it.isNotEmpty() }
+                )
+            }
+        }
+        
         val context = RecommendationContext(
             userId = userId,
             activeGoals = contextGoals,
@@ -112,7 +149,8 @@ class AssembleRecommendationContextUseCase(
             recentObservations = contextObservations,
             activePatterns = contextPatterns,
             activeBarriers = contextBarriers,
-            recentReflections = contextReflections
+            recentReflections = contextReflections,
+            recentCorrections = contextCorrections
         )
         
         return Result.Success(context)
