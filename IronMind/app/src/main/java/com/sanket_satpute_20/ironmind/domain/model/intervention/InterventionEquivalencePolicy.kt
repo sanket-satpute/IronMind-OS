@@ -46,15 +46,19 @@ class InterventionEquivalencePolicy {
         }
 
         // 3. Precedence check
-        // We do NOT silently invent a 'most recent wins' rule if multiple statuses exist.
-        val uniqueStatuses = equivalents.map { it.status }.toSet()
+        // The approved V2.12 rule for Case L: the recommendation with the greatest createdAt 
+        // determines the effective suppression state.
+        val maxCreatedAt = equivalents.maxOf { it.createdAt }
+        val mostRecentEquivalents = equivalents.filter { it.createdAt == maxCreatedAt }
+
+        // C. Equal createdAt values: if multiple records share the exact same max timestamp
+        // but have differing statuses, we must preserve the unresolved outcome for that tie.
+        val uniqueStatuses = mostRecentEquivalents.map { it.status }.toSet()
         if (uniqueStatuses.size > 1) {
             return SuppressionResult.UnresolvedPrecedence
         }
 
-        // Since statuses are identical (or there's only 1 equivalent), 
-        // evaluating the most recent one correctly applies the latest cooldown timer.
-        val relevantHistory = equivalents.maxByOrNull { it.createdAt } ?: return SuppressionResult.Allowed
+        val relevantHistory = mostRecentEquivalents.first()
 
         return when (relevantHistory.status) {
             InterventionRecommendationStatus.PENDING -> {
