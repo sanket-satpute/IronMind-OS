@@ -20,4 +20,19 @@ interface InterventionRecommendationDao {
 
     @Query("UPDATE intervention_recommendations SET status = :status WHERE id = :id")
     fun updateStatus(id: String, status: String)
+
+    @Query("""
+        SELECT * FROM intervention_recommendations 
+        WHERE userId = :userId 
+        AND objective = :objective 
+        AND (targetEntityType = :targetEntityType OR (targetEntityType IS NULL AND :targetEntityType IS NULL))
+        AND (targetEntityId = :targetEntityId OR (targetEntityId IS NULL AND :targetEntityId IS NULL))
+        ORDER BY createdAt DESC
+    """)
+    fun getEquivalentRecommendations(
+        userId: String,
+        objective: String,
+        targetEntityType: String?,
+        targetEntityId: String?
+    ): List<InterventionRecommendationEntity>
 }

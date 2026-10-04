@@ -10,4 +10,10 @@ interface InterventionRecommendationRepository {
     suspend fun getRecommendation(id: String): Result<InterventionRecommendation?, Exception>
     fun getPendingRecommendations(userId: String, currentTime: Long): Flow<List<InterventionRecommendation>>
     suspend fun updateRecommendationStatus(id: String, status: InterventionRecommendationStatus): Result<Unit, Exception>
+    suspend fun getEquivalentRecommendations(
+        userId: String,
+        objective: String,
+        targetEntityType: String?,
+        targetEntityId: String?
+    ): Result<List<InterventionRecommendation>, Exception>
 }

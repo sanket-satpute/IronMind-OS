@@ -52,4 +52,20 @@ class InterventionRecommendationRepositoryImpl(
             Result.Failure(e)
         }
     }
+
+    override suspend fun getEquivalentRecommendations(
+        userId: String,
+        objective: String,
+        targetEntityType: String?,
+        targetEntityId: String?
+    ): Result<List<InterventionRecommendation>, Exception> {
+        return try {
+            val entities = withContext(Dispatchers.IO) {
+                dao.getEquivalentRecommendations(userId, objective, targetEntityType, targetEntityId)
+            }
+            Result.Success(entities.mapNotNull { it.toDomain() })
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
 }

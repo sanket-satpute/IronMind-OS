@@ -45,6 +45,20 @@ class FakeInterventionRecommendationRepository : InterventionRecommendationRepos
         recommendations[id] = rec.copy(status = status)
         return Result.Success(Unit)
     }
+
+    override suspend fun getEquivalentRecommendations(
+        userId: String,
+        objective: String,
+        targetEntityType: String?,
+        targetEntityId: String?
+    ): Result<List<InterventionRecommendation>, Exception> {
+        return Result.Success(recommendations.values.filter { 
+            it.userId == userId && 
+            it.objective.name == objective && 
+            it.targetEntityType == targetEntityType && 
+            it.targetEntityId == targetEntityId 
+        }.sortedByDescending { it.createdAt })
+    }
 }
 
 class SaveInterventionRecommendationUseCaseTest {

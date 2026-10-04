@@ -552,7 +552,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     override val createPlanUseCase: CreatePlanUseCase by lazy {
-        CreatePlanUseCase(planRepository, idGenerator, clock, eventRepository)
+           CreatePlanUseCase(planRepository, idGenerator, clock, eventRepository)
     }
 
     override val getTasksUseCase: GetTasksUseCase by lazy {
@@ -839,7 +839,14 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         RecommendInterventionUseCase(
             ironMindAI = ironMindAI,
             clock = clock,
-            idGenerator = idGenerator
+            idGenerator = idGenerator,
+            autonomySettingsRepository = autonomySettingsRepository,
+            recommendationRepository = interventionRecommendationRepository,
+            targetCompletionResolver = com.sanket_satpute_20.ironmind.domain.model.intervention.TargetCompletionResolver(
+                goalRepository = goalRepository,
+                commitmentRepository = commitmentRepository
+            ),
+            equivalencePolicy = com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionEquivalencePolicy()
         )
     }
 

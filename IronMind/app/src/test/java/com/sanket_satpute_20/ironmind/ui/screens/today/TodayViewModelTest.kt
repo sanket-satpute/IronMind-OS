@@ -203,6 +203,20 @@ class FakeInterventionRecommendationRepository : InterventionRecommendationRepos
         // Refresh Flow if it was a real DB. We'll just update map.
         return Result.Success(Unit)
     }
+
+    override suspend fun getEquivalentRecommendations(
+        userId: String,
+        objective: String,
+        targetEntityType: String?,
+        targetEntityId: String?
+    ): Result<List<InterventionRecommendation>, Exception> {
+        return Result.Success(recommendations.values.filter { 
+            it.userId == userId && 
+            it.objective.name == objective && 
+            it.targetEntityType == targetEntityType && 
+            it.targetEntityId == targetEntityId 
+        }.sortedByDescending { it.createdAt })
+    }
 }
 
 

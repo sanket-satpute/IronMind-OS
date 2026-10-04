@@ -39,6 +39,20 @@ class FakeInterventionRecommendationDao : InterventionRecommendationDao {
             records[id] = rec.copy(status = status)
         }
     }
+
+    override fun getEquivalentRecommendations(
+        userId: String,
+        objective: String,
+        targetEntityType: String?,
+        targetEntityId: String?
+    ): List<InterventionRecommendationEntity> {
+        return records.values.filter { 
+            it.userId == userId && 
+            it.objective == objective && 
+            it.targetEntityType == targetEntityType && 
+            it.targetEntityId == targetEntityId 
+        }.sortedByDescending { it.createdAt }
+    }
 }
 
 class InterventionRecommendationRepositoryImplTest {
