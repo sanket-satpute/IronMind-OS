@@ -191,6 +191,8 @@ PROACTIVE_NOTIFICATIONS
 BACKGROUND_LEARNING
 GOAL_RESURFACING
 REFLECTION_PROCESSING
+EXPERIMENTATION
+INTERVENTION_GENERATION
 ```
 
 Additional capabilities may be added later through explicit review.
@@ -4368,6 +4370,43 @@ IronMind should respect that.
 # 306. FINAL AUTONOMY PRODUCT RULE
 
 > **The more power IronMind has, the more explicit, explainable, reversible, and controllable that power must become.**
+
+---
+
+# 307. INTERVENTION GENERATION AUTONOMY
+
+Intervention Generation autonomy controls whether IronMind may autonomously generate intervention recommendations based on context and AI inference.
+
+It means ONLY: "Permission for autonomous generation of an intervention recommendation."
+
+It must NOT become a catch-all capability for:
+* notification delivery
+* execution
+* protection
+* scheduling
+* Android actions
+* outcome learning
+
+### OFF
+
+Recommendation generation prohibited.
+
+### SUGGEST_ONLY
+
+Recommendation generation permitted.
+Recommendation is persisted.
+Suggestion UI may present it.
+No execution.
+
+### ASK_BEFORE_ACTION
+
+Same effective behavior as SUGGEST_ONLY in V2.12.
+(Do not invent V3 behavior).
+
+### FULL_AUTO
+
+Same effective behavior as SUGGEST_ONLY in V2.12.
+(Do not invent V3 behavior).
 
 ---
 
