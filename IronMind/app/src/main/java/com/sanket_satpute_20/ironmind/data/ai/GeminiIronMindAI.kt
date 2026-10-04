@@ -108,11 +108,13 @@ class GeminiIronMindAI(
                 CRITICAL RULES:
                 - This is a CANDIDATE only. You must NOT execute any action.
                 - Select exactly one interventionType from: REMIND, REDIRECT, PROTECT, BREAK_DOWN, REASSURE, CHALLENGE, ASK, RECOVER, RESCHEDULE, REFLECT, CELEBRATE, STAY_SILENT.
+                - Select exactly one objective from: INITIATE_ACTION, REDUCE_FRICTION, RECOVER_COMMITMENT, PREVENT_DISRUPTION, REINFORCE_BEHAVIOR, EXTRACT_INSIGHT.
                 - If no useful intervention is warranted, use STAY_SILENT.
                 - Do NOT manipulate, pressure, or alarm the user.
                 - Keep recommendations contextual, bounded, and explainable.
                 Output JSON with type "INTERVENTION_RECOMMENDATION" and fields:
                   interventionType (one of the types above),
+                  objective (one of the objectives above),
                   recommendation (short actionable suggestion),
                   reason (why this intervention is suggested),
                   supportingContext (optional: observable evidence that supports this recommendation),
@@ -213,8 +215,17 @@ class GeminiIronMindAI(
                         } catch (e: IllegalArgumentException) {
                             InterventionType.REMIND // Safe fallback
                         }
+                        
+                        val objectiveStr = jsonObject.optString("objective", "")
+                        val objective = try {
+                            com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.valueOf(objectiveStr)
+                        } catch (e: IllegalArgumentException) {
+                            null // Will cause isValid() to fail
+                        }
+                        
                         AIOutput.InterventionRecommendation(
                             interventionType = interventionType,
+                            objective = objective,
                             recommendation = jsonObject.optString("recommendation", ""),
                             reason = jsonObject.optString("reason", ""),
                             supportingContext = if (jsonObject.has("supportingContext") && !jsonObject.isNull("supportingContext")) jsonObject.getString("supportingContext") else null,

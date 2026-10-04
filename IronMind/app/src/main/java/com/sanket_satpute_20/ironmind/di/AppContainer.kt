@@ -318,7 +318,8 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             IronMindDatabase.MIGRATION_16_17,
             IronMindDatabase.MIGRATION_17_18,
             IronMindDatabase.MIGRATION_18_19,
-            IronMindDatabase.MIGRATION_19_20
+            IronMindDatabase.MIGRATION_19_20,
+            IronMindDatabase.MIGRATION_20_21
         ).build()
     }
 

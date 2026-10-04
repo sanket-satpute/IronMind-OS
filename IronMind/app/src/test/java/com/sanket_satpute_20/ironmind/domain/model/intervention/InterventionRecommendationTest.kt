@@ -14,6 +14,7 @@ class InterventionRecommendationTest {
     fun `candidate construction retains AI fields but drops unsafe state`() {
         val aiOutput = AIOutput.InterventionRecommendation(
             interventionType = InterventionType.BREAK_DOWN,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
             recommendation = "Break down into smaller tasks",
             reason = "Task is too large",
             supportingContext = "User has postponed 3 times",
@@ -38,6 +39,7 @@ class InterventionRecommendationTest {
             id = UUID.randomUUID().toString(),
             userId = "user_123",
             interventionType = InterventionType.BREAK_DOWN,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
             targetEntityId = "goal_123",
             targetEntityType = "GOAL",
             rationale = "Task is too large",
@@ -61,6 +63,7 @@ class InterventionRecommendationTest {
             id = "rec_1",
             userId = "user_1",
             interventionType = InterventionType.REMIND,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
             targetEntityId = null,
             targetEntityType = null,
             rationale = "Time to start",

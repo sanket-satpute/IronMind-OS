@@ -38,7 +38,7 @@ class InterventionRecommendationRepositoryImpl(
 
     override fun getPendingRecommendations(userId: String, currentTime: Long): Flow<List<InterventionRecommendation>> {
         return dao.getPendingRecommendations(userId, currentTime).map { list ->
-            list.map { it.toDomain() }
+            list.mapNotNull { it.toDomain() }
         }
     }
 

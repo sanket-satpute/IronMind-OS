@@ -9,6 +9,7 @@ data class InterventionRecommendation(
     val id: String,
     val userId: String,
     val interventionType: InterventionType,
+    val objective: com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective,
     val targetEntityId: String?,
     val targetEntityType: String?,
     val rationale: String,

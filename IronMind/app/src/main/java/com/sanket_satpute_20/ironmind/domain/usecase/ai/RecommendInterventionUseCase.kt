@@ -91,6 +91,7 @@ class RecommendInterventionUseCase(
                     id = idGenerator.generateId(),
                     userId = context.userId,
                     interventionType = candidate.interventionType,
+                    objective = candidate.objective,
                     targetEntityId = candidate.targetEntityId,
                     targetEntityType = candidate.targetEntityType,
                     rationale = candidate.rationale,

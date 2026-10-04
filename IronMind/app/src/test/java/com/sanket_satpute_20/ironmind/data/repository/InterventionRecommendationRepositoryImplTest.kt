@@ -52,6 +52,7 @@ class InterventionRecommendationRepositoryImplTest {
             id = "rec-1",
             userId = "user-1",
             interventionType = InterventionType.BREAK_DOWN,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
             targetEntityId = "goal-1",
             targetEntityType = "GOAL",
             rationale = "Because.",

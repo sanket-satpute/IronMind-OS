@@ -88,6 +88,7 @@ sealed class AIOutput {
      */
     data class InterventionRecommendation(
         val interventionType: InterventionType = InterventionType.REMIND,
+        val objective: InterventionObjective? = null,
         val recommendation: String,
         val reason: String,
         val supportingContext: String? = null,
@@ -247,7 +248,9 @@ fun AIOutput.isValid(): Boolean {
     if (confidence < 0.0f || confidence > 1.0f) return false
     // §85: schemaVersion must be positive
     if (schemaVersion < 1) return false
-    // §78: type must match the sealed subtype
     if (type != this.type) return false
+    if (this is AIOutput.InterventionRecommendation) {
+        if (objective == null) return false
+    }
     return true
 }

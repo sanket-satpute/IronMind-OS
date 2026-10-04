@@ -37,6 +37,7 @@ class InterventionPolicyEngineImplTest {
     fun `evaluatePolicy allows when no recent interventions`() = runTest {
         val candidate = AIOutput.InterventionRecommendation(
             interventionType = InterventionType.REMIND,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
             recommendation = "Do X",
             reason = "Because Y",
             confidence = 0.9f
@@ -64,6 +65,7 @@ class InterventionPolicyEngineImplTest {
 
         val candidate = AIOutput.InterventionRecommendation(
             interventionType = InterventionType.REMIND,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
             recommendation = "Do X",
             reason = "Because Y",
             confidence = 0.9f
@@ -89,6 +91,7 @@ class InterventionPolicyEngineImplTest {
 
         val candidate = AIOutput.InterventionRecommendation(
             interventionType = InterventionType.REMIND,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
             recommendation = "Do X",
             reason = "Because Y",
             confidence = 0.9f
@@ -113,7 +116,8 @@ class InterventionPolicyEngineImplTest {
         ))
 
         val candidate = AIOutput.InterventionRecommendation(
-            interventionType = InterventionType.REMIND, // Same type
+            interventionType = InterventionType.REMIND,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION, // Same type
             recommendation = "Do X",
             reason = "Because Y",
             confidence = 0.9f
@@ -139,6 +143,7 @@ class InterventionPolicyEngineImplTest {
 
         val candidate = AIOutput.InterventionRecommendation(
             interventionType = InterventionType.REMIND,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
             recommendation = "Do X",
             reason = "Because Y",
             confidence = 0.9f

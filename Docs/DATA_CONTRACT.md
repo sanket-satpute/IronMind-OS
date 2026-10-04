@@ -797,6 +797,24 @@ NEW ACTION
 
 ---
 
+# 30.5 INTERVENTION OBJECTIVE
+
+An intervention recommendation must carry a formal `objective` indicating its semantic purpose, separate from its tactic (`InterventionType`).
+
+The approved closed taxonomy is:
+- INITIATE_ACTION
+- REDUCE_FRICTION
+- RECOVER_COMMITMENT
+- PREVENT_DISRUPTION
+- REINFORCE_BEHAVIOR
+- EXTRACT_INSIGHT
+
+New recommendations MUST contain a valid non-null objective.
+Historical persisted recommendations that predated this taxonomy may have a `NULL` objective. 
+A `NULL` objective must NOT be silently replaced or mapped to a fabricated objective (like `UNKNOWN` or `EXTRACT_INSIGHT`). Such historical rows cannot be safely transformed into valid domain objects under the current non-null domain contract.
+
+---
+
 # 31. OUTCOME
 
 An `Outcome` records what actually happened after an intended action.

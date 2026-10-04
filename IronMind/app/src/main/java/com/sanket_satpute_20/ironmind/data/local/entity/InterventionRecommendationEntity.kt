@@ -8,6 +8,7 @@ data class InterventionRecommendationEntity(
     @PrimaryKey val id: String,
     val userId: String,
     val interventionType: String,
+    val objective: String?,
     val targetEntityId: String?,
     val targetEntityType: String?,
     val rationale: String,

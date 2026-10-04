@@ -54,6 +54,7 @@ class RecommendInterventionUseCaseTest {
         reason: String = "Task is large and hasn't been started"
     ) = AIOutput.InterventionRecommendation(
         interventionType = type,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
         recommendation = recommendation,
         reason = reason,
         supportingContext = "User postponed 3 times",

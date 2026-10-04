@@ -40,10 +40,10 @@ import com.sanket_satpute_20.ironmind.data.local.entity.*
         LocationObservationSettingsEntity::class,
         ActivityObservationSettingsEntity::class,
         com.sanket_satpute_20.ironmind.data.local.entity.ExperimentRecordEntity::class,
-        BarrierHypothesisEntity::class,
+        com.sanket_satpute_20.ironmind.data.local.entity.BarrierHypothesisEntity::class,
         com.sanket_satpute_20.ironmind.data.local.entity.InterventionRecommendationEntity::class
     ],
-    version = 20,
+    version = 21,
     exportSchema = false
 )
 abstract class IronMindDatabase : RoomDatabase() {
@@ -438,6 +438,17 @@ abstract class IronMindDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
                 println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=20")
+            }
+        }
+        
+        val MIGRATION_20_21 = object : Migration(20, 21) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    ALTER TABLE `intervention_recommendations` ADD COLUMN `objective` TEXT
+                    """.trimIndent()
+                )
+                println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=21")
             }
         }
     }

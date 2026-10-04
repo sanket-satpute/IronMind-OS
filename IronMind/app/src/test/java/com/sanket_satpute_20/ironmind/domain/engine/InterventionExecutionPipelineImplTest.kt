@@ -50,6 +50,7 @@ class InterventionExecutionPipelineImplTest {
     fun `propose with STAY_SILENT immediately suppresses intervention`() = runTest {
         val candidate = AIOutput.InterventionRecommendation(
             interventionType = InterventionType.STAY_SILENT,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
             recommendation = "Nothing",
             reason = "Stay silent",
             confidence = 0.9f
@@ -70,6 +71,7 @@ class InterventionExecutionPipelineImplTest {
         decisionEngine.nextResult = DecisionResult.EXECUTE
         val candidate = AIOutput.InterventionRecommendation(
             interventionType = InterventionType.REMIND,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
             recommendation = "Remind",
             reason = "Description",
             confidence = 0.9f
@@ -87,6 +89,7 @@ class InterventionExecutionPipelineImplTest {
         decisionEngine.nextResult = DecisionResult.STAY_SILENT
         val candidate = AIOutput.InterventionRecommendation(
             interventionType = InterventionType.REMIND,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
             recommendation = "Remind",
             reason = "Description",
             confidence = 0.9f

@@ -8,6 +8,7 @@ import com.sanket_satpute_20.ironmind.domain.ai.InterventionType
  */
 data class InterventionRecommendationCandidate(
     val interventionType: InterventionType,
+    val objective: com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective,
     val rationale: String,
     val suggestedAction: String,
     val targetEntityId: String?,
