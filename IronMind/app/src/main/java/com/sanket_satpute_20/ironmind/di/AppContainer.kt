@@ -97,6 +97,8 @@ import com.sanket_satpute_20.ironmind.domain.usecase.ai.ExtractIntentUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.GeneratePlanUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.HandleInterventionResultUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.RecommendInterventionUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.ai.OrchestrateInterventionGenerationUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.intervention.AssembleRecommendationContextUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.UnderstandBarriersUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.GetPendingInterventionRecommendationsUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.UpdateInterventionRecommendationStatusUseCase
@@ -200,6 +202,8 @@ interface AppContainer {
     val generatePlanUseCase: GeneratePlanUseCase
     val understandBarriersUseCase: UnderstandBarriersUseCase
     val recommendInterventionUseCase: RecommendInterventionUseCase
+    val assembleRecommendationContextUseCase: AssembleRecommendationContextUseCase
+    val orchestrateInterventionGenerationUseCase: OrchestrateInterventionGenerationUseCase
     val getPendingInterventionRecommendationsUseCase: GetPendingInterventionRecommendationsUseCase
     val updateInterventionRecommendationStatusUseCase: UpdateInterventionRecommendationStatusUseCase
     val handleInterventionResultUseCase: HandleInterventionResultUseCase
@@ -833,6 +837,25 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val understandBarriersUseCase: UnderstandBarriersUseCase by lazy {
         UnderstandBarriersUseCase(ironMindAI)
+    }
+
+    override val assembleRecommendationContextUseCase: AssembleRecommendationContextUseCase by lazy {
+        AssembleRecommendationContextUseCase(
+            goalRepository = goalRepository,
+            commitmentRepository = commitmentRepository,
+            observationRepository = observationRepository,
+            patternRepository = patternRepository,
+            barrierRepository = barrierRepository,
+            reflectionRepository = reflectionRepository,
+            timeProvider = { clock.currentTimeMillis() }
+        )
+    }
+
+    override val orchestrateInterventionGenerationUseCase: OrchestrateInterventionGenerationUseCase by lazy {
+        OrchestrateInterventionGenerationUseCase(
+            assembleContextUseCase = assembleRecommendationContextUseCase,
+            recommendInterventionUseCase = recommendInterventionUseCase
+        )
     }
 
     override val recommendInterventionUseCase: RecommendInterventionUseCase by lazy {
