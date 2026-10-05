@@ -101,6 +101,7 @@ class PlanRepositoryImplTest {
     override fun getEventsForDateRangeDesc(userId: String, startTime: Long, endTime: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.EventEntity> = emptyList()
     override fun getEventsForDateRangeWithTypesAsc(userId: String, types: List<String>, startTime: Long, endTime: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.EventEntity> = emptyList()
     override fun getEventsForDateRangeWithTypesDesc(userId: String, types: List<String>, startTime: Long, endTime: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.EventEntity> = emptyList()
+    override fun getEventsByCausationId(userId: String, causationId: String): List<com.sanket_satpute_20.ironmind.data.local.entity.EventEntity> = emptyList()
 }
 
     @Before

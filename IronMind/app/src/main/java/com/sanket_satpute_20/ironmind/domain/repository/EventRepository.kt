@@ -22,4 +22,5 @@ interface EventRepository {
     ): Result<List<Event>, Exception>
 
     suspend fun searchEvents(userId: String, query: String): Result<List<Event>, Exception>
+    suspend fun getEventsByCausationId(userId: String, causationId: String): Result<List<Event>, Exception>
 }

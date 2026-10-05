@@ -55,4 +55,9 @@ class FakeEventRepository : EventRepository {
         filtered = if (orderAsc) filtered.sortedBy { it.occurredAt } else filtered.sortedByDescending { it.occurredAt }
         return com.sanket_satpute_20.ironmind.domain.common.Result.Success(filtered.take(limit))
     }
+
+    override suspend fun getEventsByCausationId(userId: String, causationId: String): Result<List<Event>, Exception> {
+        if (shouldFail) return Result.Failure(Exception("Fake failure"))
+        return Result.Success(events.values.filter { it.userId == userId && it.causationId == causationId }.sortedBy { it.occurredAt })
+    }
 }

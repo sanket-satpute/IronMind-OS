@@ -142,6 +142,15 @@ class HandleFakeInterventionRecommendationRepository : InterventionRecommendatio
             it.targetEntityId == targetEntityId 
         }.sortedByDescending { it.createdAt })
     }
+
+    override suspend fun getRecommendationsForUser(
+        userId: String,
+        startTime: Long,
+        endTime: Long,
+        limit: Int
+    ): Result<List<InterventionRecommendation>, Exception> {
+        return Result.Success(emptyList())
+    }
 }
 
 class FakeEventRepository : EventRepository {
@@ -177,6 +186,10 @@ class FakeEventRepository : EventRepository {
     }
 
     override suspend fun getEventsForTimeWindow(userId: String, startTime: Long, endTime: Long, types: List<com.sanket_satpute_20.ironmind.domain.model.EventType>?, limit: Int, orderAsc: Boolean): com.sanket_satpute_20.ironmind.domain.common.Result<List<com.sanket_satpute_20.ironmind.domain.model.Event>, Exception> = com.sanket_satpute_20.ironmind.domain.common.Result.Success(emptyList())
+
+    override suspend fun getEventsByCausationId(userId: String, causationId: String): Result<List<Event>, Exception> {
+        return Result.Success(events.filter { it.userId == userId && it.causationId == causationId })
+    }
 }
 
 class FakeClock : Clock {

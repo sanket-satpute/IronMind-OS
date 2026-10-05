@@ -135,6 +135,9 @@ interface IronMindDao {
     @Query("SELECT * FROM events WHERE userId = :userId ORDER BY occurredAt ASC, id ASC")
     fun getEventsForUser(userId: String): List<EventEntity>
 
+    @Query("SELECT * FROM events WHERE userId = :userId AND causationId = :causationId ORDER BY occurredAt ASC, id ASC")
+    fun getEventsByCausationId(userId: String, causationId: String): List<EventEntity>
+
     @Query("SELECT COUNT(*) FROM events")
     fun getEventCount(): kotlinx.coroutines.flow.Flow<Int>
 

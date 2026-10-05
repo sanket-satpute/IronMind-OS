@@ -35,4 +35,19 @@ interface InterventionRecommendationDao {
         targetEntityType: String?,
         targetEntityId: String?
     ): List<InterventionRecommendationEntity>
+
+    @Query("""
+        SELECT * FROM intervention_recommendations 
+        WHERE userId = :userId 
+        AND createdAt >= :startTime 
+        AND createdAt < :endTime 
+        ORDER BY createdAt DESC, id ASC 
+        LIMIT :limit
+    """)
+    fun getRecommendationsForUser(
+        userId: String,
+        startTime: Long,
+        endTime: Long,
+        limit: Int
+    ): List<InterventionRecommendationEntity>
 }

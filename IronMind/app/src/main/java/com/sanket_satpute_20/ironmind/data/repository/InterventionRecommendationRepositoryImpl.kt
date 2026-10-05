@@ -68,4 +68,20 @@ class InterventionRecommendationRepositoryImpl(
             Result.Failure(e)
         }
     }
+
+    override suspend fun getRecommendationsForUser(
+        userId: String,
+        startTime: Long,
+        endTime: Long,
+        limit: Int
+    ): Result<List<InterventionRecommendation>, Exception> {
+        return try {
+            val entities = withContext(Dispatchers.IO) {
+                dao.getRecommendationsForUser(userId, startTime, endTime, limit)
+            }
+            Result.Success(entities.mapNotNull { it.toDomain() })
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
 }

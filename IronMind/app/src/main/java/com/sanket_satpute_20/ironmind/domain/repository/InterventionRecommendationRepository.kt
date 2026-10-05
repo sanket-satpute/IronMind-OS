@@ -16,4 +16,10 @@ interface InterventionRecommendationRepository {
         targetEntityType: String?,
         targetEntityId: String?
     ): Result<List<InterventionRecommendation>, Exception>
+    suspend fun getRecommendationsForUser(
+        userId: String,
+        startTime: Long,
+        endTime: Long,
+        limit: Int
+    ): Result<List<InterventionRecommendation>, Exception>
 }

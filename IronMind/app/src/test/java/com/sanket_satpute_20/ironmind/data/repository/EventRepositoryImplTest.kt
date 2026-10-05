@@ -106,6 +106,7 @@ class EventRepositoryImplTest {
     override fun getEventsForDateRangeDesc(userId: String, startTime: Long, endTime: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.EventEntity> = emptyList()
     override fun getEventsForDateRangeWithTypesAsc(userId: String, types: List<String>, startTime: Long, endTime: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.EventEntity> = emptyList()
     override fun getEventsForDateRangeWithTypesDesc(userId: String, types: List<String>, startTime: Long, endTime: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.EventEntity> = emptyList()
+    override fun getEventsByCausationId(userId: String, causationId: String): List<EventEntity> = emptyList()
 }
 
     @Test
@@ -138,5 +139,48 @@ class EventRepositoryImplTest {
 
         // Assert sensitive payload is NOT in the log
         assertTrue(!logMap.values.any { it.toString().contains("sensitive private reflection note") })
+    }
+
+    @Test
+    fun `getEventsByCausationId returns mapped domain events`() = runTest {
+        val logger = FakeIronLogger()
+        var requestedUserId: String? = null
+        var requestedCausationId: String? = null
+
+        val dao = object : IronMindDao by failingDao {
+            override fun getEventsByCausationId(userId: String, causationId: String): List<EventEntity> {
+                requestedUserId = userId
+                requestedCausationId = causationId
+                return listOf(
+                    EventEntity(
+                        id = "evt-1",
+                        userId = userId,
+                        type = EventType.INTERVENTION_ACCEPTED.name,
+                        entityType = "Intervention",
+                        entityId = "task-1",
+                        occurredAt = 1000L,
+                        recordedAt = 1000L,
+                        source = EntitySource.SYSTEM.name,
+                        metadata = null,
+                        causationId = causationId,
+                        processedAt = null,
+                        previousState = null,
+                        newState = null,
+                        correlationId = null,
+                        schemaVersion = 1
+                    )
+                )
+            }
+        }
+
+        val repository = EventRepositoryImpl(dao, logger)
+        val result = repository.getEventsByCausationId("u1", "rec-1")
+        
+        assertTrue(result is Result.Success)
+        val list = (result as Result.Success).data
+        assertEquals(1, list.size)
+        assertEquals("evt-1", list[0].id)
+        assertEquals("u1", requestedUserId)
+        assertEquals("rec-1", requestedCausationId)
     }
 }

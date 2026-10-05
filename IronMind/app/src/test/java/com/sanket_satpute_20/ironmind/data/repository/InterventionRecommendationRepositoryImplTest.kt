@@ -53,6 +53,20 @@ class FakeInterventionRecommendationDao : InterventionRecommendationDao {
             it.targetEntityId == targetEntityId 
         }.sortedByDescending { it.createdAt }
     }
+
+    override fun getRecommendationsForUser(
+        userId: String,
+        startTime: Long,
+        endTime: Long,
+        limit: Int
+    ): List<InterventionRecommendationEntity> {
+        return records.values.filter { 
+            it.userId == userId && 
+            it.createdAt >= startTime && 
+            it.createdAt < endTime
+        }.sortedWith(compareByDescending<InterventionRecommendationEntity> { it.createdAt }.thenBy { it.id })
+         .take(limit)
+    }
 }
 
 class InterventionRecommendationRepositoryImplTest {
@@ -82,5 +96,31 @@ class InterventionRecommendationRepositoryImplTest {
         val getResult = repository.getRecommendation("rec-1")
         assertTrue(getResult is Result.Success)
         assertEquals(domain, (getResult as Result.Success).data)
+    }
+
+    @Test
+    fun `getRecommendationsForUser respects time window and limit`() = runTest {
+        val r1 = InterventionRecommendationEntity("rec-1", "u1", "BREAK_DOWN", "INITIATE_ACTION", null, null, "1", "1", "PENDING", 1000L, null)
+        val r2 = InterventionRecommendationEntity("rec-2", "u1", "BREAK_DOWN", "INITIATE_ACTION", null, null, "2", "2", "PENDING", 2000L, null)
+        val r3 = InterventionRecommendationEntity("rec-3", "u1", "BREAK_DOWN", "INITIATE_ACTION", null, null, "3", "3", "PENDING", 3000L, null)
+        val r4 = InterventionRecommendationEntity("rec-4", "u2", "BREAK_DOWN", "INITIATE_ACTION", null, null, "4", "4", "PENDING", 2000L, null)
+
+        dao.insert(r1)
+        dao.insert(r2)
+        dao.insert(r3)
+        dao.insert(r4)
+
+        val result = repository.getRecommendationsForUser("u1", 1500L, 3500L, 10)
+        assertTrue(result is Result.Success)
+        val list = (result as Result.Success).data
+        assertEquals(2, list.size)
+        // Ordered by createdAt DESC
+        assertEquals("rec-3", list[0].id)
+        assertEquals("rec-2", list[1].id)
+
+        // Limit test
+        val limitResult = repository.getRecommendationsForUser("u1", 500L, 3500L, 2)
+        assertTrue(limitResult is Result.Success)
+        assertEquals(2, (limitResult as Result.Success).data.size)
     }
 }

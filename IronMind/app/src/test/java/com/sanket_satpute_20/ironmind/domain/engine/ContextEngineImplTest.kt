@@ -67,6 +67,7 @@ class ContextEngineImplTest {
         override suspend fun searchEvents(userId: String, query: String): Result<List<Event>, Exception> = Result.Success(events)
     
     override suspend fun getEventsForTimeWindow(userId: String, startTime: Long, endTime: Long, types: List<com.sanket_satpute_20.ironmind.domain.model.EventType>?, limit: Int, orderAsc: Boolean): com.sanket_satpute_20.ironmind.domain.common.Result<List<com.sanket_satpute_20.ironmind.domain.model.Event>, Exception> = com.sanket_satpute_20.ironmind.domain.common.Result.Success(emptyList())
+    override suspend fun getEventsByCausationId(userId: String, causationId: String): Result<List<Event>, Exception> = Result.Success(emptyList())
 }
 
     class FakeReflectionRepository : ReflectionRepository {

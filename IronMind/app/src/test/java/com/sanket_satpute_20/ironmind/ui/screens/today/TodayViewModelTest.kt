@@ -358,6 +358,15 @@ class FakeInterventionRecommendationRepository : InterventionRecommendationRepos
             it.targetEntityId == targetEntityId 
         }.sortedByDescending { it.createdAt })
     }
+
+    override suspend fun getRecommendationsForUser(
+        userId: String,
+        startTime: Long,
+        endTime: Long,
+        limit: Int
+    ): Result<List<InterventionRecommendation>, Exception> {
+        return Result.Success(emptyList())
+    }
 }
 
 

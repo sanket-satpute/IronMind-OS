@@ -114,4 +114,13 @@ class EventRepositoryImpl(
             Result.Failure(e)
         }
     }
+
+    override suspend fun getEventsByCausationId(userId: String, causationId: String): Result<List<Event>, Exception> = withContext(Dispatchers.IO) {
+        try {
+            val events = dao.getEventsByCausationId(userId, causationId).map { it.toDomainModel() }
+            Result.Success(events)
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
 }

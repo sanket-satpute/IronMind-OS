@@ -59,6 +59,19 @@ class FakeInterventionRecommendationRepository : InterventionRecommendationRepos
             it.targetEntityId == targetEntityId 
         }.sortedByDescending { it.createdAt })
     }
+
+    override suspend fun getRecommendationsForUser(
+        userId: String,
+        startTime: Long,
+        endTime: Long,
+        limit: Int
+    ): Result<List<InterventionRecommendation>, Exception> {
+        if (shouldFail) return Result.Failure(Exception("DB error"))
+        return Result.Success(recommendations.values.filter { 
+            it.userId == userId && 
+            it.createdAt in startTime until endTime
+        }.sortedByDescending { it.createdAt }.take(limit))
+    }
 }
 
 class SaveInterventionRecommendationUseCaseTest {
