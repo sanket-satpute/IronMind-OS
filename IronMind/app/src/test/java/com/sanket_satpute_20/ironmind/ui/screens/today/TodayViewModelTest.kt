@@ -21,6 +21,12 @@ import com.sanket_satpute_20.ironmind.domain.repository.InterventionRecommendati
 import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendation
 import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendationStatus
 import com.sanket_satpute_20.ironmind.domain.ai.InterventionType
+import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendationResult
+import com.sanket_satpute_20.ironmind.domain.usecase.ai.OrchestrateInterventionGenerationUseCase
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
+import io.mockk.every
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -54,6 +60,7 @@ class TodayViewModelTest {
     private lateinit var getPendingRecommendationsUseCase: GetPendingInterventionRecommendationsUseCase
     private lateinit var updateRecommendationStatusUseCase: UpdateInterventionRecommendationStatusUseCase
     private lateinit var handleInterventionResultUseCase: HandleInterventionResultUseCase
+    private lateinit var orchestrateInterventionGenerationUseCase: OrchestrateInterventionGenerationUseCase
 
     private lateinit var viewModel: TodayViewModel
 
@@ -76,6 +83,7 @@ class TodayViewModelTest {
         getPendingRecommendationsUseCase = GetPendingInterventionRecommendationsUseCase(recommendationRepository)
         updateRecommendationStatusUseCase = UpdateInterventionRecommendationStatusUseCase(recommendationRepository)
         handleInterventionResultUseCase = HandleInterventionResultUseCase(eventRepository, updateRecommendationStatusUseCase, clock, idGenerator)
+        orchestrateInterventionGenerationUseCase = mockk()
     }
 
     private fun createViewModel() {
@@ -85,7 +93,8 @@ class TodayViewModelTest {
             scheduleCommitmentUseCase,
             cancelCommitmentScheduleUseCase,
             getPendingRecommendationsUseCase,
-            handleInterventionResultUseCase
+            handleInterventionResultUseCase,
+            orchestrateInterventionGenerationUseCase
         )
     }
 
@@ -178,6 +187,138 @@ class TodayViewModelTest {
         val successState = state as TodayUiState.Success
         assertEquals(1, successState.pendingRecommendations.size)
         assertEquals("Take a break", successState.pendingRecommendations[0].suggestedAction)
+    }
+
+    @Test
+    fun `askIronMind executes when pending recommendations exist`() = runTest {
+        val recommendation = InterventionRecommendation(
+            id = "rec-1",
+            userId = "user-1",
+            interventionType = InterventionType.REFLECT,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
+            targetEntityId = null,
+            targetEntityType = null,
+            rationale = "High task load detected",
+            suggestedAction = "Take a break",
+            status = InterventionRecommendationStatus.PENDING,
+            createdAt = 1000L,
+            expiresAt = 3600L
+        )
+        recommendationRepository.recommendations["rec-1"] = recommendation
+
+        val mockRecommendation = InterventionRecommendation(
+            id = "mock-rec",
+            userId = "user-1",
+            interventionType = InterventionType.REFLECT,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
+            targetEntityId = null,
+            targetEntityType = null,
+            rationale = "Mock reasoning",
+            suggestedAction = "Mock action",
+            status = InterventionRecommendationStatus.PENDING,
+            createdAt = 1000L,
+            expiresAt = 3600L
+        )
+        coEvery { orchestrateInterventionGenerationUseCase(any()) } returns Result.Success(InterventionRecommendationResult.Recommended(mockRecommendation))
+
+        createViewModel()
+        advanceUntilIdle()
+        
+        var state = viewModel.uiState.value as TodayUiState.Success
+        assertEquals(1, state.pendingRecommendations.size)
+
+        viewModel.askIronMind()
+        advanceUntilIdle()
+
+        state = viewModel.uiState.value as TodayUiState.Success
+        assertEquals(false, state.isGeneratingRecommendation)
+        coVerify(exactly = 1) { orchestrateInterventionGenerationUseCase("user-1") }
+    }
+
+    @Test
+    fun `askIronMind with NoRecommendation sets transient message`() = runTest {
+        coEvery { orchestrateInterventionGenerationUseCase(any()) } returns Result.Success(InterventionRecommendationResult.NoRecommendation)
+
+        createViewModel()
+        advanceUntilIdle()
+
+        viewModel.askIronMind()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is TodayUiState.Success)
+        val successState = state as TodayUiState.Success
+        assertEquals(false, successState.isGeneratingRecommendation)
+        assertEquals("No new suggestions at this time.", successState.userMessage)
+        
+        coVerify(exactly = 1) { orchestrateInterventionGenerationUseCase("user-1") }
+    }
+
+    @Test
+    fun `askIronMind with Recommended resets generating state without error message`() = runTest {
+        val mockRecommendation = InterventionRecommendation(
+            id = "mock-rec-2",
+            userId = "user-1",
+            interventionType = InterventionType.REFLECT,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
+            targetEntityId = null,
+            targetEntityType = null,
+            rationale = "Mock reasoning",
+            suggestedAction = "Mock action",
+            status = InterventionRecommendationStatus.PENDING,
+            createdAt = 1000L,
+            expiresAt = 3600L
+        )
+        coEvery { orchestrateInterventionGenerationUseCase(any()) } returns Result.Success(InterventionRecommendationResult.Recommended(mockRecommendation))
+
+        createViewModel()
+        advanceUntilIdle()
+
+        viewModel.askIronMind()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is TodayUiState.Success)
+        val successState = state as TodayUiState.Success
+        assertEquals(false, successState.isGeneratingRecommendation)
+        assertEquals(null, successState.userMessage) // Handled by Flow, no error message
+        
+        coVerify(exactly = 1) { orchestrateInterventionGenerationUseCase("user-1") }
+    }
+
+    @Test
+    fun `askIronMind with Failure sets error message`() = runTest {
+        coEvery { orchestrateInterventionGenerationUseCase(any()) } returns Result.Failure(Exception("Network Error"))
+
+        createViewModel()
+        advanceUntilIdle()
+
+        viewModel.askIronMind()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is TodayUiState.Success)
+        val successState = state as TodayUiState.Success
+        assertEquals(false, successState.isGeneratingRecommendation)
+        assertEquals("Could not reach IronMind. Try again later.", successState.userMessage)
+    }
+
+    @Test
+    fun `clearUserMessage clears the message`() = runTest {
+        coEvery { orchestrateInterventionGenerationUseCase(any()) } returns Result.Success(InterventionRecommendationResult.NoRecommendation)
+
+        createViewModel()
+        advanceUntilIdle()
+        viewModel.askIronMind()
+        advanceUntilIdle()
+
+        var state = viewModel.uiState.value as TodayUiState.Success
+        assertEquals("No new suggestions at this time.", state.userMessage)
+
+        viewModel.clearUserMessage()
+        
+        state = viewModel.uiState.value as TodayUiState.Success
+        assertEquals(null, state.userMessage)
     }
 }
 

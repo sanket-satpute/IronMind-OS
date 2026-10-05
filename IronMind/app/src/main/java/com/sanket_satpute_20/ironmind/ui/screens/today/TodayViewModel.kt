@@ -22,12 +22,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
+import com.sanket_satpute_20.ironmind.domain.usecase.ai.OrchestrateInterventionGenerationUseCase
+import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendationResult
 
 sealed interface TodayUiState {
     data object Loading : TodayUiState
     data class Success(
         val activeCommitments: List<Commitment>,
-        val pendingRecommendations: List<InterventionRecommendation> = emptyList()
+        val pendingRecommendations: List<InterventionRecommendation> = emptyList(),
+        val isGeneratingRecommendation: Boolean = false,
+        val userMessage: String? = null
     ) : TodayUiState
     data class Error(val message: String) : TodayUiState
 }
@@ -38,7 +42,8 @@ class TodayViewModel(
     private val scheduleCommitmentUseCase: ScheduleCommitmentUseCase,
     private val cancelCommitmentScheduleUseCase: CancelCommitmentScheduleUseCase,
     private val getPendingInterventionRecommendationsUseCase: GetPendingInterventionRecommendationsUseCase,
-    private val handleInterventionResultUseCase: HandleInterventionResultUseCase
+    private val handleInterventionResultUseCase: HandleInterventionResultUseCase,
+    private val orchestrateInterventionGenerationUseCase: OrchestrateInterventionGenerationUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<TodayUiState>(TodayUiState.Loading)
@@ -144,6 +149,52 @@ class TodayViewModel(
         }
     }
 
+    fun clearUserMessage() {
+        val currentState = _uiState.value
+        if (currentState is TodayUiState.Success) {
+            _uiState.value = currentState.copy(userMessage = null)
+        }
+    }
+
+    fun askIronMind() {
+        val currentState = _uiState.value
+        if (currentState !is TodayUiState.Success) return
+        if (currentState.isGeneratingRecommendation) return
+        
+        _uiState.value = currentState.copy(isGeneratingRecommendation = true)
+
+        viewModelScope.launch {
+            val result = orchestrateInterventionGenerationUseCase(currentUserId)
+            
+            // Re-fetch current state in case it changed (e.g. commitments loaded)
+            val updatedState = _uiState.value
+            if (updatedState is TodayUiState.Success) {
+                when (result) {
+                    is Result.Success -> {
+                        val recommendationResult = result.data
+                        if (recommendationResult == InterventionRecommendationResult.NoRecommendation) {
+                            _uiState.value = updatedState.copy(
+                                isGeneratingRecommendation = false,
+                                userMessage = "No new suggestions at this time."
+                            )
+                        } else {
+                            // Recommended state - Flow will update recommendations automatically
+                            _uiState.value = updatedState.copy(
+                                isGeneratingRecommendation = false
+                            )
+                        }
+                    }
+                    is Result.Failure -> {
+                        _uiState.value = updatedState.copy(
+                            isGeneratingRecommendation = false,
+                            userMessage = "Could not reach IronMind. Try again later."
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -155,7 +206,8 @@ class TodayViewModel(
                     scheduleCommitmentUseCase = container.scheduleCommitmentUseCase,
                     cancelCommitmentScheduleUseCase = container.cancelCommitmentScheduleUseCase,
                     getPendingInterventionRecommendationsUseCase = container.getPendingInterventionRecommendationsUseCase,
-                    handleInterventionResultUseCase = container.handleInterventionResultUseCase
+                    handleInterventionResultUseCase = container.handleInterventionResultUseCase,
+                    orchestrateInterventionGenerationUseCase = container.orchestrateInterventionGenerationUseCase
                 )
             }
         }

@@ -8,6 +8,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -48,7 +50,9 @@ fun TodayScreen(
         onNavigateToReflection = onNavigateToReflection,
         onScheduleClick = { id, time -> viewModel.scheduleCommitment(id, time) },
         onCancelScheduleClick = { id -> viewModel.cancelSchedule(id) },
-        onInterventionResponse = viewModel::handleInterventionResponse
+        onInterventionResponse = viewModel::handleInterventionResponse,
+        onAskIronMind = viewModel::askIronMind,
+        onClearUserMessage = viewModel::clearUserMessage
     )
 }
 
@@ -62,9 +66,43 @@ fun TodayScreenContent(
     onNavigateToReflection: () -> Unit,
     onScheduleClick: (String, Long) -> Unit,
     onCancelScheduleClick: (String) -> Unit,
-    onInterventionResponse: (InterventionRecommendation, HandleInterventionResultUseCase.Action, String?) -> Unit
+    onInterventionResponse: (InterventionRecommendation, HandleInterventionResultUseCase.Action, String?) -> Unit,
+    onAskIronMind: () -> Unit,
+    onClearUserMessage: () -> Unit
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    if (uiState is TodayUiState.Success) {
+        val userMessage = uiState.userMessage
+        if (userMessage != null) {
+            LaunchedEffect(userMessage) {
+                snackbarHostState.showSnackbar(userMessage)
+                onClearUserMessage()
+            }
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        floatingActionButton = {
+            if (uiState is TodayUiState.Success) {
+                ExtendedFloatingActionButton(
+                    onClick = { if (!uiState.isGeneratingRecommendation) onAskIronMind() },
+                    icon = {
+                        if (uiState.isGeneratingRecommendation) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Default.Info, contentDescription = "Ask IronMind")
+                        }
+                    },
+                    text = { Text(if (uiState.isGeneratingRecommendation) "Thinking..." else "Ask IronMind") }
+                )
+            }
+        },
         topBar = {
             TopAppBar(
                 title = { Text("Today") },
