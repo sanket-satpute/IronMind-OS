@@ -67,7 +67,8 @@ class HandleInterventionResultUseCase(
             occurredAt = clock.currentTimeMillis(),
             recordedAt = clock.currentTimeMillis(),
             source = EntitySource.SYSTEM,
-            metadata = metadata
+            metadata = metadata,
+            causationId = recommendation.id
         )
 
         val eventResult = eventRepository.saveEvent(event)

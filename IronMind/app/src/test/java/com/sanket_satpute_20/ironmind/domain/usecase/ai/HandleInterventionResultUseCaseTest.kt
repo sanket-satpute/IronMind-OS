@@ -65,6 +65,7 @@ class HandleInterventionResultUseCaseTest {
         assertEquals("Intervention", event.entityType)
         assertTrue(event.metadata!!.contains("type=BREAK_DOWN"))
         assertTrue(event.metadata!!.contains("recommendation=Take a break"))
+        assertEquals("rec-1", event.causationId)
 
         val updatedRec = recommendationRepository.recommendations["rec-1"]
         assertEquals(InterventionRecommendationStatus.ACCEPTED, updatedRec?.status)
@@ -99,6 +100,7 @@ class HandleInterventionResultUseCaseTest {
 
         assertEquals(EventType.INTERVENTION_OVERRIDDEN, event.type)
         assertTrue(event.metadata!!.contains("correctedText=I will do it tonight instead"))
+        assertEquals("rec-2", event.causationId)
 
         val updatedRec = recommendationRepository.recommendations["rec-2"]
         assertEquals(InterventionRecommendationStatus.PENDING, updatedRec?.status)
