@@ -9,7 +9,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 @Composable
 fun SettingsScreen(
     modifier: Modifier = Modifier,
@@ -67,13 +68,12 @@ fun SettingsScreenContent(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "🛑 Emergency Stop — Pause All Autonomy",
+                    text = "Pause Background Observation",
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
                 Text(
-                    text = "When enabled, IronMind will stop all autonomous background actions. " +
-                            "You can re-enable autonomy at any time.",
+                    text = "Temporarily stop collecting background context such as app usage and notifications.",
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
@@ -86,7 +86,7 @@ fun SettingsScreenContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = if (uiState.isGlobalPauseActive) "Autonomy PAUSED" else "Autonomy ACTIVE",
+                            text = if (uiState.isGlobalPauseActive) "Observation PAUSED" else "Observation ACTIVE",
                             style = MaterialTheme.typography.labelLarge,
                             color = if (uiState.isGlobalPauseActive)
                                 MaterialTheme.colorScheme.error
@@ -95,7 +95,10 @@ fun SettingsScreenContent(
                         )
                         Switch(
                             checked = uiState.isGlobalPauseActive,
-                            onCheckedChange = { onGlobalPauseToggle(it) }
+                            onCheckedChange = { onGlobalPauseToggle(it) },
+                            modifier = Modifier.semantics {
+                                contentDescription = if (uiState.isGlobalPauseActive) "Resume Observation" else "Pause Observation"
+                            }
                         )
                     }
                 }
