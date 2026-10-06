@@ -20,10 +20,15 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -36,45 +41,64 @@ import java.util.Locale
 
 @Composable
 fun HistoryScreen(
-    viewModel: HistoryViewModel = viewModel(factory = HistoryViewModel.Factory)
+    viewModel: HistoryViewModel = viewModel(factory = HistoryViewModel.Factory),
+    intelligenceViewModel: IntelligenceHistoryViewModel = viewModel(factory = IntelligenceHistoryViewModel.Factory)
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val intelligenceUiState by intelligenceViewModel.uiState.collectAsState()
+
+    var selectedTabIndex by remember { mutableStateOf(0) }
+    val tabs = listOf("Timeline", "Intelligence")
 
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
-            text = "History & Timeline",
+            text = "History",
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(16.dp)
         )
 
-        when (val state = uiState) {
-            is HistoryUiState.Loading -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
+        TabRow(selectedTabIndex = selectedTabIndex) {
+            tabs.forEachIndexed { index, title ->
+                Tab(
+                    selected = selectedTabIndex == index,
+                    onClick = { selectedTabIndex = index },
+                    text = { Text(title) }
+                )
             }
-            is HistoryUiState.Error -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(text = state.message, color = MaterialTheme.colorScheme.error)
-                }
-            }
-            is HistoryUiState.Success -> {
-                if (state.timelineItems.isEmpty()) {
+        }
+
+        if (selectedTabIndex == 0) {
+            when (val state = uiState) {
+                is HistoryUiState.Loading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(text = "No history available.")
+                        CircularProgressIndicator()
                     }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp)
-                    ) {
-                        items(state.timelineItems) { item ->
-                            TimelineItemCard(item = item)
+                }
+                is HistoryUiState.Error -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(text = state.message, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                is HistoryUiState.Success -> {
+                    if (state.timelineItems.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(text = "No history available.")
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 16.dp)
+                        ) {
+                            items(state.timelineItems) { item ->
+                                TimelineItemCard(item = item)
+                            }
                         }
                     }
                 }
             }
+        } else {
+            IntelligenceHistoryContent(uiState = intelligenceUiState)
         }
     }
 }
