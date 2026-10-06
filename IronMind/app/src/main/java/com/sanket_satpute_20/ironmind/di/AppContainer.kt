@@ -96,6 +96,7 @@ import com.sanket_satpute_20.ironmind.data.ai.GeminiIronMindAI
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.ExtractIntentUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.GeneratePlanUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.HandleInterventionResultUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.ai.GetIntelligenceHistoryUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.RecommendInterventionUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.OrchestrateInterventionGenerationUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.intervention.AssembleRecommendationContextUseCase
@@ -207,6 +208,7 @@ interface AppContainer {
     val getPendingInterventionRecommendationsUseCase: GetPendingInterventionRecommendationsUseCase
     val updateInterventionRecommendationStatusUseCase: UpdateInterventionRecommendationStatusUseCase
     val handleInterventionResultUseCase: HandleInterventionResultUseCase
+    val getIntelligenceHistoryUseCase: GetIntelligenceHistoryUseCase
     val ironMindAI: IronMindAI
     val autonomySettingsRepository: AutonomySettingsRepository
     val getAutonomySettingsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.autonomy.GetAutonomySettingsUseCase
@@ -880,6 +882,13 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             updateInterventionRecommendationStatusUseCase = updateInterventionRecommendationStatusUseCase,
             clock = clock,
             idGenerator = idGenerator
+        )
+    }
+
+    override val getIntelligenceHistoryUseCase: GetIntelligenceHistoryUseCase by lazy {
+        GetIntelligenceHistoryUseCase(
+            interventionRecommendationRepository = interventionRecommendationRepository,
+            eventRepository = eventRepository
         )
     }
 
