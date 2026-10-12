@@ -3,6 +3,7 @@ package com.sanket_satpute_20.ironmind.domain.usecase.ai
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.Event
 import com.sanket_satpute_20.ironmind.domain.model.EventType
+import com.sanket_satpute_20.ironmind.domain.model.intervention.CorrectionMetadataParser
 import com.sanket_satpute_20.ironmind.domain.model.intervention.IntelligenceHistoryItem
 import com.sanket_satpute_20.ironmind.domain.model.intervention.IntelligenceHistoryResponse
 import com.sanket_satpute_20.ironmind.domain.repository.EventRepository
@@ -98,16 +99,6 @@ class GetIntelligenceHistoryUseCase(
 
     private fun extractCorrectedText(metadata: String?): String? {
         if (metadata == null) return null
-        val token = "correctedText="
-        val startIndex = metadata.indexOf(token)
-        if (startIndex == -1) return null
-        
-        // Find next comma to support "key=val,key2=val2" format, assuming comma is the delimiter
-        val endIndex = metadata.indexOf(",", startIndex + token.length)
-        return if (endIndex == -1) {
-            metadata.substring(startIndex + token.length)
-        } else {
-            metadata.substring(startIndex + token.length, endIndex)
-        }
+        return CorrectionMetadataParser.parse(metadata).correctedText
     }
 }

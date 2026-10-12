@@ -119,14 +119,11 @@ class AssembleRecommendationContextUseCase(
         if (correctionsResult is Result.Failure) return Result.Failure(correctionsResult.error)
         
         val contextCorrections = (correctionsResult as Result.Success).data.mapNotNull { event ->
-            val metadataMap = event.metadata?.split(",")?.associate { 
-                val parts = it.split("=", limit = 2)
-                if (parts.size == 2) parts[0] to parts[1] else parts[0] to ""
-            } ?: emptyMap()
+            val parsedMeta = CorrectionMetadataParser.parse(event.metadata)
             
-            val type = metadataMap["type"]
-            val recommendation = metadataMap["recommendation"]
-            val correctedText = metadataMap["correctedText"]
+            val type = parsedMeta.type
+            val recommendation = parsedMeta.recommendation
+            val correctedText = parsedMeta.correctedText
             
             if (type == null || recommendation == null) {
                 null

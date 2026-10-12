@@ -308,4 +308,16 @@ class GetIntelligenceHistoryUseCaseTest {
         val items = (result as Result.Success).data
         assertEquals("My correction", items[0].correctionText)
     }
+
+    @Test
+    fun `Correction text with commas and equals in new format is extracted completely without truncation`() = runTest {
+        recommendationRepo.saveRecommendation(dummyRec("rec-1"))
+        val fullText = "No, not now; I prefer studying at night, after 8 PM = best time"
+        val metadata = "scope=PREFERENCE,type=BREAK_DOWN,recommendation=Do something.,correctedText=$fullText"
+        eventRepo.saveEvent(dummyEvent("evt-1", type = EventType.INTERVENTION_OVERRIDDEN, causationId = "rec-1", metadata = metadata))
+
+        val result = useCase("user-1", 0L, 10000L, 50)
+        val items = (result as Result.Success).data
+        assertEquals(fullText, items[0].correctionText)
+    }
 }

@@ -148,4 +148,39 @@ class AssembleRecommendationContextUseCaseTest {
         assertTrue(result is Result.Failure)
         assertEquals(exception, (result as Result.Failure).error)
     }
+
+    @Test
+    fun `assemble context preserves structured correction text containing delimiters`() = runBlocking {
+        val userId = "user1"
+        
+        coEvery { goalRepo.getActiveGoalsForUser(any(), any()) } returns Result.Success(emptyList())
+        coEvery { commitmentRepo.getActiveCommitmentsForUser(any(), any(), any()) } returns Result.Success(emptyList())
+        coEvery { observationRepo.getObservationsForTimeWindow(any(), any(), any(), any(), any(), any()) } returns Result.Success(emptyList())
+        coEvery { patternRepo.getPatternsByStatus(any(), any(), any()) } returns Result.Success(emptyList())
+        coEvery { barrierRepo.getActiveBarriersForUser(any(), any(), any()) } returns Result.Success(emptyList())
+        coEvery { reflectionRepo.getReflectionsForTimeWindow(any(), any(), any(), any(), any()) } returns Result.Success(emptyList())
+
+        val complexText = "No, not now, I prefer studying at night = best time, \"quoted\""
+        val event = Event(
+            id = "e1",
+            userId = userId,
+            type = EventType.INTERVENTION_OVERRIDDEN,
+            entityType = "Intervention",
+            entityId = "t1",
+            occurredAt = 100L,
+            recordedAt = 100L,
+            source = EntitySource.SYSTEM,
+            metadata = "scope=CONSTRAINT,type=BREAK_DOWN,recommendation=Take a break, walk 5 mins,correctedText=$complexText"
+        )
+        coEvery { eventRepo.getEventsForTimeWindow(userId, any(), any(), listOf(EventType.INTERVENTION_OVERRIDDEN), AssembleRecommendationContextUseCase.MAX_CORRECTIONS, false) } returns Result.Success(listOf(event))
+
+        val result = useCase(userId)
+        assertTrue(result is Result.Success)
+        val context = (result as Result.Success).data
+        assertEquals(1, context.recentCorrections.size)
+        val correction = context.recentCorrections.first()
+        assertEquals("BREAK_DOWN", correction.interventionType)
+        assertEquals("Take a break, walk 5 mins", correction.recommendation)
+        assertEquals(complexText, correction.correctedText)
+    }
 }

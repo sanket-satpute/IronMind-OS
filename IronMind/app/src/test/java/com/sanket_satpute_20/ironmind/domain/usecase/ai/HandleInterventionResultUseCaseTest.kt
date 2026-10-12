@@ -100,10 +100,79 @@ class HandleInterventionResultUseCaseTest {
 
         assertEquals(EventType.INTERVENTION_OVERRIDDEN, event.type)
         assertTrue(event.metadata!!.contains("correctedText=I will do it tonight instead"))
+        assertTrue(event.metadata!!.contains("scope=INTERVENTION_CORRECTION"))
         assertEquals("rec-2", event.causationId)
 
         val updatedRec = recommendationRepository.recommendations["rec-2"]
         assertEquals(InterventionRecommendationStatus.PENDING, updatedRec?.status)
+    }
+
+    @Test
+    fun `invoke with CORRECT and explicit scope persists specified scope`() = runTest {
+        val recommendation = InterventionRecommendation(
+            id = "rec-3",
+            userId = "user-1",
+            interventionType = InterventionType.BREAK_DOWN,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
+            targetEntityId = "task-3",
+            targetEntityType = "Task",
+            suggestedAction = "Break into smaller steps",
+            rationale = "Task is large",
+            status = InterventionRecommendationStatus.PENDING,
+            createdAt = 1000L,
+            expiresAt = 2000L
+        )
+        recommendationRepository.recommendations["rec-3"] = recommendation
+
+        val result = useCase(
+            recommendation = recommendation,
+            action = HandleInterventionResultUseCase.Action.CORRECT,
+            userId = "user-1",
+            correctedText = "I prefer studying at night",
+            scope = com.sanket_satpute_20.ironmind.domain.model.intervention.CorrectionScope.PREFERENCE
+        )
+
+        assertTrue(result is Result.Success)
+        val event = eventRepository.events.first()
+
+        assertEquals(EventType.INTERVENTION_OVERRIDDEN, event.type)
+        assertTrue(event.metadata!!.contains("scope=PREFERENCE"))
+        assertEquals("rec-3", event.causationId)
+    }
+
+    @Test
+    fun `invoke with CORRECT preserves complex text with delimiters and commas`() = runTest {
+        val recommendation = InterventionRecommendation(
+            id = "rec-4",
+            userId = "user-1",
+            interventionType = InterventionType.BREAK_DOWN,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
+            targetEntityId = "task-4",
+            targetEntityType = "Task",
+            suggestedAction = "Do task now",
+            rationale = "Urgent",
+            status = InterventionRecommendationStatus.PENDING,
+            createdAt = 1000L,
+            expiresAt = 2000L
+        )
+        recommendationRepository.recommendations["rec-4"] = recommendation
+
+        val complexText = "No, not now; I prefer studying at night, after 8 PM = best time, \"quoted\""
+
+        val result = useCase(
+            recommendation = recommendation,
+            action = HandleInterventionResultUseCase.Action.CORRECT,
+            userId = "user-1",
+            correctedText = complexText,
+            scope = com.sanket_satpute_20.ironmind.domain.model.intervention.CorrectionScope.CONSTRAINT
+        )
+
+        assertTrue(result is Result.Success)
+        val event = eventRepository.events.first()
+
+        val parsed = com.sanket_satpute_20.ironmind.domain.model.intervention.CorrectionMetadataParser.parse(event.metadata)
+        assertEquals(com.sanket_satpute_20.ironmind.domain.model.intervention.CorrectionScope.CONSTRAINT, parsed.scope)
+        assertEquals(complexText, parsed.correctedText)
     }
 }
 

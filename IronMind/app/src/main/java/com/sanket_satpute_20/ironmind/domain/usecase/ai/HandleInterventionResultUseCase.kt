@@ -6,12 +6,15 @@ import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.EntitySource
 import com.sanket_satpute_20.ironmind.domain.model.Event
 import com.sanket_satpute_20.ironmind.domain.model.EventType
+import com.sanket_satpute_20.ironmind.domain.model.intervention.CorrectionMetadataParser
+import com.sanket_satpute_20.ironmind.domain.model.intervention.CorrectionScope
 import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendation
 import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendationStatus
 import com.sanket_satpute_20.ironmind.domain.repository.EventRepository
 
 /**
  * Sprint V2.11: Suggestion-Only Intelligence UI.
+ * Sprint V2.16-C1: Structured Correction Data Contract.
  *
  * Handles the user's explicit response to an intervention recommendation (Accept, Reject, Correct, Ignore).
  * Records the outcome into the Event system, satisfying the requirement:
@@ -34,7 +37,8 @@ class HandleInterventionResultUseCase(
         recommendation: InterventionRecommendation,
         action: Action,
         userId: String,
-        correctedText: String? = null
+        correctedText: String? = null,
+        scope: CorrectionScope = CorrectionScope.INTERVENTION_CORRECTION
     ): Result<Unit, Exception> {
         val eventType = when (action) {
             Action.ACCEPT -> EventType.INTERVENTION_ACCEPTED
@@ -50,11 +54,20 @@ class HandleInterventionResultUseCase(
             Action.CORRECT -> null // Do not map CORRECT. Leave status unchanged (undefined handling per contract).
         }
 
-        val metadata = buildString {
-            append("type=${recommendation.interventionType}")
-            append(",recommendation=${recommendation.suggestedAction}")
-            if (correctedText != null) {
-                append(",correctedText=$correctedText")
+        val metadata = if (action == Action.CORRECT) {
+            CorrectionMetadataParser.serialize(
+                scope = scope,
+                type = recommendation.interventionType.name,
+                recommendation = recommendation.suggestedAction,
+                correctedText = correctedText
+            )
+        } else {
+            buildString {
+                append("type=${recommendation.interventionType}")
+                append(",recommendation=${recommendation.suggestedAction}")
+                if (correctedText != null) {
+                    append(",correctedText=$correctedText")
+                }
             }
         }
 
