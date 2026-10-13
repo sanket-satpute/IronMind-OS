@@ -11,6 +11,8 @@ import com.sanket_satpute_20.ironmind.domain.common.IdGenerator
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.AutonomyCapability
 import com.sanket_satpute_20.ironmind.domain.model.AutonomyLevel
+import com.sanket_satpute_20.ironmind.domain.model.intervention.CausalHypothesisReference
+import com.sanket_satpute_20.ironmind.domain.model.intervention.CausalHypothesisType
 import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionEquivalencePolicy
 import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendation
 import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendationResult
@@ -173,7 +175,8 @@ class RecommendInterventionUseCase(
                             rationale = candidate.rationale,
                             suggestedAction = candidate.suggestedAction,
                             status = InterventionRecommendationStatus.PENDING,
-                            createdAt = currentTimeMs
+                            createdAt = currentTimeMs,
+                            causalHypothesis = validateCausalHypothesis(candidate, context)
                         )
 
                         val saveResult = recommendationRepository.saveRecommendation(recommendation)
@@ -215,5 +218,34 @@ class RecommendInterventionUseCase(
             ${context.recentReflections.joinToString("\n") { "REFLECTION [${it.id}]: ${it.content}" }}
             ${context.recentCorrections.joinToString("\n") { "CORRECTION [${it.eventId}]: User explicitly corrected recommendation '${it.recommendation}' (Target: ${it.targetEntityId ?: "None"}, Type: ${it.interventionType}). Corrected Text: ${it.correctedText ?: "None provided"}" }}
         """.trimIndent()
+    }
+
+    private fun validateCausalHypothesis(
+        candidate: com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendationCandidate,
+        context: RecommendationContext
+    ): CausalHypothesisReference? {
+        val rawId = candidate.causalHypothesisId?.trim()
+        val rawType = candidate.causalHypothesisType?.trim()
+
+        if (rawId.isNullOrEmpty() || rawType.isNullOrEmpty()) {
+            return null
+        }
+
+        val type = try {
+            CausalHypothesisType.valueOf(rawType)
+        } catch (e: IllegalArgumentException) {
+            return null
+        }
+
+        val exists = when (type) {
+            CausalHypothesisType.PATTERN -> context.activePatterns.any { it.id == rawId }
+            CausalHypothesisType.BARRIER -> context.activeBarriers.any { it.id == rawId }
+        }
+
+        return if (exists) {
+            CausalHypothesisReference(id = rawId, type = type)
+        } else {
+            null
+        }
     }
 }

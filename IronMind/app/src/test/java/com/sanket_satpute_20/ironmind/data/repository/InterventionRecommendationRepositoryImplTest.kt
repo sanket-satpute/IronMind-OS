@@ -123,4 +123,40 @@ class InterventionRecommendationRepositoryImplTest {
         assertTrue(limitResult is Result.Success)
         assertEquals(2, (limitResult as Result.Success).data.size)
     }
+
+    @Test
+    fun `saveRecommendation and getRecommendation preserves non-null causal hypothesis provenance`() = runTest {
+        val domain = InterventionRecommendation(
+            id = "rec-provenance-1",
+            userId = "user-1",
+            interventionType = InterventionType.BREAK_DOWN,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
+            targetEntityId = "goal-1",
+            targetEntityType = "GOAL",
+            rationale = "Hypothesis validated",
+            suggestedAction = "Split task",
+            status = InterventionRecommendationStatus.PENDING,
+            createdAt = 1000L,
+            expiresAt = 2000L,
+            causalHypothesis = com.sanket_satpute_20.ironmind.domain.model.intervention.CausalHypothesisReference(
+                id = "pat-focus-drop",
+                type = com.sanket_satpute_20.ironmind.domain.model.intervention.CausalHypothesisType.PATTERN
+            )
+        )
+
+        val saveResult = repository.saveRecommendation(domain)
+        assertTrue(saveResult is Result.Success)
+
+        val getResult = repository.getRecommendation("rec-provenance-1")
+        assertTrue(getResult is Result.Success)
+        val loaded = (getResult as Result.Success).data
+        assertEquals(domain, loaded)
+        assertEquals(
+            com.sanket_satpute_20.ironmind.domain.model.intervention.CausalHypothesisReference(
+                id = "pat-focus-drop",
+                type = com.sanket_satpute_20.ironmind.domain.model.intervention.CausalHypothesisType.PATTERN
+            ),
+            loaded?.causalHypothesis
+        )
+    }
 }

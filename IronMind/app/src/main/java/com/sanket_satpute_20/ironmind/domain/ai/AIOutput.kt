@@ -94,6 +94,8 @@ sealed class AIOutput {
         val supportingContext: String? = null,
         val targetEntityId: String? = null,
         val targetEntityType: String? = null,
+        val causalHypothesisId: String? = null,
+        val causalHypothesisType: String? = null,
         override val confidence: Float,
         override val reasoning: String? = null,
         override val schemaVersion: Int = 2

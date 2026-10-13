@@ -137,4 +137,79 @@ class GeminiIronMindAITest {
         val json = "This is not json"
         GeminiIronMindAI.parseAndValidateOutput(json, AIRequestType.INTENT_EXTRACTION)
     }
+
+    @Test
+    fun `parseAndValidateOutput parses INTERVENTION_RECOMMENDATION with causal hypothesis provenance correctly`() {
+        val json = """
+            {
+                "type": "INTERVENTION_RECOMMENDATION",
+                "confidence": 0.85,
+                "schemaVersion": 2,
+                "interventionType": "REDIRECT",
+                "objective": "REDUCE_FRICTION",
+                "recommendation": "Take a 5 minute walk",
+                "reason": "Focus is degrading",
+                "targetEntityId": "goal-1",
+                "targetEntityType": "GOAL",
+                "causalHypothesisId": "pat-focus-drop-1",
+                "causalHypothesisType": "PATTERN"
+            }
+        """.trimIndent()
+
+        val output = GeminiIronMindAI.parseAndValidateOutput(json, AIRequestType.INTERVENTION_SUGGESTION)
+        assertTrue(output is AIOutput.InterventionRecommendation)
+        val intervention = output as AIOutput.InterventionRecommendation
+        assertEquals("pat-focus-drop-1", intervention.causalHypothesisId)
+        assertEquals("PATTERN", intervention.causalHypothesisType)
+    }
+
+    @Test
+    fun `parseAndValidateOutput parses INTERVENTION_RECOMMENDATION with barrier causal hypothesis provenance correctly`() {
+        val json = """
+            {
+                "type": "INTERVENTION_RECOMMENDATION",
+                "confidence": 0.85,
+                "schemaVersion": 2,
+                "interventionType": "BREAK_DOWN",
+                "objective": "INITIATE_ACTION",
+                "recommendation": "Do just the first step",
+                "reason": "Task size barrier active",
+                "targetEntityId": "goal-1",
+                "targetEntityType": "GOAL",
+                "causalHypothesisId": "bar-task-size-1",
+                "causalHypothesisType": "BARRIER"
+            }
+        """.trimIndent()
+
+        val output = GeminiIronMindAI.parseAndValidateOutput(json, AIRequestType.INTERVENTION_SUGGESTION)
+        assertTrue(output is AIOutput.InterventionRecommendation)
+        val intervention = output as AIOutput.InterventionRecommendation
+        assertEquals("bar-task-size-1", intervention.causalHypothesisId)
+        assertEquals("BARRIER", intervention.causalHypothesisType)
+    }
+
+    @Test
+    fun `parseAndValidateOutput parses INTERVENTION_RECOMMENDATION with omitted or null causal hypothesis fields as null`() {
+        val json = """
+            {
+                "type": "INTERVENTION_RECOMMENDATION",
+                "confidence": 0.85,
+                "schemaVersion": 2,
+                "interventionType": "REMIND",
+                "objective": "INITIATE_ACTION",
+                "recommendation": "Start workout",
+                "reason": "Scheduled time reached",
+                "targetEntityId": "goal-1",
+                "targetEntityType": "GOAL",
+                "causalHypothesisId": null,
+                "causalHypothesisType": null
+            }
+        """.trimIndent()
+
+        val output = GeminiIronMindAI.parseAndValidateOutput(json, AIRequestType.INTERVENTION_SUGGESTION)
+        assertTrue(output is AIOutput.InterventionRecommendation)
+        val intervention = output as AIOutput.InterventionRecommendation
+        org.junit.Assert.assertNull(intervention.causalHypothesisId)
+        org.junit.Assert.assertNull(intervention.causalHypothesisType)
+    }
 }

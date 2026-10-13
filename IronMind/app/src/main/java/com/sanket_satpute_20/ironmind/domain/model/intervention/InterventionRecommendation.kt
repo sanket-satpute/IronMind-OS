@@ -16,5 +16,6 @@ data class InterventionRecommendation(
     val suggestedAction: String,
     val status: InterventionRecommendationStatus = InterventionRecommendationStatus.PENDING,
     val createdAt: Long,
-    val expiresAt: Long? = null
+    val expiresAt: Long? = null,
+    val causalHypothesis: CausalHypothesisReference? = null
 )

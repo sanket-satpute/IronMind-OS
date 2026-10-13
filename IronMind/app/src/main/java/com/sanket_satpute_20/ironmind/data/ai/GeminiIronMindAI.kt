@@ -119,7 +119,9 @@ class GeminiIronMindAI(
                   reason (why this intervention is suggested),
                   supportingContext (optional: observable evidence that supports this recommendation),
                   targetEntityId (optional ID of the target from context),
-                  targetEntityType (optional, one of: GOAL, COMMITMENT, REFLECTION, if targetEntityId is provided).
+                  targetEntityType (optional, one of: GOAL, COMMITMENT, REFLECTION, if targetEntityId is provided),
+                  causalHypothesisId (optional ID of the single active pattern or barrier hypothesis that materially informed this intervention),
+                  causalHypothesisType (optional, one of: PATTERN, BARRIER, required if causalHypothesisId is provided).
             """.trimIndent()
             else -> "Match the output type to the request type. Return relevant fields for that type."
         }
@@ -231,6 +233,8 @@ class GeminiIronMindAI(
                             supportingContext = if (jsonObject.has("supportingContext") && !jsonObject.isNull("supportingContext")) jsonObject.getString("supportingContext") else null,
                             targetEntityId = if (jsonObject.has("targetEntityId") && !jsonObject.isNull("targetEntityId")) jsonObject.getString("targetEntityId") else null,
                             targetEntityType = if (jsonObject.has("targetEntityType") && !jsonObject.isNull("targetEntityType")) jsonObject.getString("targetEntityType") else null,
+                            causalHypothesisId = if (jsonObject.has("causalHypothesisId") && !jsonObject.isNull("causalHypothesisId")) jsonObject.getString("causalHypothesisId") else null,
+                            causalHypothesisType = if (jsonObject.has("causalHypothesisType") && !jsonObject.isNull("causalHypothesisType")) jsonObject.getString("causalHypothesisType") else null,
                             confidence = confidence,
                             reasoning = reasoning,
                             schemaVersion = schemaVersion

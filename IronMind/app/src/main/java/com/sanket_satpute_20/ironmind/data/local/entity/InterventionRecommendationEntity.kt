@@ -15,5 +15,7 @@ data class InterventionRecommendationEntity(
     val suggestedAction: String,
     val status: String,
     val createdAt: Long,
-    val expiresAt: Long?
+    val expiresAt: Long?,
+    val causalHypothesisId: String? = null,
+    val causalHypothesisType: String? = null
 )

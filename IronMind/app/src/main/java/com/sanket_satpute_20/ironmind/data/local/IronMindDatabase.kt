@@ -44,7 +44,7 @@ import com.sanket_satpute_20.ironmind.data.local.entity.*
         com.sanket_satpute_20.ironmind.data.local.entity.InterventionRecommendationEntity::class,
         com.sanket_satpute_20.ironmind.data.local.entity.LearnerEventStatusEntity::class
     ],
-    version = 22,
+    version = 23,
     exportSchema = false
 )
 abstract class IronMindDatabase : RoomDatabase() {
@@ -481,6 +481,22 @@ abstract class IronMindDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_learner_event_status_lease` ON `learner_event_status` (`status`, `leaseExpiresAt`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_learner_event_status_user` ON `learner_event_status` (`userId`)")
                 println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=22")
+            }
+        }
+
+        val MIGRATION_22_23 = object : Migration(22, 23) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    ALTER TABLE `intervention_recommendations` ADD COLUMN `causalHypothesisId` TEXT
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    ALTER TABLE `intervention_recommendations` ADD COLUMN `causalHypothesisType` TEXT
+                    """.trimIndent()
+                )
+                println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=23")
             }
         }
     }

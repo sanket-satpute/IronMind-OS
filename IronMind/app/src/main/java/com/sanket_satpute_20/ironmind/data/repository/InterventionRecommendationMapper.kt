@@ -14,6 +14,20 @@ fun InterventionRecommendationEntity.toDomain(): InterventionRecommendation? {
         return null
     }
 
+    val parsedCausalHypothesis = if (!causalHypothesisId.isNullOrBlank() && !causalHypothesisType.isNullOrBlank()) {
+        try {
+            val type = com.sanket_satpute_20.ironmind.domain.model.intervention.CausalHypothesisType.valueOf(causalHypothesisType)
+            com.sanket_satpute_20.ironmind.domain.model.intervention.CausalHypothesisReference(
+                id = causalHypothesisId,
+                type = type
+            )
+        } catch (e: IllegalArgumentException) {
+            null
+        }
+    } else {
+        null
+    }
+
     return InterventionRecommendation(
         id = id,
         userId = userId,
@@ -25,7 +39,8 @@ fun InterventionRecommendationEntity.toDomain(): InterventionRecommendation? {
         suggestedAction = suggestedAction,
         status = InterventionRecommendationStatus.valueOf(status),
         createdAt = createdAt,
-        expiresAt = expiresAt
+        expiresAt = expiresAt,
+        causalHypothesis = parsedCausalHypothesis
     )
 }
 
@@ -40,5 +55,7 @@ fun InterventionRecommendation.toEntity(): InterventionRecommendationEntity = In
     suggestedAction = suggestedAction,
     status = status.name,
     createdAt = createdAt,
-    expiresAt = expiresAt
+    expiresAt = expiresAt,
+    causalHypothesisId = causalHypothesis?.id,
+    causalHypothesisType = causalHypothesis?.type?.name
 )

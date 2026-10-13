@@ -20,6 +20,13 @@ import com.sanket_satpute_20.ironmind.domain.model.intervention.ContextGoal
 import com.sanket_satpute_20.ironmind.domain.model.intervention.TargetCompletionResolver
 import com.sanket_satpute_20.ironmind.domain.model.intervention.TargetCompletionResult
 import com.sanket_satpute_20.ironmind.domain.model.GoalStatus
+import com.sanket_satpute_20.ironmind.domain.model.intervention.CausalHypothesisReference
+import com.sanket_satpute_20.ironmind.domain.model.intervention.CausalHypothesisType
+import com.sanket_satpute_20.ironmind.domain.model.intervention.ContextBarrier
+import com.sanket_satpute_20.ironmind.domain.model.intervention.ContextPattern
+import com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType
+import com.sanket_satpute_20.ironmind.domain.ai.BarrierCategory
+import com.sanket_satpute_20.ironmind.domain.model.barrier.BarrierConfirmationState
 import com.sanket_satpute_20.ironmind.domain.repository.AutonomySettingsRepository
 import com.sanket_satpute_20.ironmind.domain.repository.InterventionRecommendationRepository
 import io.mockk.coEvery
@@ -28,6 +35,8 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -67,7 +76,9 @@ class RecommendInterventionUseCaseTest {
         objective: InterventionObjective? = InterventionObjective.INITIATE_ACTION,
         targetEntityType: String? = "GOAL",
         targetEntityId: String? = "goal-1",
-        confidence: Float = 0.8f
+        confidence: Float = 0.8f,
+        causalHypothesisId: String? = null,
+        causalHypothesisType: String? = null
     ) = AIOutput.InterventionRecommendation(
         interventionType = interventionType,
         objective = objective,
@@ -75,7 +86,9 @@ class RecommendInterventionUseCaseTest {
         targetEntityId = targetEntityId,
         reason = "Test rationale",
         recommendation = "Test action",
-        confidence = confidence
+        confidence = confidence,
+        causalHypothesisId = causalHypothesisId,
+        causalHypothesisType = causalHypothesisType
     )
 
     private fun historicalRecommendation(
@@ -678,5 +691,191 @@ class RecommendInterventionUseCaseTest {
         assertTrue("Context string should contain the correction", 
             capturedContextString!!.contains("CORRECTION [evt-123]: User explicitly corrected recommendation 'Do x' (Target: goal-99, Type: BREAK_DOWN). Corrected Text: I disagree")
         )
+    }
+
+    @Test
+    fun `T-C3_5-01 valid PATTERN causal hypothesis in context snapshot is populated on recommendation`() = runBlocking {
+        setupAutonomy(AutonomyLevel.FULL_AUTO)
+        setupAI(validAIOutput(causalHypothesisId = "pat-100", causalHypothesisType = "PATTERN"))
+        setupTargetCompletion(TargetCompletionResult.NOT_COMPLETED)
+        setupHistory()
+        setupSaveSuccess()
+
+        val context = defaultContext().copy(
+            activePatterns = listOf(
+                ContextPattern(id = "pat-100", type = PatternType.TIME_PATTERN, description = "Afternoon energy drop")
+            )
+        )
+
+        val result = useCase(context)
+        assertTrue(result is Result.Success)
+        val recResult = (result as Result.Success).data
+        assertTrue(recResult is InterventionRecommendationResult.Recommended)
+        val rec = (recResult as InterventionRecommendationResult.Recommended).recommendation
+        assertNotNull(rec.causalHypothesis)
+        assertEquals(CausalHypothesisReference(id = "pat-100", type = CausalHypothesisType.PATTERN), rec.causalHypothesis)
+    }
+
+    @Test
+    fun `T-C3_5-02 valid BARRIER causal hypothesis in context snapshot is populated on recommendation`() = runBlocking {
+        setupAutonomy(AutonomyLevel.FULL_AUTO)
+        setupAI(validAIOutput(causalHypothesisId = "bar-200", causalHypothesisType = "BARRIER"))
+        setupTargetCompletion(TargetCompletionResult.NOT_COMPLETED)
+        setupHistory()
+        setupSaveSuccess()
+
+        val context = defaultContext().copy(
+            activeBarriers = listOf(
+                ContextBarrier(id = "bar-200", category = BarrierCategory.UNCERTAINTY, description = "Unclear specifications", confirmationState = BarrierConfirmationState.UNCONFIRMED)
+            )
+        )
+
+        val result = useCase(context)
+        assertTrue(result is Result.Success)
+        val recResult = (result as Result.Success).data
+        assertTrue(recResult is InterventionRecommendationResult.Recommended)
+        val rec = (recResult as InterventionRecommendationResult.Recommended).recommendation
+        assertNotNull(rec.causalHypothesis)
+        assertEquals(CausalHypothesisReference(id = "bar-200", type = CausalHypothesisType.BARRIER), rec.causalHypothesis)
+    }
+
+    @Test
+    fun `T-C3_5-03 unlinked recommendation with omitted hypothesis fields sets causalHypothesis to null`() = runBlocking {
+        setupAutonomy(AutonomyLevel.FULL_AUTO)
+        setupAI(validAIOutput(causalHypothesisId = null, causalHypothesisType = null))
+        setupTargetCompletion(TargetCompletionResult.NOT_COMPLETED)
+        setupHistory()
+        setupSaveSuccess()
+
+        val result = useCase(defaultContext())
+        assertTrue(result is Result.Success)
+        val recResult = (result as Result.Success).data
+        assertTrue(recResult is InterventionRecommendationResult.Recommended)
+        val rec = (recResult as InterventionRecommendationResult.Recommended).recommendation
+        assertNull(rec.causalHypothesis)
+    }
+
+    @Test
+    fun `T-C3_5-04 hallucinated PATTERN id not in activePatterns fails closed to null and preserves recommendation`() = runBlocking {
+        setupAutonomy(AutonomyLevel.FULL_AUTO)
+        setupAI(validAIOutput(causalHypothesisId = "pat-hallucinated", causalHypothesisType = "PATTERN"))
+        setupTargetCompletion(TargetCompletionResult.NOT_COMPLETED)
+        setupHistory()
+        setupSaveSuccess()
+
+        val context = defaultContext().copy(
+            activePatterns = listOf(
+                ContextPattern(id = "pat-other", type = PatternType.CONTEXT_PATTERN, description = "Other pattern")
+            )
+        )
+
+        val result = useCase(context)
+        assertTrue(result is Result.Success)
+        val recResult = (result as Result.Success).data
+        assertTrue("Recommendation must still be generated when provenance fails verification", recResult is InterventionRecommendationResult.Recommended)
+        val rec = (recResult as InterventionRecommendationResult.Recommended).recommendation
+        assertNull("Hallucinated pattern ID must fail closed to null causalHypothesis", rec.causalHypothesis)
+    }
+
+    @Test
+    fun `T-C3_5-05 hallucinated BARRIER id not in activeBarriers fails closed to null and preserves recommendation`() = runBlocking {
+        setupAutonomy(AutonomyLevel.FULL_AUTO)
+        setupAI(validAIOutput(causalHypothesisId = "bar-hallucinated", causalHypothesisType = "BARRIER"))
+        setupTargetCompletion(TargetCompletionResult.NOT_COMPLETED)
+        setupHistory()
+        setupSaveSuccess()
+
+        val context = defaultContext().copy(
+            activeBarriers = listOf(
+                ContextBarrier(id = "bar-other", category = BarrierCategory.DISTRACTION, description = "Other barrier", confirmationState = BarrierConfirmationState.UNCONFIRMED)
+            )
+        )
+
+        val result = useCase(context)
+        assertTrue(result is Result.Success)
+        val recResult = (result as Result.Success).data
+        assertTrue("Recommendation must still be generated when provenance fails verification", recResult is InterventionRecommendationResult.Recommended)
+        val rec = (recResult as InterventionRecommendationResult.Recommended).recommendation
+        assertNull("Hallucinated barrier ID must fail closed to null causalHypothesis", rec.causalHypothesis)
+    }
+
+    @Test
+    fun `T-C3_5-06 mismatched hypothesis type fails closed to null and preserves recommendation`() = runBlocking {
+        setupAutonomy(AutonomyLevel.FULL_AUTO)
+        // ID belongs to a pattern, but type claims BARRIER
+        setupAI(validAIOutput(causalHypothesisId = "pat-real", causalHypothesisType = "BARRIER"))
+        setupTargetCompletion(TargetCompletionResult.NOT_COMPLETED)
+        setupHistory()
+        setupSaveSuccess()
+
+        val context = defaultContext().copy(
+            activePatterns = listOf(
+                ContextPattern(id = "pat-real", type = PatternType.CONTEXT_PATTERN, description = "Real pattern")
+            ),
+            activeBarriers = emptyList()
+        )
+
+        val result = useCase(context)
+        assertTrue(result is Result.Success)
+        val recResult = (result as Result.Success).data
+        assertTrue(recResult is InterventionRecommendationResult.Recommended)
+        val rec = (recResult as InterventionRecommendationResult.Recommended).recommendation
+        assertNull("Mismatched hypothesis type must fail closed to null causalHypothesis", rec.causalHypothesis)
+    }
+
+    @Test
+    fun `T-C3_5-07 inconsistent hypothesis fields fail closed to null and preserve recommendation`() = runBlocking {
+        setupAutonomy(AutonomyLevel.FULL_AUTO)
+        setupTargetCompletion(TargetCompletionResult.NOT_COMPLETED)
+        setupHistory()
+        setupSaveSuccess()
+
+        val context = defaultContext().copy(
+            activePatterns = listOf(
+                ContextPattern(id = "pat-1", type = PatternType.CONTEXT_PATTERN, description = "Pattern")
+            )
+        )
+
+        // Case A: ID provided, type is null
+        setupAI(validAIOutput(causalHypothesisId = "pat-1", causalHypothesisType = null))
+        val resultA = useCase(context)
+        assertTrue(resultA is Result.Success)
+        val recA = ((resultA as Result.Success).data as InterventionRecommendationResult.Recommended).recommendation
+        assertNull("ID without type must fail closed to null", recA.causalHypothesis)
+
+        // Case B: Type provided, ID is null
+        setupAI(validAIOutput(causalHypothesisId = null, causalHypothesisType = "PATTERN"))
+        val resultB = useCase(context)
+        assertTrue(resultB is Result.Success)
+        val recB = ((resultB as Result.Success).data as InterventionRecommendationResult.Recommended).recommendation
+        assertNull("Type without ID must fail closed to null", recB.causalHypothesis)
+    }
+
+    @Test
+    fun `T-C3_5-08 blank id or invalid type string fails closed to null and preserves recommendation`() = runBlocking {
+        setupAutonomy(AutonomyLevel.FULL_AUTO)
+        setupTargetCompletion(TargetCompletionResult.NOT_COMPLETED)
+        setupHistory()
+        setupSaveSuccess()
+
+        val context = defaultContext().copy(
+            activePatterns = listOf(
+                ContextPattern(id = "pat-1", type = PatternType.CONTEXT_PATTERN, description = "Pattern")
+            )
+        )
+
+        // Case A: Blank ID with valid type
+        setupAI(validAIOutput(causalHypothesisId = "   ", causalHypothesisType = "PATTERN"))
+        val resultA = useCase(context)
+        assertTrue(resultA is Result.Success)
+        val recA = ((resultA as Result.Success).data as InterventionRecommendationResult.Recommended).recommendation
+        assertNull("Blank ID must fail closed to null", recA.causalHypothesis)
+
+        // Case B: Valid ID with invalid type string
+        setupAI(validAIOutput(causalHypothesisId = "pat-1", causalHypothesisType = "NON_EXISTENT_TYPE"))
+        val resultB = useCase(context)
+        assertTrue(resultB is Result.Success)
+        val recB = ((resultB as Result.Success).data as InterventionRecommendationResult.Recommended).recommendation
+        assertNull("Invalid type string must fail closed to null", recB.causalHypothesis)
     }
 }
