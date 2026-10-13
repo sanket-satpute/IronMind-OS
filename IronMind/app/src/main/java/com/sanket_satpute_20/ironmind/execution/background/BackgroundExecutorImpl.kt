@@ -51,7 +51,7 @@ class BackgroundExecutorImpl(
         )
     }
 
-    fun scheduleEventProcessing() {
+    override fun scheduleEventProcessing() {
         // Event processing is critical but shouldn't drain a dying battery if avoidable
         val constraints = Constraints.Builder()
             .setRequiresBatteryNotLow(true)
@@ -62,8 +62,26 @@ class BackgroundExecutorImpl(
             .build()
 
         workManager.enqueueUniqueWork(
-            "EventProcessingWorker",
+            EventProcessingWorker.UNIQUE_WORK_NAME,
             ExistingWorkPolicy.KEEP,
+            request
+        )
+    }
+
+    override fun scheduleEventReconciliation() {
+        val constraints = Constraints.Builder()
+            .setRequiresBatteryNotLow(true)
+            .build()
+
+        val request = androidx.work.PeriodicWorkRequestBuilder<EventProcessingWorker>(
+            15, java.util.concurrent.TimeUnit.MINUTES
+        )
+            .setConstraints(constraints)
+            .build()
+
+        workManager.enqueueUniquePeriodicWork(
+            EventProcessingWorker.RECONCILIATION_WORK_NAME,
+            androidx.work.ExistingPeriodicWorkPolicy.KEEP,
             request
         )
     }

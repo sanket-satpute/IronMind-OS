@@ -26,7 +26,17 @@ class IronMindWorkerFactory(
                 appContainer.barrierUnderstandingOrchestrator
             )
             SyncWorker::class.java.name -> SyncWorker(appContext, workerParameters, appContainer.syncUseCase)
-            EventProcessingWorker::class.java.name -> EventProcessingWorker(appContext, workerParameters, appContainer.eventRepository) // Placeholder for now
+            EventProcessingWorker::class.java.name -> EventProcessingWorker(
+                appContext = appContext,
+                workerParams = workerParameters,
+                learnerEventStatusDao = appContainer.learnerEventStatusDao,
+                eventRepository = appContainer.eventRepository,
+                eventProcessor = appContainer.eventProcessor,
+                clock = appContainer.clock,
+                logger = appContainer.logger,
+                database = appContainer.database,
+                ironMindDao = appContainer.database.ironMindDao()
+            )
             PatternUpdateWorker::class.java.name -> PatternUpdateWorker(appContext, workerParameters, appContainer.patternEngine)
             InterventionEvaluationWorker::class.java.name -> InterventionEvaluationWorker(appContext, workerParameters, appContainer.interventionExecutionPipeline)
             ObservationWorker::class.java.name -> ObservationWorker(appContext, workerParameters, appContainer.executeObservationCollectionUseCase, appContainer.authRepository)

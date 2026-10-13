@@ -292,6 +292,9 @@ interface AppContainer {
     val buildFactualContextSnapshotUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.BuildFactualContextSnapshotUseCase
 
     // Services
+    val learnerEventStatusDao: com.sanket_satpute_20.ironmind.data.local.dao.LearnerEventStatusDao
+    val eventProcessor: com.sanket_satpute_20.ironmind.execution.background.EventProcessor
+    val database: com.sanket_satpute_20.ironmind.data.local.IronMindDatabase
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -300,7 +303,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         DebugIronLogger()
     }
 
-    private val database: IronMindDatabase by lazy {
+    override val database: IronMindDatabase by lazy {
         Room.databaseBuilder(
             context,
             IronMindDatabase::class.java,
@@ -325,12 +328,21 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             IronMindDatabase.MIGRATION_17_18,
             IronMindDatabase.MIGRATION_18_19,
             IronMindDatabase.MIGRATION_19_20,
-            IronMindDatabase.MIGRATION_20_21
+            IronMindDatabase.MIGRATION_20_21,
+            IronMindDatabase.MIGRATION_21_22
         ).build()
     }
 
     private val globalAutonomyStateDao: com.sanket_satpute_20.ironmind.data.local.dao.GlobalAutonomyStateDao by lazy {
         database.globalAutonomyStateDao()
+    }
+
+    override val learnerEventStatusDao: com.sanket_satpute_20.ironmind.data.local.dao.LearnerEventStatusDao by lazy {
+        database.learnerEventStatusDao()
+    }
+
+    override val eventProcessor: com.sanket_satpute_20.ironmind.execution.background.EventProcessor by lazy {
+        com.sanket_satpute_20.ironmind.execution.background.DefaultEventProcessor()
     }
 
     private val appUsageObservationSettingsDao: com.sanket_satpute_20.ironmind.data.local.dao.AppUsageObservationSettingsDao by lazy {
@@ -394,7 +406,12 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     override val eventRepository: EventRepository by lazy {
-        EventRepositoryImpl(database.ironMindDao(), logger)
+        EventRepositoryImpl(
+            dao = database.ironMindDao(),
+            logger = logger,
+            database = database,
+            learnerEventStatusDao = learnerEventStatusDao
+        )
     }
 
     override val goalRepository: GoalRepository by lazy {
@@ -881,7 +898,8 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             eventRepository = eventRepository,
             updateInterventionRecommendationStatusUseCase = updateInterventionRecommendationStatusUseCase,
             clock = clock,
-            idGenerator = idGenerator
+            idGenerator = idGenerator,
+            backgroundExecutor = backgroundExecutor
         )
     }
 
@@ -1141,7 +1159,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             interventionDao = database.interventionDao(),
             experimentDao = experimentDao,
             autonomySettingsDao = database.autonomySettingsDao(),
-            globalAutonomyStateDao = globalAutonomyStateDao
+            globalAutonomyStateDao = globalAutonomyStateDao,
+            learnerEventStatusDao = learnerEventStatusDao,
+            database = database,
+            workManager = try { androidx.work.WorkManager.getInstance(context) } catch (e: Exception) { null }
         )
     }
 

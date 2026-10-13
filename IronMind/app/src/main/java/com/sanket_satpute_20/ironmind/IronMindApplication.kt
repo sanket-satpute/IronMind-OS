@@ -28,10 +28,23 @@ class IronMindApplication : Application(), Configuration.Provider {
             applicationScope = applicationScope
         )
         adapter.start()
+
+        registerStartupReconciliation(container.backgroundExecutor)
     }
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(IronMindWorkerFactory(container))
             .build()
+
+    companion object {
+        fun registerStartupReconciliation(backgroundExecutor: com.sanket_satpute_20.ironmind.execution.background.BackgroundExecutor) {
+            try {
+                backgroundExecutor.scheduleEventReconciliation()
+                println("IronMindLifecycle [EventReconciliation] [SCHEDULED]")
+            } catch (e: Exception) {
+                println("IronMindLifecycle [EventReconciliation] [SCHEDULE_FAILED] error=${e.message ?: "UNKNOWN"}")
+            }
+        }
+    }
 }

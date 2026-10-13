@@ -80,11 +80,9 @@ class AutonomousReflectionEngineImpl(
         when (aiOutput) {
             is AIOutput.MemoryCandidate -> {
                 if (memoryPatternProcessingLevel == AutonomyLevel.FULL_AUTO || memoryPatternProcessingLevel == AutonomyLevel.ASK_BEFORE_ACTION) {
-                    val confirmationState = if (memoryPatternProcessingLevel == AutonomyLevel.FULL_AUTO) {
-                        MemoryConfirmationState.SYSTEM_CONFIRMED
-                    } else {
-                        MemoryConfirmationState.UNCONFIRMED
-                    }
+                    // Sprint V2.16-C3.4: Autonomous AI inference must never grant SYSTEM_CONFIRMED.
+                    // All AI-inferred candidate knowledge remains UNCONFIRMED until explicit user confirmation.
+                    val confirmationState = MemoryConfirmationState.UNCONFIRMED
                     
                     val memory = Memory(
                         id = idGenerator.generateId(),

@@ -6,6 +6,8 @@ class FakeBackgroundExecutor : BackgroundExecutor {
     var scheduleReflectionProcessingCalled = false
     var scheduledReflectionId: String? = null
     var shouldThrowException = false
+    var scheduleEventProcessingCalled = false
+    var scheduleEventReconciliationCalled = false
 
     override fun scheduleReflectionProcessing(reflectionId: String) {
         if (shouldThrowException) {
@@ -13,5 +15,19 @@ class FakeBackgroundExecutor : BackgroundExecutor {
         }
         scheduleReflectionProcessingCalled = true
         scheduledReflectionId = reflectionId
+    }
+
+    override fun scheduleEventProcessing() {
+        if (shouldThrowException) {
+            throw Exception("Failed to schedule")
+        }
+        scheduleEventProcessingCalled = true
+    }
+
+    override fun scheduleEventReconciliation() {
+        if (shouldThrowException) {
+            throw Exception("Failed to schedule")
+        }
+        scheduleEventReconciliationCalled = true
     }
 }

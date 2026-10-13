@@ -41,9 +41,10 @@ import com.sanket_satpute_20.ironmind.data.local.entity.*
         ActivityObservationSettingsEntity::class,
         com.sanket_satpute_20.ironmind.data.local.entity.ExperimentRecordEntity::class,
         com.sanket_satpute_20.ironmind.data.local.entity.BarrierHypothesisEntity::class,
-        com.sanket_satpute_20.ironmind.data.local.entity.InterventionRecommendationEntity::class
+        com.sanket_satpute_20.ironmind.data.local.entity.InterventionRecommendationEntity::class,
+        com.sanket_satpute_20.ironmind.data.local.entity.LearnerEventStatusEntity::class
     ],
-    version = 21,
+    version = 22,
     exportSchema = false
 )
 abstract class IronMindDatabase : RoomDatabase() {
@@ -64,6 +65,7 @@ abstract class IronMindDatabase : RoomDatabase() {
     abstract fun experimentDao(): com.sanket_satpute_20.ironmind.data.local.dao.ExperimentDao
     abstract fun barrierDao(): BarrierDao
     abstract fun interventionRecommendationDao(): com.sanket_satpute_20.ironmind.data.local.dao.InterventionRecommendationDao
+    abstract fun learnerEventStatusDao(): com.sanket_satpute_20.ironmind.data.local.dao.LearnerEventStatusDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -449,6 +451,36 @@ abstract class IronMindDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
                 println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=21")
+            }
+        }
+
+        val MIGRATION_21_22 = object : Migration(21, 22) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `learner_event_status` (
+                        `eventId` TEXT NOT NULL,
+                        `userId` TEXT NOT NULL,
+                        `status` TEXT NOT NULL,
+                        `claimCount` INTEGER NOT NULL,
+                        `failureCount` INTEGER NOT NULL,
+                        `maxAttempts` INTEGER NOT NULL,
+                        `leaseToken` TEXT,
+                        `leaseExpiresAt` INTEGER,
+                        `lastAttemptAt` INTEGER,
+                        `nextAttemptAt` INTEGER NOT NULL,
+                        `errorMessage` TEXT,
+                        `hadMalformedMetadata` INTEGER NOT NULL,
+                        `createdAt` INTEGER NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`eventId`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_learner_event_status_poll` ON `learner_event_status` (`status`, `nextAttemptAt`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_learner_event_status_lease` ON `learner_event_status` (`status`, `leaseExpiresAt`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_learner_event_status_user` ON `learner_event_status` (`userId`)")
+                println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=22")
             }
         }
     }

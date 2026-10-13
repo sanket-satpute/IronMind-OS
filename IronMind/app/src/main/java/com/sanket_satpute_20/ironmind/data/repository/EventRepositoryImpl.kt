@@ -1,6 +1,9 @@
 package com.sanket_satpute_20.ironmind.data.repository
 
+import androidx.room.withTransaction
+import com.sanket_satpute_20.ironmind.data.local.IronMindDatabase
 import com.sanket_satpute_20.ironmind.data.local.dao.IronMindDao
+import com.sanket_satpute_20.ironmind.data.local.dao.LearnerEventStatusDao
 import com.sanket_satpute_20.ironmind.data.local.entity.toDomainModel
 import com.sanket_satpute_20.ironmind.data.local.entity.toEntity
 import com.sanket_satpute_20.ironmind.domain.common.Result
@@ -12,8 +15,72 @@ import kotlinx.coroutines.withContext
 
 class EventRepositoryImpl(
     private val dao: IronMindDao,
-    private val logger: IronLogger? = null
+    private val logger: IronLogger? = null,
+    private val database: IronMindDatabase? = null,
+    private val learnerEventStatusDao: LearnerEventStatusDao? = null
 ) : EventRepository {
+
+    override fun isAtomicLearnerStatusSupported(): Boolean = database != null
+
+    override suspend fun saveEventWithLearnerStatus(
+        event: Event
+    ): Result<Event, Exception> = withContext(Dispatchers.IO) {
+        val status = com.sanket_satpute_20.ironmind.data.local.entity.LearnerEventStatusEntity(
+            eventId = event.id,
+            userId = event.userId,
+            status = "PENDING",
+            claimCount = 0,
+            failureCount = 0,
+            maxAttempts = 5,
+            leaseToken = null,
+            leaseExpiresAt = null,
+            lastAttemptAt = null,
+            nextAttemptAt = event.occurredAt,
+            errorMessage = null,
+            hadMalformedMetadata = false,
+            createdAt = event.occurredAt,
+            updatedAt = event.occurredAt
+        )
+        if (database != null) {
+            try {
+                database.withTransaction {
+                    val user = dao.getUserProfile(event.userId)
+                    if (user == null) {
+                        throw IllegalStateException("USER_PROFILE_NOT_FOUND: User ${event.userId} does not exist or has been erased")
+                    }
+                    dao.insertEvent(event.toEntity())
+                    val sDao = learnerEventStatusDao ?: database.learnerEventStatusDao()
+                    sDao.insert(status)
+                }
+                Result.Success(event)
+            } catch (e: Exception) {
+                logger?.logLifecycle(
+                    "Event",
+                    "PERSIST_WITH_STATUS_FAILURE",
+                    mapOf(
+                        "eventType" to event.type.name,
+                        "eventId" to event.id,
+                        "error" to (e.message ?: "UNKNOWN")
+                    )
+                )
+                Result.Failure(e)
+            }
+        } else {
+            val user = dao.getUserProfile(event.userId)
+            if (user == null) {
+                return@withContext Result.Failure(IllegalStateException("USER_PROFILE_NOT_FOUND: User ${event.userId} does not exist or has been erased"))
+            }
+            val saveResult = saveEvent(event)
+            if (saveResult is Result.Success && learnerEventStatusDao != null) {
+                try {
+                    learnerEventStatusDao.insert(status)
+                } catch (e: Exception) {
+                    return@withContext Result.Failure(e)
+                }
+            }
+            saveResult
+        }
+    }
 
     override suspend fun saveEvent(event: Event): Result<Event, Exception> = withContext(Dispatchers.IO) {
         try {

@@ -23,4 +23,8 @@ interface EventRepository {
 
     suspend fun searchEvents(userId: String, query: String): Result<List<Event>, Exception>
     suspend fun getEventsByCausationId(userId: String, causationId: String): Result<List<Event>, Exception>
+
+    fun isAtomicLearnerStatusSupported(): Boolean = false
+
+    suspend fun saveEventWithLearnerStatus(event: Event): Result<Event, Exception> = saveEvent(event)
 }

@@ -114,9 +114,9 @@ class AutonomousReflectionEngineImplTest {
         assertTrue(result is Result.Success)
         assertEquals(emptyList<com.sanket_satpute_20.ironmind.domain.model.pattern.PatternCandidate>(), (result as Result.Success).data)
 
-        // Check memory is saved and auto-confirmed
+        // Check memory is saved as UNCONFIRMED (FULL_AUTO does not grant SYSTEM_CONFIRMED per V2.16-C3.4)
         assertEquals(1, memoryRepository.memories.size)
-        assertEquals(MemoryConfirmationState.SYSTEM_CONFIRMED, memoryRepository.memories[0].confirmationState)
+        assertEquals(MemoryConfirmationState.UNCONFIRMED, memoryRepository.memories[0].confirmationState)
         assertEquals("User prefers reading in the morning.", memoryRepository.memories[0].content)
     }
 

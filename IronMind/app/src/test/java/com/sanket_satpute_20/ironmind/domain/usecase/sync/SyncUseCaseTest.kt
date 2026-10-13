@@ -1,6 +1,6 @@
 package com.sanket_satpute_20.ironmind.domain.usecase.sync
 
-import com.sanket_satpute_20.ironmind.data.sync.SyncOrchestrator
+import com.sanket_satpute_20.ironmind.data.sync.SyncOrchestrator as DataSyncOrchestrator
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.OutboxEntry
 import com.sanket_satpute_20.ironmind.domain.model.OutboxOperationType
@@ -18,14 +18,14 @@ class SyncUseCaseTest {
 
     private lateinit var outboxRepository: FakeOutboxRepository
     private lateinit var syncRepository: FakeSyncRepository
-    private lateinit var orchestrator: SyncOrchestrator
+    private lateinit var orchestrator: DataSyncOrchestrator
     private lateinit var syncUseCase: SyncUseCase
 
     @Before
     fun setup() {
         outboxRepository = FakeOutboxRepository()
         syncRepository = FakeSyncRepository()
-        orchestrator = SyncOrchestrator(outboxRepository, syncRepository)
+        orchestrator = DataSyncOrchestrator(outboxRepository, syncRepository)
         syncUseCase = SyncUseCase(orchestrator)
     }
 
@@ -144,5 +144,32 @@ class SyncUseCaseTest {
         assertTrue(state.isIdle)
         assertEquals(0, state.pendingCount)
         assertNull(state.lastError)
+    }
+
+    // --- interface decoupling ---
+    @Test
+    fun `sync usecase functions cleanly with decoupled domain SyncOrchestrator implementation`() = runTest {
+        val mockDomainOrchestrator = object : SyncOrchestrator {
+            var calledUserId: String? = null
+            override suspend fun sync(userId: String): Result<com.sanket_satpute_20.ironmind.domain.model.SyncState, Exception> {
+                calledUserId = userId
+                return Result.Success(
+                    com.sanket_satpute_20.ironmind.domain.model.SyncState(
+                        isIdle = true,
+                        isSyncing = false,
+                        lastSyncedAt = 9999L,
+                        lastError = null,
+                        pendingCount = 0
+                    )
+                )
+            }
+        }
+
+        val pureDomainUseCase = SyncUseCase(mockDomainOrchestrator)
+        val result = pureDomainUseCase("user-pure-domain")
+
+        assertTrue(result is Result.Success)
+        assertEquals("user-pure-domain", mockDomainOrchestrator.calledUserId)
+        assertEquals(9999L, (result as Result.Success).data.lastSyncedAt)
     }
 }

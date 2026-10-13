@@ -36,4 +36,28 @@ class ArchitectureIsolationTest {
             }
         }
     }
+
+    @Test
+    fun `domain layer must not depend on data layer`() {
+        val projectDir = File(System.getProperty("user.dir") ?: "")
+        val domainDir = File(projectDir, "src/main/java/com/sanket_satpute_20/ironmind/domain")
+
+        if (!domainDir.exists()) {
+            return
+        }
+
+        val domainFiles = domainDir.walkTopDown().filter { it.extension == "kt" || it.extension == "java" }
+
+        val forbiddenImport = "import com.sanket_satpute_20.ironmind.data."
+
+        domainFiles.forEach { file ->
+            val content = file.readText()
+            val hasForbiddenImport = content.lines().any { line -> line.trim().startsWith(forbiddenImport) }
+            assertTrue(
+                "Architecture Violation: Domain file ${file.name} contains forbidden import '$forbiddenImport*'. " +
+                        "The domain layer must not depend on the data layer.",
+                !hasForbiddenImport
+            )
+        }
+    }
 }

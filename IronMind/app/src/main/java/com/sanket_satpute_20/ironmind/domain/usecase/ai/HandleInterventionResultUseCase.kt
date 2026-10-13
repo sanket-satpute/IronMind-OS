@@ -11,20 +11,22 @@ import com.sanket_satpute_20.ironmind.domain.model.intervention.CorrectionScope
 import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendation
 import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendationStatus
 import com.sanket_satpute_20.ironmind.domain.repository.EventRepository
+import com.sanket_satpute_20.ironmind.execution.background.BackgroundExecutor
 
 /**
  * Sprint V2.11: Suggestion-Only Intelligence UI.
  * Sprint V2.16-C1: Structured Correction Data Contract.
+ * Sprint V2.16-C3.4: Safe Event Infrastructure and Erasure Hardening.
  *
  * Handles the user's explicit response to an intervention recommendation (Accept, Reject, Correct, Ignore).
- * Records the outcome into the Event system, satisfying the requirement:
- * "The user can: accept, reject, correct, ignore and the result is recorded."
+ * Records the outcome into the Event system and learner status atomically.
  */
 class HandleInterventionResultUseCase(
     private val eventRepository: EventRepository,
     private val updateInterventionRecommendationStatusUseCase: UpdateInterventionRecommendationStatusUseCase,
     private val clock: Clock,
-    private val idGenerator: IdGenerator
+    private val idGenerator: IdGenerator,
+    private val backgroundExecutor: BackgroundExecutor? = null
 ) {
     enum class Action {
         ACCEPT,
@@ -84,10 +86,19 @@ class HandleInterventionResultUseCase(
             causationId = recommendation.id
         )
 
-        val eventResult = eventRepository.saveEvent(event)
-        
-        if (eventResult is Result.Failure) {
-            return eventResult
+        // Sprint V2.16-C3.4: Atomic Event + Status insertion with user-profile validation via EventRepository
+        val persistResult = eventRepository.saveEventWithLearnerStatus(event)
+        if (persistResult is Result.Failure) {
+            return persistResult
+        }
+
+        if (backgroundExecutor != null) {
+            try {
+                backgroundExecutor.scheduleEventProcessing()
+            } catch (e: Exception) {
+                // Primary intervention flow must not depend on background event processing
+                println("IronMindLifecycle [EventStatus] [SCHEDULE_FAILED] eventId=${event.id}")
+            }
         }
 
         if (mappedStatus != null) {

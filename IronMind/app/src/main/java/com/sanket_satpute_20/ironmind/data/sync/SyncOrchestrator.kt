@@ -6,6 +6,7 @@ import com.sanket_satpute_20.ironmind.domain.model.SyncStatus
 import com.sanket_satpute_20.ironmind.domain.repository.OutboxRepository
 import com.sanket_satpute_20.ironmind.domain.repository.SyncRepository
 import com.sanket_satpute_20.ironmind.domain.repository.SyncUploadResult
+import com.sanket_satpute_20.ironmind.domain.usecase.sync.SyncOrchestrator as DomainSyncOrchestrator
 
 /**
  * Coordinates the sync cycle:
@@ -21,8 +22,8 @@ import com.sanket_satpute_20.ironmind.domain.repository.SyncUploadResult
 class SyncOrchestrator(
     private val outboxRepository: OutboxRepository,
     private val syncRepository: SyncRepository
-) {
-    suspend fun sync(userId: String): Result<SyncState, Exception> {
+) : DomainSyncOrchestrator {
+    override suspend fun sync(userId: String): Result<SyncState, Exception> {
         println("IronMindLifecycle [Sync] [STARTED] userId=$userId")
 
         val pendingResult = outboxRepository.getPendingEntries()

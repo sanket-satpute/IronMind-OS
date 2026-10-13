@@ -1,8 +1,11 @@
 package com.sanket_satpute_20.ironmind.data.repository
 
+import androidx.room.withTransaction
+import com.sanket_satpute_20.ironmind.data.local.IronMindDatabase
 import com.sanket_satpute_20.ironmind.data.local.dao.*
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.repository.DataManagementRepository
+import com.sanket_satpute_20.ironmind.infrastructure.worker.EventProcessingWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -13,33 +16,53 @@ class DataManagementRepositoryImpl(
     private val interventionDao: InterventionDao,
     private val experimentDao: ExperimentDao,
     private val autonomySettingsDao: AutonomySettingsDao,
-    private val globalAutonomyStateDao: GlobalAutonomyStateDao
+    private val globalAutonomyStateDao: GlobalAutonomyStateDao,
+    private val learnerEventStatusDao: LearnerEventStatusDao? = null,
+    private val database: IronMindDatabase? = null,
+    private val workManager: androidx.work.WorkManager? = null
 ) : DataManagementRepository {
 
     override suspend fun deleteAllUserData(userId: String): Result<Unit, Exception> = withContext(Dispatchers.IO) {
         try {
-            ironMindDao.deleteUserProfile(userId)
-            ironMindDao.deleteGoalsForUser(userId)
-            ironMindDao.deletePlansForUser(userId)
-            ironMindDao.deleteTasksForUser(userId)
-            ironMindDao.deleteCommitmentsForUser(userId)
-            ironMindDao.deleteReflectionsForUser(userId)
-            ironMindDao.deleteProtectionRulesForUser(userId)
-            ironMindDao.deleteProtectionSessionsForUser(userId)
-            ironMindDao.deleteEventsForUser(userId)
-            ironMindDao.deleteMemoriesForUser(userId)
-            
-            patternDao.deletePatternsForUser(userId)
-            observationDao.deleteObservationsForUser(userId)
-            interventionDao.deleteInterventionsForUser(userId)
-            experimentDao.deleteExperimentsForUser(userId)
-            autonomySettingsDao.deleteAutonomySettingsForUser(userId)
-            globalAutonomyStateDao.deleteGlobalAutonomyStateForUser(userId)
-            
+            if (database != null) {
+                database.withTransaction {
+                    executeAllDeletions(userId)
+                }
+            } else {
+                executeAllDeletions(userId)
+            }
+            try {
+                workManager?.cancelUniqueWork(EventProcessingWorker.UNIQUE_WORK_NAME)
+                workManager?.cancelUniqueWork(EventProcessingWorker.RECONCILIATION_WORK_NAME)
+            } catch (e: Exception) {
+                // Supplementary cancellation must not cause erasure failure
+            }
             Result.Success(Unit)
         } catch (e: Exception) {
             Result.Failure(e)
         }
+    }
+
+    private suspend fun executeAllDeletions(userId: String) {
+        ironMindDao.deleteUserProfile(userId)
+        ironMindDao.deleteGoalsForUser(userId)
+        ironMindDao.deletePlansForUser(userId)
+        ironMindDao.deleteTasksForUser(userId)
+        ironMindDao.deleteCommitmentsForUser(userId)
+        ironMindDao.deleteReflectionsForUser(userId)
+        ironMindDao.deleteProtectionRulesForUser(userId)
+        ironMindDao.deleteProtectionSessionsForUser(userId)
+        ironMindDao.deleteEventsForUser(userId)
+        ironMindDao.deleteMemoriesForUser(userId)
+
+        learnerEventStatusDao?.deleteAllForUser(userId)
+
+        patternDao.deletePatternsForUser(userId)
+        observationDao.deleteObservationsForUser(userId)
+        interventionDao.deleteInterventionsForUser(userId)
+        experimentDao.deleteExperimentsForUser(userId)
+        autonomySettingsDao.deleteAutonomySettingsForUser(userId)
+        globalAutonomyStateDao.deleteGlobalAutonomyStateForUser(userId)
     }
 
     override suspend fun cleanupExpiredPatterns(userId: String, thresholdTime: Long): Result<Unit, Exception> = withContext(Dispatchers.IO) {
