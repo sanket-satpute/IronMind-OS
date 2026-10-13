@@ -481,7 +481,14 @@ class SafeEventInfrastructureAndErasureTest {
 
     @Test
     fun `HandleInterventionResultUseCase persists atomically and fails when user is erased`() = runBlocking {
-        val recRepo = mockk<InterventionRecommendationRepository>(relaxed = true)
+        val recRepo = object : InterventionRecommendationRepository {
+            override suspend fun saveRecommendation(recommendation: InterventionRecommendation) = Result.Success(Unit)
+            override suspend fun getRecommendation(id: String) = Result.Success(null)
+            override fun getPendingRecommendations(userId: String, currentTime: Long) = kotlinx.coroutines.flow.emptyFlow<List<InterventionRecommendation>>()
+            override suspend fun updateRecommendationStatus(id: String, status: InterventionRecommendationStatus) = Result.Success(Unit)
+            override suspend fun getEquivalentRecommendations(userId: String, objective: String, targetEntityType: String?, targetEntityId: String?) = Result.Success(emptyList<InterventionRecommendation>())
+            override suspend fun getRecommendationsForUser(userId: String, startTime: Long, endTime: Long, limit: Int) = Result.Success(emptyList<InterventionRecommendation>())
+        }
         val updateStatusUseCase = UpdateInterventionRecommendationStatusUseCase(recRepo)
 
         val useCase = HandleInterventionResultUseCase(

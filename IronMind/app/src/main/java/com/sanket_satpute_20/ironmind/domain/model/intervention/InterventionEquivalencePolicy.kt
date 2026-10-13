@@ -80,6 +80,7 @@ class InterventionEquivalencePolicy {
             }
             InterventionRecommendationStatus.ACCEPTED -> SuppressionResult.Allowed
             InterventionRecommendationStatus.EXPIRED -> SuppressionResult.Allowed
+            InterventionRecommendationStatus.OVERRIDDEN -> SuppressionResult.Allowed
         }
     }
 }

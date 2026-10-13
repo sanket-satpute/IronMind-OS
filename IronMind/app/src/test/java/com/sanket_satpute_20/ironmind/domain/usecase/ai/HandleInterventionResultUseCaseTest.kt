@@ -72,7 +72,7 @@ class HandleInterventionResultUseCaseTest {
     }
 
     @Test
-    fun `invoke with CORRECT saves INTERVENTION_OVERRIDDEN event with corrected text and does NOT change status`() = runTest {
+    fun `invoke with CORRECT saves INTERVENTION_OVERRIDDEN event with corrected text and updates status to OVERRIDDEN`() = runTest {
         val recommendation = InterventionRecommendation(
             id = "rec-2",
             userId = "user-1",
@@ -102,9 +102,189 @@ class HandleInterventionResultUseCaseTest {
         assertTrue(event.metadata!!.contains("correctedText=I will do it tonight instead"))
         assertTrue(event.metadata!!.contains("scope=INTERVENTION_CORRECTION"))
         assertEquals("rec-2", event.causationId)
+        assertEquals("task-2", event.entityId)
 
         val updatedRec = recommendationRepository.recommendations["rec-2"]
-        assertEquals(InterventionRecommendationStatus.PENDING, updatedRec?.status)
+        assertEquals(InterventionRecommendationStatus.OVERRIDDEN, updatedRec?.status)
+    }
+
+    @Test
+    fun `invoke with CORRECT when status update fails returns failure and leaves error actionable`() = runTest {
+        val recommendation = InterventionRecommendation(
+            id = "rec-fail-status",
+            userId = "user-1",
+            interventionType = InterventionType.BREAK_DOWN,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
+            targetEntityId = "task-fail",
+            targetEntityType = "Task",
+            suggestedAction = "Break down",
+            rationale = "Large task",
+            status = InterventionRecommendationStatus.PENDING,
+            createdAt = 1000L,
+            expiresAt = 2000L
+        )
+        recommendationRepository.recommendations["rec-fail-status"] = recommendation
+        recommendationRepository.shouldFailUpdateStatus = true
+
+        val result = useCase(
+            recommendation,
+            HandleInterventionResultUseCase.Action.CORRECT,
+            "user-1",
+            "Not needed"
+        )
+
+        assertTrue(result is Result.Failure)
+        assertEquals("Update failed", (result as Result.Failure).error.message)
+    }
+
+    @Test
+    fun `invoke with CORRECT when status update fails allows retry which reuses existing event without duplicate`() = runTest {
+        val recommendation = InterventionRecommendation(
+            id = "rec-retry-idempotent",
+            userId = "user-1",
+            interventionType = InterventionType.BREAK_DOWN,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
+            targetEntityId = "task-retry",
+            targetEntityType = "Task",
+            suggestedAction = "Break down into 2 steps",
+            rationale = "Large task",
+            status = InterventionRecommendationStatus.PENDING,
+            createdAt = 1000L,
+            expiresAt = 2000L
+        )
+        recommendationRepository.recommendations["rec-retry-idempotent"] = recommendation
+        recommendationRepository.shouldFailUpdateStatus = true
+
+        // First attempt: event persists, status update fails
+        val firstResult = useCase(
+            recommendation,
+            HandleInterventionResultUseCase.Action.CORRECT,
+            "user-1",
+            "Initial correction text",
+            com.sanket_satpute_20.ironmind.domain.model.intervention.CorrectionScope.CONSTRAINT
+        )
+        assertTrue(firstResult is Result.Failure)
+        assertEquals(1, eventRepository.events.size)
+        val initialEvent = eventRepository.events.first()
+        assertEquals("rec-retry-idempotent", initialEvent.causationId)
+        assertEquals("task-retry", initialEvent.entityId)
+        assertTrue(initialEvent.metadata!!.contains("Initial correction text"))
+        assertTrue(initialEvent.metadata!!.contains("scope=CONSTRAINT"))
+
+        // Retry attempt: transient repository failure resolves
+        recommendationRepository.shouldFailUpdateStatus = false
+        val retryResult = useCase(
+            recommendation,
+            HandleInterventionResultUseCase.Action.CORRECT,
+            "user-1",
+            "Initial correction text",
+            com.sanket_satpute_20.ironmind.domain.model.intervention.CorrectionScope.CONSTRAINT
+        )
+        assertTrue(retryResult is Result.Success)
+
+        // Verifications:
+        // 1. Exactly 1 event exists in repository (no duplicate event inserted)
+        assertEquals(1, eventRepository.events.size)
+        // 2. Original event ID, timestamp, causationId, entityId, metadata are preserved intact
+        val survivingEvent = eventRepository.events.first()
+        assertEquals(initialEvent.id, survivingEvent.id)
+        assertEquals(initialEvent.occurredAt, survivingEvent.occurredAt)
+        assertEquals(initialEvent.metadata, survivingEvent.metadata)
+        assertEquals(initialEvent.causationId, survivingEvent.causationId)
+        assertEquals(initialEvent.entityId, survivingEvent.entityId)
+        // 3. Status was durably updated to OVERRIDDEN
+        val updatedRec = recommendationRepository.recommendations["rec-retry-idempotent"]
+        assertEquals(InterventionRecommendationStatus.OVERRIDDEN, updatedRec?.status)
+    }
+
+    @Test
+    fun `invoke with CORRECT when causation lookup fails propagates failure and inserts no event`() = runTest {
+        val recommendation = InterventionRecommendation(
+            id = "rec-lookup-fail",
+            userId = "user-1",
+            interventionType = InterventionType.BREAK_DOWN,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
+            targetEntityId = "task-lk",
+            targetEntityType = "Task",
+            suggestedAction = "Quick task",
+            rationale = "Rationale",
+            status = InterventionRecommendationStatus.PENDING,
+            createdAt = 1000L,
+            expiresAt = 2000L
+        )
+        recommendationRepository.recommendations["rec-lookup-fail"] = recommendation
+        eventRepository.shouldFailGetEventsByCausationId = true
+
+        val result = useCase(
+            recommendation,
+            HandleInterventionResultUseCase.Action.CORRECT,
+            "user-1",
+            "Correction"
+        )
+
+        assertTrue("Failure must be propagated when lookup fails", result is Result.Failure)
+        assertEquals("Causation lookup failed", (result as Result.Failure).error.message)
+        assertEquals("No event should be inserted when lookup fails", 0, eventRepository.events.size)
+        assertEquals(InterventionRecommendationStatus.PENDING, recommendationRepository.recommendations["rec-lookup-fail"]?.status)
+    }
+
+    @Test
+    fun `invoke with CORRECT when event save fails propagates failure and does not update status`() = runTest {
+        val recommendation = InterventionRecommendation(
+            id = "rec-save-fail",
+            userId = "user-1",
+            interventionType = InterventionType.BREAK_DOWN,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
+            targetEntityId = "task-sf",
+            targetEntityType = "Task",
+            suggestedAction = "Action",
+            rationale = "Rationale",
+            status = InterventionRecommendationStatus.PENDING,
+            createdAt = 1000L,
+            expiresAt = 2000L
+        )
+        recommendationRepository.recommendations["rec-save-fail"] = recommendation
+        eventRepository.shouldFailSaveEvent = true
+
+        val result = useCase(
+            recommendation,
+            HandleInterventionResultUseCase.Action.CORRECT,
+            "user-1",
+            "Correction"
+        )
+
+        assertTrue(result is Result.Failure)
+        assertEquals("Event save failed", (result as Result.Failure).error.message)
+        assertEquals(InterventionRecommendationStatus.PENDING, recommendationRepository.recommendations["rec-save-fail"]?.status)
+    }
+
+    @Test
+    fun `invoke with CORRECT does not deduplicate unrelated recommendations`() = runTest {
+        val rec1 = InterventionRecommendation(
+            id = "rec-diff-1",
+            userId = "user-1",
+            interventionType = InterventionType.BREAK_DOWN,
+            objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
+            targetEntityId = "task-1",
+            targetEntityType = "Task",
+            suggestedAction = "Action 1",
+            rationale = "Rationale 1",
+            status = InterventionRecommendationStatus.PENDING,
+            createdAt = 1000L,
+            expiresAt = 2000L
+        )
+        val rec2 = rec1.copy(id = "rec-diff-2", targetEntityId = "task-2")
+        recommendationRepository.recommendations["rec-diff-1"] = rec1
+        recommendationRepository.recommendations["rec-diff-2"] = rec2
+
+        val result1 = useCase(rec1, HandleInterventionResultUseCase.Action.CORRECT, "user-1", "Correction 1")
+        val result2 = useCase(rec2, HandleInterventionResultUseCase.Action.CORRECT, "user-1", "Correction 2")
+
+        assertTrue(result1 is Result.Success)
+        assertTrue(result2 is Result.Success)
+        assertEquals(2, eventRepository.events.size)
+        assertEquals(InterventionRecommendationStatus.OVERRIDDEN, recommendationRepository.recommendations["rec-diff-1"]?.status)
+        assertEquals(InterventionRecommendationStatus.OVERRIDDEN, recommendationRepository.recommendations["rec-diff-2"]?.status)
     }
 
     @Test
@@ -192,7 +372,10 @@ class HandleFakeInterventionRecommendationRepository : InterventionRecommendatio
         return MutableStateFlow(recommendations.values.filter { it.userId == userId && it.status == InterventionRecommendationStatus.PENDING })
     }
 
+    var shouldFailUpdateStatus = false
+
     override suspend fun updateRecommendationStatus(id: String, status: InterventionRecommendationStatus): Result<Unit, Exception> {
+        if (shouldFailUpdateStatus) return Result.Failure(Exception("Update failed"))
         val rec = recommendations[id] ?: return Result.Failure(Exception("Not found"))
         recommendations[id] = rec.copy(status = status)
         return Result.Success(Unit)
@@ -224,8 +407,11 @@ class HandleFakeInterventionRecommendationRepository : InterventionRecommendatio
 
 class FakeEventRepository : EventRepository {
     val events = mutableListOf<Event>()
+    var shouldFailGetEventsByCausationId = false
+    var shouldFailSaveEvent = false
 
     override suspend fun saveEvent(event: Event): Result<Event, Exception> {
+        if (shouldFailSaveEvent) return Result.Failure(Exception("Event save failed"))
         events.add(event)
         return Result.Success(event)
     }
@@ -257,6 +443,7 @@ class FakeEventRepository : EventRepository {
     override suspend fun getEventsForTimeWindow(userId: String, startTime: Long, endTime: Long, types: List<com.sanket_satpute_20.ironmind.domain.model.EventType>?, limit: Int, orderAsc: Boolean): com.sanket_satpute_20.ironmind.domain.common.Result<List<com.sanket_satpute_20.ironmind.domain.model.Event>, Exception> = com.sanket_satpute_20.ironmind.domain.common.Result.Success(emptyList())
 
     override suspend fun getEventsByCausationId(userId: String, causationId: String): Result<List<Event>, Exception> {
+        if (shouldFailGetEventsByCausationId) return Result.Failure(Exception("Causation lookup failed"))
         return Result.Success(events.filter { it.userId == userId && it.causationId == causationId })
     }
 }
@@ -267,6 +454,7 @@ class FakeClock : Clock {
 }
 
 class FakeIdGenerator : IdGenerator {
-    var nextId = "id-1"
-    override fun generateId(): String = nextId
+    private var counter = 1
+    var nextId: String? = null
+    override fun generateId(): String = nextId ?: "id-${counter++}"
 }

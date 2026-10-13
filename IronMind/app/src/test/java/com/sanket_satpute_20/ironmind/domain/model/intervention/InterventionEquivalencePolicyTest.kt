@@ -175,6 +175,15 @@ class InterventionEquivalencePolicyTest {
         assertEquals(SuppressionResult.Allowed, result)
     }
 
+    // O2. Existing OVERRIDDEN => allowed
+    @Test
+    fun `evaluateSuppression allows candidate if OVERRIDDEN`() {
+        val candidate = createCandidate()
+        val history = createHistory(status = InterventionRecommendationStatus.OVERRIDDEN)
+        val result = policy.evaluateSuppression(candidate, listOf(history), false, 1000L)
+        assertEquals(SuppressionResult.Allowed, result)
+    }
+
     // P. Target completed => suppressed
     @Test
     fun `evaluateSuppression suppresses candidate if target is completed`() {

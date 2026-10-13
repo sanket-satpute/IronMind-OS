@@ -135,6 +135,7 @@ fun IntelligenceHistoryItemCard(item: IntelligenceHistoryItem) {
                     InterventionRecommendationStatus.IGNORED -> "Ignored"
                     InterventionRecommendationStatus.EXPIRED -> "Expired"
                     InterventionRecommendationStatus.PENDING -> "Pending"
+                    InterventionRecommendationStatus.OVERRIDDEN -> "Overridden"
                 }
                 Text(
                     text = "Status: $statusText",

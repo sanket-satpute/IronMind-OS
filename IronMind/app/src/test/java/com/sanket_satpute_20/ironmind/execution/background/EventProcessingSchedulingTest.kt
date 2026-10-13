@@ -99,6 +99,7 @@ class EventProcessingSchedulingTest {
     fun `HandleInterventionResultUseCase records PENDING status and triggers scheduleEventProcessing`() = runBlocking {
         val eventRepo = mockk<EventRepository>()
         val savedEventSlot = slot<Event>()
+        coEvery { eventRepo.getEventsByCausationId(any(), any()) } returns Result.Success(emptyList())
         coEvery { eventRepo.saveEventWithLearnerStatus(capture(savedEventSlot)) } answers { Result.Success(savedEventSlot.captured) }
 
         val updateStatusUseCase = mockk<UpdateInterventionRecommendationStatusUseCase>()

@@ -7,6 +7,7 @@ import com.sanket_satpute_20.ironmind.domain.model.observation.*
 import com.sanket_satpute_20.ironmind.domain.model.pattern.*
 import com.sanket_satpute_20.ironmind.domain.ai.BarrierCategory
 import com.sanket_satpute_20.ironmind.domain.repository.*
+import com.sanket_satpute_20.ironmind.domain.model.intervention.CorrectionScope
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
@@ -115,6 +116,7 @@ class AssembleRecommendationContextUseCaseTest {
         assertEquals("BREAK_DOWN", correction.interventionType)
         assertEquals("Do jumping jacks", correction.recommendation)
         assertEquals("I have a broken leg", correction.correctedText)
+        assertEquals(CorrectionScope.INTERVENTION_CORRECTION, correction.scope)
     }
 
     @Test
@@ -182,5 +184,104 @@ class AssembleRecommendationContextUseCaseTest {
         assertEquals("BREAK_DOWN", correction.interventionType)
         assertEquals("Take a break, walk 5 mins", correction.recommendation)
         assertEquals(complexText, correction.correctedText)
+        assertEquals(CorrectionScope.CONSTRAINT, correction.scope)
+    }
+
+    @Test
+    fun `assemble context preserves all explicit CorrectionScope values`() = runBlocking {
+        val userId = "user1"
+
+        coEvery { goalRepo.getActiveGoalsForUser(any(), any()) } returns Result.Success(emptyList())
+        coEvery { commitmentRepo.getActiveCommitmentsForUser(any(), any(), any()) } returns Result.Success(emptyList())
+        coEvery { observationRepo.getObservationsForTimeWindow(any(), any(), any(), any(), any(), any()) } returns Result.Success(emptyList())
+        coEvery { patternRepo.getPatternsByStatus(any(), any(), any()) } returns Result.Success(emptyList())
+        coEvery { barrierRepo.getActiveBarriersForUser(any(), any(), any()) } returns Result.Success(emptyList())
+        coEvery { reflectionRepo.getReflectionsForTimeWindow(any(), any(), any(), any(), any()) } returns Result.Success(emptyList())
+
+        val testScopes = listOf(
+            CorrectionScope.INFERENCE_CORRECTION,
+            CorrectionScope.PREFERENCE,
+            CorrectionScope.EXPLICIT_GENERAL_RULE
+        )
+
+        val events = testScopes.mapIndexed { index, scope ->
+            Event(
+                id = "evt-$index",
+                userId = userId,
+                type = EventType.INTERVENTION_OVERRIDDEN,
+                entityType = "Intervention",
+                entityId = "target-$index",
+                occurredAt = (index + 1) * 1000L,
+                recordedAt = (index + 1) * 1000L,
+                source = EntitySource.SYSTEM,
+                metadata = "scope=${scope.name},type=PROMPT,recommendation=Rec $index,correctedText=Correction $index"
+            )
+        }
+
+        coEvery { eventRepo.getEventsForTimeWindow(userId, any(), any(), listOf(EventType.INTERVENTION_OVERRIDDEN), AssembleRecommendationContextUseCase.MAX_CORRECTIONS, false) } returns Result.Success(events)
+
+        val result = useCase(userId)
+        assertTrue(result is Result.Success)
+        val context = (result as Result.Success).data
+        assertEquals(testScopes.size, context.recentCorrections.size)
+
+        testScopes.forEachIndexed { index, expectedScope ->
+            val corr = context.recentCorrections[index]
+            assertEquals("evt-$index", corr.eventId)
+            assertEquals("target-$index", corr.targetEntityId)
+            assertEquals("PROMPT", corr.interventionType)
+            assertEquals("Rec $index", corr.recommendation)
+            assertEquals("Correction $index", corr.correctedText)
+            assertEquals(expectedScope, corr.scope)
+        }
+    }
+
+    @Test
+    fun `assemble context falls back to INTERVENTION_CORRECTION on unknown or malformed scope`() = runBlocking {
+        val userId = "user1"
+
+        coEvery { goalRepo.getActiveGoalsForUser(any(), any()) } returns Result.Success(emptyList())
+        coEvery { commitmentRepo.getActiveCommitmentsForUser(any(), any(), any()) } returns Result.Success(emptyList())
+        coEvery { observationRepo.getObservationsForTimeWindow(any(), any(), any(), any(), any(), any()) } returns Result.Success(emptyList())
+        coEvery { patternRepo.getPatternsByStatus(any(), any(), any()) } returns Result.Success(emptyList())
+        coEvery { barrierRepo.getActiveBarriersForUser(any(), any(), any()) } returns Result.Success(emptyList())
+        coEvery { reflectionRepo.getReflectionsForTimeWindow(any(), any(), any(), any(), any()) } returns Result.Success(emptyList())
+
+        val unknownScopeEvent = Event(
+            id = "e_unknown",
+            userId = userId,
+            type = EventType.INTERVENTION_OVERRIDDEN,
+            entityType = "Intervention",
+            entityId = "t1",
+            occurredAt = 100L,
+            recordedAt = 100L,
+            source = EntitySource.SYSTEM,
+            metadata = "scope=NOT_A_VALID_SCOPE,type=BREAK_DOWN,recommendation=Do jumping jacks,correctedText=Fixed"
+        )
+
+        val missingScopeEvent = Event(
+            id = "e_missing",
+            userId = userId,
+            type = EventType.INTERVENTION_OVERRIDDEN,
+            entityType = "Intervention",
+            entityId = "t2",
+            occurredAt = 200L,
+            recordedAt = 200L,
+            source = EntitySource.SYSTEM,
+            metadata = "type=BREAK_DOWN,recommendation=Do pushups,correctedText=Also fixed"
+        )
+
+        coEvery { eventRepo.getEventsForTimeWindow(userId, any(), any(), listOf(EventType.INTERVENTION_OVERRIDDEN), AssembleRecommendationContextUseCase.MAX_CORRECTIONS, false) } returns Result.Success(listOf(unknownScopeEvent, missingScopeEvent))
+
+        val result = useCase(userId)
+        assertTrue(result is Result.Success)
+        val context = (result as Result.Success).data
+        assertEquals(2, context.recentCorrections.size)
+
+        assertEquals("e_unknown", context.recentCorrections[0].eventId)
+        assertEquals(CorrectionScope.INTERVENTION_CORRECTION, context.recentCorrections[0].scope)
+
+        assertEquals("e_missing", context.recentCorrections[1].eventId)
+        assertEquals(CorrectionScope.INTERVENTION_CORRECTION, context.recentCorrections[1].scope)
     }
 }

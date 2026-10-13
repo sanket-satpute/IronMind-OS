@@ -68,5 +68,6 @@ data class ContextCorrection(
     val occurredAt: Long,
     val interventionType: String,
     val recommendation: String,
-    val correctedText: String?
+    val correctedText: String?,
+    val scope: CorrectionScope = CorrectionScope.INTERVENTION_CORRECTION
 )

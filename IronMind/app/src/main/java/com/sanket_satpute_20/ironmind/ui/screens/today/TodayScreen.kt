@@ -18,6 +18,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sanket_satpute_20.ironmind.domain.model.Commitment
 import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
 import com.sanket_satpute_20.ironmind.domain.model.ResultStatus
+import com.sanket_satpute_20.ironmind.domain.model.intervention.CorrectionScope
 import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendation
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.HandleInterventionResultUseCase
 import com.sanket_satpute_20.ironmind.ui.components.CommitmentStatusControls
@@ -66,7 +67,7 @@ fun TodayScreenContent(
     onNavigateToReflection: () -> Unit,
     onScheduleClick: (String, Long) -> Unit,
     onCancelScheduleClick: (String) -> Unit,
-    onInterventionResponse: (InterventionRecommendation, HandleInterventionResultUseCase.Action, String?) -> Unit,
+    onInterventionResponse: (InterventionRecommendation, HandleInterventionResultUseCase.Action, String?, CorrectionScope) -> Unit,
     onAskIronMind: () -> Unit,
     onClearUserMessage: () -> Unit
 ) {
@@ -159,7 +160,7 @@ fun TodayContent(
     onStatusChange: (String, CommitmentStatus, ResultStatus?) -> Unit,
     onScheduleClick: (String, Long) -> Unit,
     onCancelScheduleClick: (String) -> Unit,
-    onInterventionResponse: (InterventionRecommendation, HandleInterventionResultUseCase.Action, String?) -> Unit
+    onInterventionResponse: (InterventionRecommendation, HandleInterventionResultUseCase.Action, String?, CorrectionScope) -> Unit
 ) {
     if (commitments.isEmpty() && pendingRecommendations.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -182,7 +183,7 @@ fun TodayContent(
             items(pendingRecommendations, key = { it.id }) { recommendation ->
                 InterventionSuggestionCard(
                     recommendation = recommendation,
-                    onAction = { action, text -> onInterventionResponse(recommendation, action, text) }
+                    onAction = { action, text, scope -> onInterventionResponse(recommendation, action, text, scope) }
                 )
             }
             item {

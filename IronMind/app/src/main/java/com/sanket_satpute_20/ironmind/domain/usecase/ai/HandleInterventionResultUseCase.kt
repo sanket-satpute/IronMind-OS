@@ -53,7 +53,7 @@ class HandleInterventionResultUseCase(
             Action.ACCEPT -> InterventionRecommendationStatus.ACCEPTED
             Action.REJECT -> InterventionRecommendationStatus.REJECTED
             Action.IGNORE -> InterventionRecommendationStatus.IGNORED
-            Action.CORRECT -> null // Do not map CORRECT. Leave status unchanged (undefined handling per contract).
+            Action.CORRECT -> InterventionRecommendationStatus.OVERRIDDEN
         }
 
         val metadata = if (action == Action.CORRECT) {
@@ -73,39 +73,50 @@ class HandleInterventionResultUseCase(
             }
         }
 
-        val event = Event(
-            id = idGenerator.generateId(),
-            userId = userId,
-            type = eventType,
-            entityType = "Intervention",
-            entityId = recommendation.targetEntityId,
-            occurredAt = clock.currentTimeMillis(),
-            recordedAt = clock.currentTimeMillis(),
-            source = EntitySource.SYSTEM,
-            metadata = metadata,
-            causationId = recommendation.id
-        )
-
-        // Sprint V2.16-C3.4: Atomic Event + Status insertion with user-profile validation via EventRepository
-        val persistResult = eventRepository.saveEventWithLearnerStatus(event)
-        if (persistResult is Result.Failure) {
-            return persistResult
+        val shouldPersistEvent = if (action == Action.CORRECT) {
+            val causationLookupResult = eventRepository.getEventsByCausationId(userId, recommendation.id)
+            if (causationLookupResult is Result.Failure) {
+                return causationLookupResult
+            }
+            val existingEvents = (causationLookupResult as Result.Success).data
+            !existingEvents.any { it.type == EventType.INTERVENTION_OVERRIDDEN }
+        } else {
+            true
         }
 
-        if (backgroundExecutor != null) {
-            try {
-                backgroundExecutor.scheduleEventProcessing()
-            } catch (e: Exception) {
-                // Primary intervention flow must not depend on background event processing
-                println("IronMindLifecycle [EventStatus] [SCHEDULE_FAILED] eventId=${event.id}")
+        if (shouldPersistEvent) {
+            val event = Event(
+                id = idGenerator.generateId(),
+                userId = userId,
+                type = eventType,
+                entityType = "Intervention",
+                entityId = recommendation.targetEntityId,
+                occurredAt = clock.currentTimeMillis(),
+                recordedAt = clock.currentTimeMillis(),
+                source = EntitySource.SYSTEM,
+                metadata = metadata,
+                causationId = recommendation.id
+            )
+
+            // Sprint V2.16-C3.4: Atomic Event + Status insertion with user-profile validation via EventRepository
+            val persistResult = eventRepository.saveEventWithLearnerStatus(event)
+            if (persistResult is Result.Failure) {
+                return persistResult
+            }
+
+            if (backgroundExecutor != null) {
+                try {
+                    backgroundExecutor.scheduleEventProcessing()
+                } catch (e: Exception) {
+                    // Primary intervention flow must not depend on background event processing
+                    println("IronMindLifecycle [EventStatus] [SCHEDULE_FAILED] eventId=${event.id}")
+                }
             }
         }
 
-        if (mappedStatus != null) {
-            val statusResult = updateInterventionRecommendationStatusUseCase(recommendation.id, mappedStatus)
-            if (statusResult is Result.Failure) {
-                return statusResult
-            }
+        val statusResult = updateInterventionRecommendationStatusUseCase(recommendation.id, mappedStatus)
+        if (statusResult is Result.Failure) {
+            return statusResult
         }
         
         return Result.Success(Unit)

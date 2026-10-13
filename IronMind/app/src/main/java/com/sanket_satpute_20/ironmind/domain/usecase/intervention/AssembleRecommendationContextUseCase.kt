@@ -134,7 +134,8 @@ class AssembleRecommendationContextUseCase(
                     occurredAt = event.occurredAt,
                     interventionType = type,
                     recommendation = recommendation,
-                    correctedText = correctedText?.takeIf { it.isNotEmpty() }
+                    correctedText = correctedText?.takeIf { it.isNotEmpty() },
+                    scope = parsedMeta.scope
                 )
             }
         }

@@ -10,6 +10,7 @@ import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.Commitment
 import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
 import com.sanket_satpute_20.ironmind.domain.model.ResultStatus
+import com.sanket_satpute_20.ironmind.domain.model.intervention.CorrectionScope
 import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendation
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.GetPendingInterventionRecommendationsUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.HandleInterventionResultUseCase
@@ -51,6 +52,7 @@ class TodayViewModel(
 
     // Using a hardcoded user ID for V0.5 as session management doesn't exist yet
     private val currentUserId = "user-1"
+    private val handledRecommendationIds = mutableSetOf<String>()
 
     init {
         loadData()
@@ -69,10 +71,19 @@ class TodayViewModel(
                             _uiState.value = TodayUiState.Error(e.message ?: "Failed to load recommendations")
                         }
                         .collect { recommendations ->
-                            _uiState.value = TodayUiState.Success(
-                                activeCommitments = commitments,
-                                pendingRecommendations = recommendations
-                            )
+                            val visibleRecommendations = recommendations.filter { it.id !in handledRecommendationIds }
+                            val currentState = _uiState.value
+                            if (currentState is TodayUiState.Success) {
+                                _uiState.value = currentState.copy(
+                                    activeCommitments = commitments,
+                                    pendingRecommendations = visibleRecommendations
+                                )
+                            } else {
+                                _uiState.value = TodayUiState.Success(
+                                    activeCommitments = commitments,
+                                    pendingRecommendations = visibleRecommendations
+                                )
+                            }
                         }
                 }
                 is Result.Failure -> {
@@ -132,20 +143,41 @@ class TodayViewModel(
     fun handleInterventionResponse(
         recommendation: InterventionRecommendation,
         action: HandleInterventionResultUseCase.Action,
-        correctedText: String?
+        correctedText: String?,
+        scope: CorrectionScope = CorrectionScope.INTERVENTION_CORRECTION
     ) {
         viewModelScope.launch {
-            handleInterventionResultUseCase(
+            val result = handleInterventionResultUseCase(
                 recommendation = recommendation,
                 action = action,
                 userId = currentUserId,
-                correctedText = correctedText
+                correctedText = correctedText,
+                scope = scope
             )
-            // No need to reload data explicitly here because GetPendingInterventionRecommendationsUseCase 
-            // returns a Flow. When the status is updated, the Flow will emit a new list 
-            // (if the database implementation supports Flow updates, Room does). 
-            // If Room isn't reacting properly due to how it's queried, we might need a manual refresh,
-            // but standard Room Flow implementation handles this automatically.
+            val currentState = _uiState.value
+            if (currentState is TodayUiState.Success) {
+                when (result) {
+                    is Result.Success -> {
+                        handledRecommendationIds.add(recommendation.id)
+                        val updatedPending = currentState.pendingRecommendations.filter { it.id !in handledRecommendationIds }
+                        val feedbackMsg = when (action) {
+                            HandleInterventionResultUseCase.Action.CORRECT -> "Correction recorded"
+                            HandleInterventionResultUseCase.Action.ACCEPT -> "Suggestion accepted"
+                            HandleInterventionResultUseCase.Action.REJECT -> "Suggestion dismissed"
+                            HandleInterventionResultUseCase.Action.IGNORE -> "Suggestion ignored"
+                        }
+                        _uiState.value = currentState.copy(
+                            pendingRecommendations = updatedPending,
+                            userMessage = feedbackMsg
+                        )
+                    }
+                    is Result.Failure -> {
+                        _uiState.value = currentState.copy(
+                            userMessage = "Failed to record response: ${result.error.message ?: "Unknown error"}"
+                        )
+                    }
+                }
+            }
         }
     }
 

@@ -8,5 +8,6 @@ enum class InterventionRecommendationStatus {
     ACCEPTED,
     REJECTED,
     IGNORED,
-    EXPIRED
+    EXPIRED,
+    OVERRIDDEN
 }
