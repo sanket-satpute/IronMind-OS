@@ -19,17 +19,33 @@ class DataManagementRepositoryImpl(
     private val globalAutonomyStateDao: GlobalAutonomyStateDao,
     private val learnerEventStatusDao: LearnerEventStatusDao? = null,
     private val database: IronMindDatabase? = null,
-    private val workManager: androidx.work.WorkManager? = null
+    private val workManager: androidx.work.WorkManager? = null,
+    private val interventionRecommendationDao: InterventionRecommendationDao? = null,
+    private val barrierDao: BarrierDao? = null
 ) : DataManagementRepository {
 
     override suspend fun deleteAllUserData(userId: String): Result<Unit, Exception> = withContext(Dispatchers.IO) {
         try {
-            if (database != null) {
-                database.withTransaction {
-                    executeAllDeletions(userId)
-                }
-            } else {
-                executeAllDeletions(userId)
+            val db = database ?: return@withContext Result.Failure(
+                IllegalStateException("Database required for transactional user data erasure is unavailable")
+            )
+            val recDao = interventionRecommendationDao ?: try {
+                db.interventionRecommendationDao()
+            } catch (e: Exception) {
+                null
+            } ?: return@withContext Result.Failure(
+                IllegalStateException("InterventionRecommendationDao could not be resolved for user data erasure")
+            )
+            val bDao = barrierDao ?: try {
+                db.barrierDao()
+            } catch (e: Exception) {
+                null
+            } ?: return@withContext Result.Failure(
+                IllegalStateException("BarrierDao could not be resolved for user data erasure")
+            )
+
+            db.withTransaction {
+                executeAllDeletions(userId, recDao, bDao)
             }
             try {
                 workManager?.cancelUniqueWork(EventProcessingWorker.UNIQUE_WORK_NAME)
@@ -43,7 +59,11 @@ class DataManagementRepositoryImpl(
         }
     }
 
-    private suspend fun executeAllDeletions(userId: String) {
+    private suspend fun executeAllDeletions(
+        userId: String,
+        recDao: InterventionRecommendationDao,
+        bDao: BarrierDao
+    ) {
         ironMindDao.deleteUserProfile(userId)
         ironMindDao.deleteGoalsForUser(userId)
         ironMindDao.deletePlansForUser(userId)
@@ -55,7 +75,11 @@ class DataManagementRepositoryImpl(
         ironMindDao.deleteEventsForUser(userId)
         ironMindDao.deleteMemoriesForUser(userId)
 
-        learnerEventStatusDao?.deleteAllForUser(userId)
+        recDao.deleteRecommendationsForUser(userId)
+        bDao.deleteBarriersForUser(userId)
+
+        val sDao = learnerEventStatusDao ?: database?.learnerEventStatusDao()
+        sDao?.deleteAllForUser(userId)
 
         patternDao.deletePatternsForUser(userId)
         observationDao.deleteObservationsForUser(userId)

@@ -5816,6 +5816,28 @@ The authoritative V1 Policy for AI:
 
 ---
 
+# 282. V2.16-C3.8A CORRECTION REASONING AND HYPOTHESIS CONSERVATISM
+
+This section defines epistemic and reasoning constraints for AI components interpreting user corrections, aligned with `DATA_CONTRACT.md` Section 334 and Section 246 of this contract.
+
+1. **Epistemic Separation:**
+   An eligible correction event indicates only that prerequisites for review exist. The AI must NOT treat an eligible correction as proof that an underlying causal hypothesis is false, invalid, or refuted.
+
+2. **Distinguishing Situational Nuance from Causal Refutation:**
+   - The AI must explicitly differentiate between tactical, temporary, or situational overrides (e.g., "Tired today", "Schedule conflict") and challenges to general causal mechanisms.
+   - A single situational correction must not be used to invalidate a long-term pattern supported by empirical observations.
+
+3. **Ambiguity Clarification:**
+   In accordance with Section 246, when the scope or intent of a correction is ambiguous and materially affects future reasoning, the system must formulate a clarification request (e.g., asking whether the correction applies generally or only to the immediate instance) rather than assuming general invalidation.
+
+4. **Domain Model Immutability:**
+   Per Section 280, the AI generates candidate hypotheses and advisory interpretations only. It MUST NOT directly output or mutate `confidence`, `status`, or `confirmationState`. Domain models remain strictly under domain ownership.
+
+5. **No Personality or Identity Labelling:**
+   Per Product Constitution Section 19, the AI must never infer fixed personality labels, character traits, or sensitive personal attributes from isolated correction events.
+
+---
+
 # END OF AI BEHAVIOR CONTRACT
 
 ````

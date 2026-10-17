@@ -1723,6 +1723,52 @@ and the result is recorded.
 
 ---
 
+# Sprint V2.16 — Causal Correction & Learner Integrity
+
+## Objective
+
+Harden causation integrity for user intervention corrections and establish conservative, auditable workflows for causal hypothesis review without premature learner-state mutation.
+
+### Sprint V2.16-C3.8A — Correction Review Policy Closure
+
+**Status:** COMPLETE
+**Objective:** Formalize conservative correction-review policy in authoritative contracts (`DATA_CONTRACT.md` Section 334, `AUTONOMY_POLICY.md` Section 308, `AI_BEHAVIOR_CONTRACT.md` Section 282).
+**Rules & Invariants:**
+- Strict 4-stage separation: Event Persisted $\rightarrow$ Eligibility Evaluated $\rightarrow$ Review Decision $\rightarrow$ Lifecycle Action.
+- Eligibility evaluated via `EvaluateCorrectionEligibilityUseCase` is strictly read-only and deterministic; it does NOT prove a hypothesis false or authorize mutation.
+- Prohibit automatic confidence penalties, status changes, or confirmation state mutations.
+- User-confirmed hypotheses cannot be altered without explicit user authorization.
+- Conservative ambiguity handling: situational corrections do not refute general hypotheses; prompt user when ambiguous.
+- Preserve `DefaultEventProcessor` as safe no-op; zero schema or production code changes in this phase.
+
+### Sprint V2.16-C3.8B — Read-Only Decision Workflow
+
+**Status:** COMPLETE
+**Objective:** Implement a deterministic, read-only decision evaluation use case assessing candidate evidence without mutating learner state, schemas, or background processors.
+**Deliverables:**
+- Define `CorrectionReviewDecision` domain model.
+- Implement `EvaluateCorrectionReviewDecisionUseCase` consuming `CorrectionEligibilityResult.Eligible`.
+- Comprehensive unit and integration test suite proving zero state mutation.
+
+### Sprint V2.16-C3.8C — Read-Only Correction Review Candidates
+
+**Status:** COMPLETE
+**Objective:** Implement a deterministic, read-only query use case (`GetCorrectionReviewCandidatesUseCase`) that discovers and projects in-memory candidates for causal hypothesis review using bounded, time-windowed event retrieval and fail-closed operational failure propagation.
+**Deliverables:**
+- Define `CorrectionReviewCandidate` in-memory domain read model.
+- Implement `GetCorrectionReviewCandidatesUseCase` utilizing existing `getEventsForTimeWindow` and `EvaluateCorrectionReviewDecisionUseCase`.
+- Wire into `AppContainer` and `DefaultAppContainer`.
+- Comprehensive unit test suite verifying input validation, bounded query semantics, operational failure aborts, deterministic ordering, and zero state mutation.
+**Rules & Invariants:**
+- Bounded, time-windowed retrieval of `INTERVENTION_OVERRIDDEN` events; database limit is applied before eligibility filtering.
+- Reuses the existing correction eligibility and review-decision workflow (`DeferredForConsideration` only).
+- Deterministic candidate ordering by `occurredAt` descending with stable tiebreaking by `eventId` ascending.
+- Operational failures (`DATA_RETRIEVAL_FAILED`) propagate as `Result.Failure` without swallowing errors.
+- Zero persistence, zero UI, zero AI classifiers, zero background workers, and zero learner-state mutations.
+- Review candidates represent in-memory deferral for consideration, not hypothesis validation, correction resolution, or automatic learning.
+
+---
+
 # V2 EXIT GATE
 
 V2 is complete when IronMind can:

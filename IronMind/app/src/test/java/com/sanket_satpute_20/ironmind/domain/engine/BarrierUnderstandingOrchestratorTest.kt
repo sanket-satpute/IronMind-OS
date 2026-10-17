@@ -40,6 +40,10 @@ class BarrierUnderstandingOrchestratorTest {
         override suspend fun getActiveBarriersForUser(userId: String, excludedStates: List<BarrierConfirmationState>, limit: Int): Result<List<BarrierHypothesis>, Exception> {
             return Result.Success(savedBarriers.filter { it.userId == userId && it.confirmationState !in excludedStates }.take(limit))
         }
+
+        override suspend fun getBarrier(id: String): Result<BarrierHypothesis?, Exception> {
+            return Result.Success(savedBarriers.find { it.id == id })
+        }
     }
 
     private val fakeIdGenerator = object : IdGenerator {

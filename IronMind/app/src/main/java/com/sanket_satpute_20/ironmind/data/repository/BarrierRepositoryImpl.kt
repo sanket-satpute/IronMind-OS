@@ -78,4 +78,26 @@ class BarrierRepositoryImpl(
             Result.Failure(e)
         }
     }
+
+    override suspend fun getBarrier(id: String): Result<BarrierHypothesis?, Exception> = withContext(Dispatchers.IO) {
+        try {
+            val entity = barrierDao.getBarrierById(id)
+            val hypothesis = entity?.let {
+                BarrierHypothesis(
+                    id = it.id,
+                    userId = it.userId,
+                    category = BarrierCategory.valueOf(it.category),
+                    description = it.description,
+                    confirmationState = BarrierConfirmationState.valueOf(it.confirmationState),
+                    status = BarrierStatus.valueOf(it.status),
+                    sourceReflectionId = it.sourceReflectionId,
+                    firstObservedAt = it.firstObservedAt,
+                    lastObservedAt = it.lastObservedAt
+                )
+            }
+            Result.Success(hypothesis)
+        } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
 }

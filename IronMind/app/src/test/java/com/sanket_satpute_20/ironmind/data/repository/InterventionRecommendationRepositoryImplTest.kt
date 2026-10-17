@@ -67,6 +67,11 @@ class FakeInterventionRecommendationDao : InterventionRecommendationDao {
         }.sortedWith(compareByDescending<InterventionRecommendationEntity> { it.createdAt }.thenBy { it.id })
          .take(limit)
     }
+    override fun deleteRecommendationsForUser(userId: String): Int {
+        val initialSize = records.size
+        records.entries.removeIf { it.value.userId == userId }
+        return initialSize - records.size
+    }
 }
 
 class InterventionRecommendationRepositoryImplTest {

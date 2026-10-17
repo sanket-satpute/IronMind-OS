@@ -208,6 +208,9 @@ interface AppContainer {
     val getPendingInterventionRecommendationsUseCase: GetPendingInterventionRecommendationsUseCase
     val updateInterventionRecommendationStatusUseCase: UpdateInterventionRecommendationStatusUseCase
     val handleInterventionResultUseCase: HandleInterventionResultUseCase
+    val evaluateCorrectionEligibilityUseCase: com.sanket_satpute_20.ironmind.domain.usecase.intervention.EvaluateCorrectionEligibilityUseCase
+    val evaluateCorrectionReviewDecisionUseCase: com.sanket_satpute_20.ironmind.domain.usecase.intervention.EvaluateCorrectionReviewDecisionUseCase
+    val getCorrectionReviewCandidatesUseCase: com.sanket_satpute_20.ironmind.domain.usecase.intervention.GetCorrectionReviewCandidatesUseCase
     val getIntelligenceHistoryUseCase: GetIntelligenceHistoryUseCase
     val ironMindAI: IronMindAI
     val autonomySettingsRepository: AutonomySettingsRepository
@@ -923,6 +926,28 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         )
     }
 
+    override val evaluateCorrectionEligibilityUseCase: com.sanket_satpute_20.ironmind.domain.usecase.intervention.EvaluateCorrectionEligibilityUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.intervention.EvaluateCorrectionEligibilityUseCase(
+            eventRepository = eventRepository,
+            recommendationRepository = interventionRecommendationRepository,
+            patternRepository = patternRepository,
+            barrierRepository = barrierRepository
+        )
+    }
+
+    override val evaluateCorrectionReviewDecisionUseCase: com.sanket_satpute_20.ironmind.domain.usecase.intervention.EvaluateCorrectionReviewDecisionUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.intervention.EvaluateCorrectionReviewDecisionUseCase(
+            evaluateCorrectionEligibilityUseCase = evaluateCorrectionEligibilityUseCase
+        )
+    }
+
+    override val getCorrectionReviewCandidatesUseCase: com.sanket_satpute_20.ironmind.domain.usecase.intervention.GetCorrectionReviewCandidatesUseCase by lazy {
+        com.sanket_satpute_20.ironmind.domain.usecase.intervention.GetCorrectionReviewCandidatesUseCase(
+            eventRepository = eventRepository,
+            evaluateCorrectionReviewDecisionUseCase = evaluateCorrectionReviewDecisionUseCase
+        )
+    }
+
     // V4.1 — App Usage Observation
     override val appUsageObservationSettingsRepository: AppUsageObservationSettingsRepository by lazy {
         AppUsageObservationSettingsRepositoryImpl(appUsageObservationSettingsDao, clock)
@@ -1163,7 +1188,9 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             globalAutonomyStateDao = globalAutonomyStateDao,
             learnerEventStatusDao = learnerEventStatusDao,
             database = database,
-            workManager = try { androidx.work.WorkManager.getInstance(context) } catch (e: Exception) { null }
+            workManager = try { androidx.work.WorkManager.getInstance(context) } catch (e: Exception) { null },
+            interventionRecommendationDao = database.interventionRecommendationDao(),
+            barrierDao = database.barrierDao()
         )
     }
 

@@ -6148,6 +6148,67 @@ The authoritative V1 Pattern Confidence, Lifecycle, and Deduplication Policy is:
 
 ---
 
+# 333. V2.16-C3.7B CAUSAL HYPOTHESIS CORRECTION REVIEW ELIGIBILITY POLICY
+
+The authoritative policy governing when a causal hypothesis (Pattern or Barrier) is eligible for review following a user intervention correction is:
+
+1. **Epistemic Scope:** Review eligibility indicates solely that all deterministic prerequisites for further causal hypothesis review are satisfied. It does NOT assert or prove that a hypothesis is false, disproven, contradicted, or invalid.
+2. **Reviewable Hypothesis Lifecycle Requirements:**
+   - **Pattern Hypotheses:**
+     - Must have `status == PatternStatus.ACTIVE`. Hypotheses with status `EXPIRED`, `DELETED`, or `INACTIVE` must not qualify.
+     - Must have `confirmationState` in `{UNCONFIRMED, USER_CONFIRMED}`. Active user-confirmed hypotheses remain eligible for review when the user explicitly disputes an intervention's reasoning. Hypotheses with `confirmationState == USER_REJECTED` must not qualify.
+     - `SYSTEM_CONFIRMED` semantics are currently unratified; hypotheses in this state must fail closed and are NOT eligible for review until formally specified.
+     - `PatternStatus.DECAYING`: The active domain model defines `PatternStatus` as `{ACTIVE, INACTIVE, EXPIRED, DELETED}` (decay is represented via numerical confidence decay on active patterns). If a separate `DECAYING` status enum is formalized in future schemas, unratified statuses must fail closed unless explicitly active and non-expired.
+   - **Barrier Hypotheses:**
+     - Must have `status == BarrierStatus.ACTIVE`. Hypotheses with status `EXPIRED` must not qualify.
+     - Must have `confirmationState` in `{UNCONFIRMED, CONFIRMED}`. Active confirmed barrier hypotheses remain eligible for review. Hypotheses with `confirmationState` in `{REJECTED, DISMISSED}` must not qualify.
+3. **No Autonomous Mutations:** Eligibility evaluation is strictly read-only. It MUST NOT:
+   - Apply automatic confidence penalties or adjustments.
+   - Retire, delete, or modify any Pattern or Barrier hypothesis.
+   - Mutate recommendation statuses or learner event processing states.
+   - Alter the safe no-op behavior of `DefaultEventProcessor` for `INTERVENTION_OVERRIDDEN` events.
+4. **No Arbitrary Heuristics:** No confidence threshold, recency window, or age cut-off is imposed unless authoritatively codified in a permanent contract.
+
+---
+
+# 334. V2.16-C3.8A CORRECTION REVIEW WORKFLOW & CONSERVATIVE MUTATION POLICY
+
+The authoritative policy governing the workflow subsequent to correction eligibility evaluation (`EvaluateCorrectionEligibilityUseCase`) is:
+
+1. **Separation of Correction Stages:**
+   The correction review lifecycle is strictly divided into four decoupled stages:
+   - **Stage 1 (Correction Recorded):** An immutable historical audit event (`INTERVENTION_OVERRIDDEN`) is persisted with authoritative `event.causationId = recommendation.id` and exact user-provided `correctedText`.
+   - **Stage 2 (Eligibility Evaluated):** A deterministic, read-only evaluation (`EvaluateCorrectionEligibilityUseCase`) checks the 12 prerequisites codified in Section 333. An `Eligible` result signifies only that prerequisites for review are met; it does NOT prove a hypothesis false, constitute a lifecycle decision, or authorize mutation.
+   - **Stage 3 (Review Decision):** A separate, initially read-only workflow analyzes whether the available evidence warrants further action (e.g., distinguishing situational context from causal challenges).
+   - **Stage 4 (Hypothesis Lifecycle Action):** Any future hypothesis lifecycle transition (e.g., state change or retirement) must be executed solely by a separately authorized domain use case under explicit governance.
+
+2. **Prohibition of Automatic Lifecycle Mutations:**
+   A correction event or an `Eligible` review status alone MUST NOT automatically:
+   - Reduce hypothesis confidence or apply a numerical penalty.
+   - Reject, expire, retire, or delete any Pattern or Barrier hypothesis.
+   - Mutate hypothesis `confirmationState` (e.g., from `USER_CONFIRMED` or `UNCONFIRMED` to `USER_REJECTED`).
+   - Derive persistent causal conclusions, personality traits, or identity labels from an isolated correction.
+   - Introduce unratified confidence thresholds, recency windows, decay factors, penalties, or retirement rules in this phase.
+
+3. **Preservation of Lifecycle and Authority Boundaries:**
+   - **Lifecycle States:** Non-reviewable or unratified lifecycle states (including `EXPIRED`, `DELETED`, `USER_REJECTED`, `INACTIVE`, and unratified `SYSTEM_CONFIRMED`) fail closed and must terminate review without mutation.
+   - **User Primacy on Confirmed Hypotheses:** A `USER_CONFIRMED` (or `CONFIRMED`) hypothesis reflects explicit user authorization and must not be altered, degraded, or rejected merely because a correction is evaluated as eligible. Any future modification to a user-confirmed hypothesis requires explicit user confirmation via an authorized workflow.
+   - **Integrity Constraints:** Review eligibility must never bypass event ownership, account-erasure transactionality, retention policies, or causation integrity constraints.
+   - **AI Boundary:** AI components may assist in interpreting correction semantics in future phases but must never own or execute domain lifecycle mutations directly.
+
+4. **Conservative Ambiguity Handling:**
+   - **Situational vs. Causal:** A tactical or situational correction (e.g., "Not today", "Wrong time", "Schedule changed") must not be conflated with a refutation of the underlying causal belief.
+   - **Clarification Gate:** When correction semantics are ambiguous and clarification is necessary, the system must solicit user clarification per `AI_BEHAVIOR_CONTRACT.md` Section 246 prior to proposing any hypothesis revision.
+   - **No Heuristic Classifiers:** No LLM-based autonomous classifier or automatic confidence adjustment may be implemented in this phase.
+   - **Anti-Amplification:** Multiple retries, repeated events from the same recommendation, or duplicate submissions must not be aggregated or counted as independent causal evidence.
+
+5. **Preservation of Safe Operational Behavior:**
+   - `DefaultEventProcessor` must remain a safe no-op returning `SuccessNoChange("UNVERIFIED_CORRECTION_SAFE_NO_OP")` for `INTERVENTION_OVERRIDDEN` events.
+   - Existing event immutability and transactional user-data erasure guarantees remain strictly intact.
+   - This policy introduces zero schema changes, zero migrations, zero background workers, zero UI elements, and zero production learner-state mutators.
+
+---
+
 # END OF DATA CONTRACT
 
 ````

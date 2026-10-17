@@ -16,4 +16,10 @@ interface BarrierDao {
 
     @Query("SELECT * FROM barrier_hypotheses WHERE userId = :userId AND confirmationState NOT IN (:excludedStates) ORDER BY lastObservedAt DESC LIMIT :limit")
     suspend fun getActiveBarriersForUser(userId: String, excludedStates: List<String>, limit: Int): List<BarrierHypothesisEntity>
+
+    @Query("DELETE FROM barrier_hypotheses WHERE userId = :userId")
+    suspend fun deleteBarriersForUser(userId: String): Int
+
+    @Query("SELECT * FROM barrier_hypotheses WHERE id = :id LIMIT 1")
+    suspend fun getBarrierById(id: String): BarrierHypothesisEntity?
 }

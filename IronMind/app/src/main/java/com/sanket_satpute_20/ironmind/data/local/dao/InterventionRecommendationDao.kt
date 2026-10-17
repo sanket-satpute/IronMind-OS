@@ -50,4 +50,7 @@ interface InterventionRecommendationDao {
         endTime: Long,
         limit: Int
     ): List<InterventionRecommendationEntity>
+
+    @Query("DELETE FROM intervention_recommendations WHERE userId = :userId")
+    fun deleteRecommendationsForUser(userId: String): Int
 }

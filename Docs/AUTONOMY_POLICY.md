@@ -4410,6 +4410,27 @@ Same effective behavior as SUGGEST_ONLY in V2.12.
 
 ---
 
+# 308. V2.16-C3.8A CORRECTION REVIEW AUTONOMY AND MUTATION GATES
+
+This section establishes authoritative autonomy constraints on the correction-review workflow, subordinate to the permanent hierarchy in Section 12 and aligned with `DATA_CONTRACT.md` Section 334.
+
+1. **No Autonomous Mutation Authority:**
+   Correction review eligibility evaluated under V2.16-C3.7B grants **no autonomous authority** to mutate learner state.
+   No AI model, background worker, or review workflow may:
+   - Automatically adjust, decay, or penalize hypothesis confidence.
+   - Automatically transition a Pattern or Barrier to `REJECTED`, `EXPIRED`, `DELETED`, or `DISMISSED`.
+   - Automatically alter `MemoryConfirmationState` or `BarrierConfirmationState`.
+
+2. **User Confirmation Primacy:**
+   Per Section 12 (Authority Hierarchy), explicit user confirmations outrank unconfirmed inferences or background evaluators.
+   - A hypothesis in a `USER_CONFIRMED` (or `CONFIRMED`) state cannot be demoted, decayed, or rejected autonomously based on an intervention correction.
+   - Any proposed change to a user-confirmed hypothesis requires explicit, informed user confirmation (`ASK_BEFORE_ACTION`).
+
+3. **Read-Only Workflow Boundary:**
+   Review decision workflows subsequent to eligibility are strictly read-only advisory processors. They may propose candidate decisions or request clarification, but domain mutators must execute only through separately authorized domain pathways under explicit policy governance.
+
+---
+
 # END OF AUTONOMY POLICY
 
 ````
