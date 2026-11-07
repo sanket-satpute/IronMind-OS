@@ -12,7 +12,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sanket_satpute_20.ironmind.ui.screens.digital.DigitalBehaviourContent
+import com.sanket_satpute_20.ironmind.ui.screens.digital.DigitalBehaviourViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -22,9 +27,27 @@ import java.util.Locale
 fun ProtectionScreen(
     modifier: Modifier = Modifier,
     viewModel: ProtectionViewModel = viewModel(factory = ProtectionViewModel.Factory),
+    digitalViewModel: DigitalBehaviourViewModel = viewModel(factory = DigitalBehaviourViewModel.Factory),
     onNavigateBack: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val digitalUiState by digitalViewModel.uiState.collectAsState()
+    var selectedTabIndex by remember { mutableIntStateOf(0) }
+    val tabs = listOf("Digital Behaviour", "Focus Protection")
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.loadCurrentSession()
+                digitalViewModel.refresh()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     // Common distracting packages for V0 presentation
     val commonPackages = listOf(
@@ -41,7 +64,7 @@ fun ProtectionScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text("Protection") },
+                title = { Text("Digital Behaviour & Protection") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -50,142 +73,167 @@ fun ProtectionScreen(
             )
         }
     ) { paddingValues ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            when (val state = uiState) {
-                is ProtectionUiState.Loading -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            PrimaryTabRow(selectedTabIndex = selectedTabIndex) {
+                tabs.forEachIndexed { index, title ->
+                    Tab(
+                        selected = selectedTabIndex == index,
+                        onClick = { selectedTabIndex = index },
+                        text = { Text(title) }
+                    )
                 }
-                is ProtectionUiState.Error -> {
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .padding(32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = state.message,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyLarge
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .weight(1f)
+            ) {
+                when (selectedTabIndex) {
+                    0 -> {
+                        DigitalBehaviourContent(
+                            uiState = digitalUiState,
+                            onSelectDate = { digitalViewModel.selectDate(it) },
+                            onRefresh = { digitalViewModel.refresh() },
+                            onAcknowledgeError = { digitalViewModel.acknowledgeError() }
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = { viewModel.acknowledgeError() }) {
-                            Text("Retry")
-                        }
                     }
-                }
-                is ProtectionUiState.NoActiveSession -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp)
-                    ) {
-                        Text(
-                            text = "Start Protection Session",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Select apps to protect your focus. When a protected app is opened, IronMind will immediately return you to the home screen. You must grant the Accessibility permission to enable this.",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        Text(
-                            text = "Common Targets",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        LazyColumn(
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            items(commonPackages) { (pkg, name) ->
-                                val isSelected = selectedPackages.contains(pkg)
-                                Card(
-                                    onClick = {
-                                        if (isSelected) selectedPackages.remove(pkg)
-                                        else selectedPackages.add(pkg)
-                                    },
+                    1 -> {
+                        when (val state = uiState) {
+                            is ProtectionUiState.Loading -> {
+                                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                            }
+                            is ProtectionUiState.Error -> {
+                                Column(
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-                                    )
+                                        .align(Alignment.Center)
+                                        .padding(32.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(16.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(name, style = MaterialTheme.typography.bodyLarge)
-                                        if (isSelected) {
-                                            Icon(Icons.Default.Check, contentDescription = "Selected")
-                                        }
+                                    Text(
+                                        text = state.message,
+                                        color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Button(onClick = { viewModel.acknowledgeError() }) {
+                                        Text("Retry")
                                     }
                                 }
                             }
-                        }
+                            is ProtectionUiState.NoActiveSession -> {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(16.dp)
+                                ) {
+                                    Text(
+                                        text = "Start Protection Session",
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Select apps to protect your focus. When a protected app is opened, IronMind will immediately return you to the home screen. You must grant the Accessibility permission to enable this.",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Spacer(modifier = Modifier.height(24.dp))
 
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(
-                            onClick = { viewModel.startProtection(selectedPackages.toList()) },
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = selectedPackages.isNotEmpty()
-                        ) {
-                            Text("Start Protection")
-                        }
-                    }
-                }
-                is ProtectionUiState.ActiveSession -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        val dateFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-                        val startTime = dateFormat.format(Date(state.session.startedAt))
+                                    Text(
+                                        text = "Common Targets",
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
 
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(32.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(
-                                    text = "Protection is Active",
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "Protected apps will be closed immediately upon opening.",
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
+                                    LazyColumn(
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        items(commonPackages) { (pkg, name) ->
+                                            val isSelected = selectedPackages.contains(pkg)
+                                            Card(
+                                                onClick = {
+                                                    if (isSelected) selectedPackages.remove(pkg)
+                                                    else selectedPackages.add(pkg)
+                                                },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 4.dp),
+                                                colors = CardDefaults.cardColors(
+                                                    containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                                                )
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(16.dp),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(name, style = MaterialTheme.typography.bodyLarge)
+                                                    if (isSelected) {
+                                                        Icon(Icons.Default.Check, contentDescription = "Selected")
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Button(
+                                        onClick = { viewModel.startProtection(selectedPackages.toList()) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        enabled = selectedPackages.isNotEmpty()
+                                    ) {
+                                        Text("Start Protection")
+                                    }
+                                }
                             }
-                        }
+                            is ProtectionUiState.ActiveSession -> {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(16.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Card(
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(32.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            Text(
+                                                text = "Protection is Active",
+                                                style = MaterialTheme.typography.headlineMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                            )
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(
+                                                text = "Protected apps will be closed immediately upon opening.",
+                                                style = MaterialTheme.typography.bodyLarge
+                                            )
+                                        }
+                                    }
 
-                        Spacer(modifier = Modifier.height(32.dp))
+                                    Spacer(modifier = Modifier.height(32.dp))
 
-                        Button(
-                            onClick = { viewModel.stopProtection() },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                        ) {
-                            Text("Stop Protection")
+                                    Button(
+                                        onClick = { viewModel.stopProtection() },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                                    ) {
+                                        Text("Stop Protection")
+                                    }
+                                }
+                            }
                         }
                     }
                 }
