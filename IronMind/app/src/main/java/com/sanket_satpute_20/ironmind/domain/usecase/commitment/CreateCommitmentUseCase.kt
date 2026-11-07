@@ -30,7 +30,9 @@ class CreateCommitmentUseCase(
         priority: Int,
         scheduledStartAt: Long? = null,
         scheduledEndAt: Long? = null,
-        initialStatus: CommitmentStatus = CommitmentStatus.PLANNED
+        initialStatus: CommitmentStatus = CommitmentStatus.PLANNED,
+        commitmentId: String? = null,
+        eventId: String? = null
     ): Result<Commitment, Exception> {
         if (title.isBlank()) {
             return Result.Failure(IllegalArgumentException("Title cannot be blank"))
@@ -40,9 +42,12 @@ class CreateCommitmentUseCase(
             return Result.Failure(IllegalArgumentException("Initial status must be PLANNED or COMMITTED"))
         }
 
+        val actualCommitmentId = commitmentId ?: idGenerator.generateId()
+        val actualEventId = eventId ?: idGenerator.generateId()
+
         val now = clock.currentTimeMillis()
         val commitment = Commitment(
-            id = idGenerator.generateId(),
+            id = actualCommitmentId,
             userId = userId,
             goalId = goalId,
             planId = planId,
@@ -68,7 +73,7 @@ class CreateCommitmentUseCase(
                 }
                 
                 val createEvent = Event(
-                    id = idGenerator.generateId(),
+                    id = actualEventId,
                     userId = userId,
                     type = EventType.COMMITMENT_CREATED,
                     entityType = "COMMITMENT",

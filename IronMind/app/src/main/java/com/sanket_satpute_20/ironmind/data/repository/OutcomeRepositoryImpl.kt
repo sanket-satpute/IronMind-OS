@@ -19,7 +19,7 @@ class OutcomeRepositoryImpl(
                 dao.insertOutcome(outcome.toEntity())
             }
             Result.Success(Unit)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -30,7 +30,29 @@ class OutcomeRepositoryImpl(
                 dao.getOutcomeForSource(sourceEntityId)
             }
             Result.Success(entity?.toDomain())
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
+
+    override suspend fun getOutcome(id: String): Result<Outcome?, Exception> {
+        return try {
+            val entity = withContext(Dispatchers.IO) {
+                dao.getOutcome(id)
+            }
+            Result.Success(entity?.toDomain())
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
+
+    override suspend fun getOutcomesForUser(userId: String): Result<List<Outcome>, Exception> {
+        return try {
+            val entities = withContext(Dispatchers.IO) {
+                dao.getOutcomesForUser(userId)
+            }
+            Result.Success(entities.map { it.toDomain() })
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }

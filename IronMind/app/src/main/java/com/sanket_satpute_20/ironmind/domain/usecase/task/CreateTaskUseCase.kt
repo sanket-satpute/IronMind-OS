@@ -26,15 +26,20 @@ class CreateTaskUseCase(
         priority: Int,
         estimatedDurationMinutes: Int? = null,
         scheduledAt: Long? = null,
-        dueAt: Long? = null
+        dueAt: Long? = null,
+        taskId: String? = null,
+        eventId: String? = null
     ): Result<Task, Exception> {
         if (title.isBlank()) {
             return Result.Failure(IllegalArgumentException("Title cannot be blank"))
         }
 
+        val actualTaskId = taskId ?: idGenerator.generateId()
+        val actualEventId = eventId ?: idGenerator.generateId()
+
         val now = clock.currentTimeMillis()
         val task = Task(
-            id = idGenerator.generateId(),
+            id = actualTaskId,
             userId = userId,
             goalId = goalId,
             planId = planId,
@@ -54,7 +59,7 @@ class CreateTaskUseCase(
             is Result.Failure -> Result.Failure(result.error)
             is Result.Success -> {
                 val event = Event(
-                    id = idGenerator.generateId(),
+                    id = actualEventId,
                     userId = userId,
                     type = EventType.TASK_CREATED,
                     entityType = "TASK",
