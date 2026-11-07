@@ -18,9 +18,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sanket_satpute_20.ironmind.ui.screens.digital.DigitalBehaviourContent
 import com.sanket_satpute_20.ironmind.ui.screens.digital.DigitalBehaviourViewModel
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.sanket_satpute_20.ironmind.ui.screens.protection.restriction.AppRestrictionSection
+import com.sanket_satpute_20.ironmind.ui.screens.protection.restriction.AppRestrictionViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -28,12 +27,15 @@ fun ProtectionScreen(
     modifier: Modifier = Modifier,
     viewModel: ProtectionViewModel = viewModel(factory = ProtectionViewModel.Factory),
     digitalViewModel: DigitalBehaviourViewModel = viewModel(factory = DigitalBehaviourViewModel.Factory),
+    restrictionViewModel: AppRestrictionViewModel = viewModel(factory = AppRestrictionViewModel.Factory),
     onNavigateBack: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val digitalUiState by digitalViewModel.uiState.collectAsState()
+    val restrictionUiState by restrictionViewModel.uiState.collectAsState()
+
     var selectedTabIndex by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Digital Behaviour", "Focus Protection")
+    val tabs = listOf("Digital Behaviour", "App Restrictions", "Focus Protection")
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -41,6 +43,7 @@ fun ProtectionScreen(
             if (event == Lifecycle.Event.ON_RESUME) {
                 viewModel.loadCurrentSession()
                 digitalViewModel.refresh()
+                restrictionViewModel.refresh()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -103,6 +106,17 @@ fun ProtectionScreen(
                         )
                     }
                     1 -> {
+                        AppRestrictionSection(
+                            uiState = restrictionUiState,
+                            onSearchQueryChange = { restrictionViewModel.updateSearchQuery(it) },
+                            onToggleAppSelection = { restrictionViewModel.toggleAppSelection(it) },
+                            onSaveSelectedRestrictions = { restrictionViewModel.saveSelectedRestrictions() },
+                            onClearSelection = { restrictionViewModel.clearSelection() },
+                            onToggleRestrictionEnabled = { id, enabled -> restrictionViewModel.toggleRestriction(id, enabled) },
+                            onRetry = { restrictionViewModel.acknowledgeError() }
+                        )
+                    }
+                    2 -> {
                         when (val state = uiState) {
                             is ProtectionUiState.Loading -> {
                                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
@@ -144,15 +158,24 @@ fun ProtectionScreen(
                                     Spacer(modifier = Modifier.height(24.dp))
 
                                     Text(
-                                        text = "Common Targets",
+                                        text = "Targets",
                                         style = MaterialTheme.typography.titleMedium
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
 
+                                    // Combine configured enabled restrictions with common packages
+                                    val targetOptions = remember(restrictionUiState.configuredRestrictions) {
+                                        val fromConfig = restrictionUiState.configuredRestrictions
+                                            .filter { it.isEnabled }
+                                            .map { it.packageName to it.appDisplayName }
+                                        val combined = (fromConfig + commonPackages).distinctBy { it.first }
+                                        combined
+                                    }
+
                                     LazyColumn(
                                         modifier = Modifier.weight(1f)
                                     ) {
-                                        items(commonPackages) { (pkg, name) ->
+                                        items(targetOptions) { (pkg, name) ->
                                             val isSelected = selectedPackages.contains(pkg)
                                             Card(
                                                 onClick = {
