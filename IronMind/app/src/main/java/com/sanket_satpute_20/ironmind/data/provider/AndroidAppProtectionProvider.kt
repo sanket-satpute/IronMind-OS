@@ -19,13 +19,22 @@ class AndroidAppProtectionProvider(
     }
 
     override suspend fun applyProtection(targetPackages: List<String>): Result<Unit, Exception> {
-        return applyProtection(targetPackages, sessionId = null, userId = null)
+        return applyProtection(targetPackages, sessionId = null, userId = null, scheduledEndAt = null)
     }
 
     override suspend fun applyProtection(
         targetPackages: List<String>,
         sessionId: String?,
         userId: String?
+    ): Result<Unit, Exception> {
+        return applyProtection(targetPackages, sessionId, userId, scheduledEndAt = null)
+    }
+
+    override suspend fun applyProtection(
+        targetPackages: List<String>,
+        sessionId: String?,
+        userId: String?,
+        scheduledEndAt: Long?
     ): Result<Unit, Exception> {
         if (!hasRequiredPermissions()) {
             return Result.Failure(Exception("Missing required protection permissions: Accessibility Service must be enabled in system settings"))
@@ -42,15 +51,16 @@ class AndroidAppProtectionProvider(
 
         val effectiveUserId = userId ?: userSessionProvider?.getActiveUserId() ?: "active_session"
 
-        // Persist enforcement state with authoritative session identity for recovery
+        // Persist enforcement state with authoritative session identity and scheduledEndAt for recovery
         enforcementStore.saveEnforcementState(
             sessionId = sessionId,
             userId = effectiveUserId,
             isActive = true,
-            packages = sanitized.toSet()
+            packages = sanitized.toSet(),
+            scheduledEndAt = scheduledEndAt
         )
 
-        IronMindProtectionService.setActiveSessionIdentity(sessionId, effectiveUserId)
+        IronMindProtectionService.setActiveSessionIdentity(sessionId, effectiveUserId, scheduledEndAt)
         IronMindProtectionService.setProtectedPackages(sanitized)
         IronMindProtectionService.setProtectionActive(true)
         return Result.Success(Unit)
@@ -60,7 +70,7 @@ class AndroidAppProtectionProvider(
         enforcementStore.clearEnforcementState()
         IronMindProtectionService.setProtectionActive(false)
         IronMindProtectionService.setProtectedPackages(emptyList())
-        IronMindProtectionService.setActiveSessionIdentity(null, null)
+        IronMindProtectionService.setActiveSessionIdentity(null, null, null)
         return Result.Success(Unit)
     }
 
@@ -83,6 +93,9 @@ class AndroidAppProtectionProvider(
         val storedState = enforcementStore.getEnforcementState()
         if (storedState?.isActive == true && !storedState.sessionId.isNullOrBlank()) {
             if (activeUid != null && storedState.userId != activeUid) {
+                return false
+            }
+            if (storedState.scheduledEndAt != null && System.currentTimeMillis() >= storedState.scheduledEndAt) {
                 return false
             }
             return true

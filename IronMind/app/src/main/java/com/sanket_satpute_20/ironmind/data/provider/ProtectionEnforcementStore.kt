@@ -8,6 +8,7 @@ data class PersistentEnforcementState(
     val userId: String,
     val isActive: Boolean,
     val protectedPackages: Set<String>,
+    val scheduledEndAt: Long? = null,
     val lastUpdatedEpochMs: Long
 )
 
@@ -18,6 +19,8 @@ data class PersistentEnforcementState(
  *
  * Epistemic guarantee: A persistent enforcement state can never independently
  * authorize app blocking without a non-blank originating [sessionId].
+ * Furthermore, an enforcement state whose [scheduledEndAt] timestamp has passed
+ * is authoritatively inactive.
  */
 class ProtectionEnforcementStore(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -26,21 +29,24 @@ class ProtectionEnforcementStore(context: Context) {
         sessionId: String?,
         userId: String,
         isActive: Boolean,
-        packages: Set<String>
+        packages: Set<String>,
+        scheduledEndAt: Long? = null
     ) {
         val filtered = packages.filter { it.isNotBlank() && it != IRONMIND_PACKAGE }.toSet()
-        val genuinelyActive = isActive && filtered.isNotEmpty() && !sessionId.isNullOrBlank()
+        val isExpired = scheduledEndAt != null && System.currentTimeMillis() >= scheduledEndAt
+        val genuinelyActive = isActive && filtered.isNotEmpty() && !sessionId.isNullOrBlank() && !isExpired
         prefs.edit()
             .putString(KEY_SESSION_ID, sessionId)
             .putString(KEY_USER_ID, userId)
             .putBoolean(KEY_IS_ACTIVE, genuinelyActive)
             .putStringSet(KEY_PACKAGES, if (genuinelyActive) filtered else emptySet())
+            .putLong(KEY_SCHEDULED_END_AT, scheduledEndAt ?: -1L)
             .putLong(KEY_LAST_UPDATED, System.currentTimeMillis())
             .apply()
     }
 
     fun saveEnforcementState(userId: String, isActive: Boolean, packages: Set<String>) {
-        saveEnforcementState(sessionId = null, userId = userId, isActive = isActive, packages = packages)
+        saveEnforcementState(sessionId = null, userId = userId, isActive = isActive, packages = packages, scheduledEndAt = null)
     }
 
     fun clearEnforcementState() {
@@ -49,6 +55,7 @@ class ProtectionEnforcementStore(context: Context) {
             .putBoolean(KEY_IS_ACTIVE, false)
             .putStringSet(KEY_PACKAGES, emptySet())
             .putString(KEY_USER_ID, null)
+            .putLong(KEY_SCHEDULED_END_AT, -1L)
             .putLong(KEY_LAST_UPDATED, System.currentTimeMillis())
             .apply()
     }
@@ -60,16 +67,20 @@ class ProtectionEnforcementStore(context: Context) {
         val packages = prefs.getStringSet(KEY_PACKAGES, emptySet())?.filter {
             it.isNotBlank() && it != IRONMIND_PACKAGE
         }?.toSet() ?: emptySet()
+        val scheduledEndAtRaw = prefs.getLong(KEY_SCHEDULED_END_AT, -1L)
+        val scheduledEndAt = if (scheduledEndAtRaw > 0L) scheduledEndAtRaw else null
         val lastUpdated = prefs.getLong(KEY_LAST_UPDATED, 0L)
 
         val hasValidSession = !sessionId.isNullOrBlank()
-        val genuinelyActive = isActive && packages.isNotEmpty() && hasValidSession
+        val isExpired = scheduledEndAt != null && System.currentTimeMillis() >= scheduledEndAt
+        val genuinelyActive = isActive && packages.isNotEmpty() && hasValidSession && !isExpired
 
         return PersistentEnforcementState(
             sessionId = sessionId,
             userId = userId,
             isActive = genuinelyActive,
             protectedPackages = if (genuinelyActive) packages else emptySet(),
+            scheduledEndAt = scheduledEndAt,
             lastUpdatedEpochMs = lastUpdated
         )
     }
@@ -81,6 +92,7 @@ class ProtectionEnforcementStore(context: Context) {
         private const val KEY_USER_ID = "active_user_id"
         private const val KEY_IS_ACTIVE = "is_active"
         private const val KEY_PACKAGES = "protected_packages"
+        private const val KEY_SCHEDULED_END_AT = "scheduled_end_at_epoch_ms"
         private const val KEY_LAST_UPDATED = "last_updated_epoch_ms"
     }
 }

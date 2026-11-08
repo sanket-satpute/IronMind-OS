@@ -71,4 +71,50 @@ class StartProtectionSessionUseCaseTest {
         assertTrue(savedSessionResult is Result.Success)
         assertEquals(session, (savedSessionResult as Result.Success).data)
     }
+
+    @Test
+    fun `rejects starting session when scheduledEndAt is in the past`() = runTest {
+        clock.setTime(1_000_000L)
+        val result = startProtectionSessionUseCase(
+            userId = "user1",
+            scheduledEndAt = 999_999L
+        )
+
+        assertTrue(result is Result.Failure)
+        assertTrue((result as Result.Failure).error is IllegalArgumentException)
+        assertTrue(protectionRepository.getActiveProtectionSessionsForUser("user1").let {
+            (it as Result.Success).data.isEmpty()
+        })
+    }
+
+    @Test
+    fun `rejects starting session when scheduledEndAt equals current time`() = runTest {
+        clock.setTime(1_000_000L)
+        val result = startProtectionSessionUseCase(
+            userId = "user1",
+            scheduledEndAt = 1_000_000L
+        )
+
+        assertTrue(result is Result.Failure)
+        assertTrue((result as Result.Failure).error is IllegalArgumentException)
+    }
+
+    @Test
+    fun `starts session with valid future scheduledEndAt and forwards to provider`() = runTest {
+        clock.setTime(1_000_000L)
+        idGenerator.nextId = "test_scheduled_session"
+
+        val scheduledEnd = 1_500_000L
+        val result = startProtectionSessionUseCase(
+            userId = "user1",
+            scheduledEndAt = scheduledEnd,
+            targetPackages = listOf("com.test.app")
+        )
+
+        assertTrue(result is Result.Success)
+        val session = (result as Result.Success).data
+        assertEquals(scheduledEnd, session.scheduledEndAt)
+        assertEquals(scheduledEnd, protectionProvider.lastScheduledEndAt)
+        assertTrue(protectionProvider.isProtectionActive())
+    }
 }

@@ -3,8 +3,12 @@ package com.sanket_satpute_20.ironmind.domain.usecase.protection
 import com.sanket_satpute_20.ironmind.data.provider.ProtectionEnforcementStore
 import com.sanket_satpute_20.ironmind.domain.common.Clock
 import com.sanket_satpute_20.ironmind.domain.common.Result
+import com.sanket_satpute_20.ironmind.domain.model.EntitySource
+import com.sanket_satpute_20.ironmind.domain.model.Event
+import com.sanket_satpute_20.ironmind.domain.model.EventType
 import com.sanket_satpute_20.ironmind.domain.model.ProtectionSessionStatus
 import com.sanket_satpute_20.ironmind.domain.provider.AppProtectionProvider
+import com.sanket_satpute_20.ironmind.domain.repository.EventRepository
 import com.sanket_satpute_20.ironmind.domain.repository.ProtectionRepository
 import com.sanket_satpute_20.ironmind.domain.session.UserSessionProvider
 import com.sanket_satpute_20.ironmind.domain.usecase.digital.GetEligibleRestrictionsForEnforcementUseCase
@@ -58,7 +62,8 @@ class AuthoritativeProtectionSessionRecoveryUseCase(
     private val clock: Clock,
     private val appProtectionProvider: AppProtectionProvider,
     private val enforcementStore: ProtectionEnforcementStore,
-    private val getEligibleRestrictionsForEnforcementUseCase: GetEligibleRestrictionsForEnforcementUseCase? = null
+    private val getEligibleRestrictionsForEnforcementUseCase: GetEligibleRestrictionsForEnforcementUseCase? = null,
+    private val eventRepository: EventRepository? = null
 ) {
     suspend operator fun invoke(): ProtectionRecoveryResult {
         try {
@@ -124,6 +129,19 @@ class AuthoritativeProtectionSessionRecoveryUseCase(
                     updatedAt = now
                 )
                 protectionRepository.saveProtectionSession(expiredSession)
+                eventRepository?.saveEvent(
+                    Event(
+                        id = java.util.UUID.randomUUID().toString(),
+                        userId = session.userId,
+                        type = EventType.PROTECTION_ENDED,
+                        entityType = "PROTECTION_SESSION",
+                        entityId = session.id,
+                        occurredAt = session.scheduledEndAt,
+                        recordedAt = now,
+                        source = EntitySource.SYSTEM
+                    )
+                )
+                println("IronMindLifecycle [Protection] [SESSION_STOPPED] sessionId=${session.id} reason=EXPIRED")
                 failClosed()
                 return ProtectionRecoveryResult.FailedClosed(ProtectionRecoveryResult.FailClosedReason.SESSION_EXPIRED)
             }
@@ -149,14 +167,15 @@ class AuthoritativeProtectionSessionRecoveryUseCase(
             }
 
             // 10. Authorization confirmed! Restore enforcement
-            IronMindProtectionService.setActiveSessionIdentity(session.id, activeUserId)
+            IronMindProtectionService.setActiveSessionIdentity(session.id, activeUserId, session.scheduledEndAt)
             IronMindProtectionService.setProtectedPackages(packagesToEnforce)
             IronMindProtectionService.setProtectionActive(true)
             enforcementStore.saveEnforcementState(
                 sessionId = session.id,
                 userId = activeUserId,
                 isActive = true,
-                packages = packagesToEnforce
+                packages = packagesToEnforce,
+                scheduledEndAt = session.scheduledEndAt
             )
 
             return ProtectionRecoveryResult.Restored(
@@ -176,6 +195,6 @@ class AuthoritativeProtectionSessionRecoveryUseCase(
         enforcementStore.clearEnforcementState()
         IronMindProtectionService.setProtectionActive(false)
         IronMindProtectionService.setProtectedPackages(emptySet())
-        IronMindProtectionService.setActiveSessionIdentity(null, null)
+        IronMindProtectionService.setActiveSessionIdentity(null, null, null)
     }
 }

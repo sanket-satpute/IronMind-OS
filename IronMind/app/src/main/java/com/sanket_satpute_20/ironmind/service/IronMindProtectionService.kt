@@ -22,6 +22,10 @@ class IronMindProtectionService : AccessibilityService() {
         private val protectedPkgs = mutableSetOf<String>()
         private var activeUserId: String? = null
         private var activeSessionId: String? = null
+        private var activeScheduledEndAt: Long? = null
+
+        var clock: com.sanket_satpute_20.ironmind.domain.common.Clock? = null
+        private fun currentTime(): Long = clock?.currentTimeMillis() ?: System.currentTimeMillis()
 
         var recoveryUseCaseProvider: (() -> AuthoritativeProtectionSessionRecoveryUseCase)? = null
 
@@ -31,10 +35,16 @@ class IronMindProtectionService : AccessibilityService() {
                 protectedPkgs.clear()
                 activeUserId = null
                 activeSessionId = null
+                activeScheduledEndAt = null
             }
         }
 
         fun isProtectionActive(): Boolean {
+            val endAt = activeScheduledEndAt
+            if (isActive && endAt != null && currentTime() >= endAt) {
+                setProtectionActive(false)
+                return false
+            }
             return isActive
         }
 
@@ -44,16 +54,23 @@ class IronMindProtectionService : AccessibilityService() {
         }
 
         fun getProtectedPackages(): Set<String> {
+            val endAt = activeScheduledEndAt
+            if (isActive && endAt != null && currentTime() >= endAt) {
+                setProtectionActive(false)
+                return emptySet()
+            }
             return protectedPkgs.toSet()
         }
 
-        fun setActiveSessionIdentity(sessionId: String?, userId: String?) {
+        fun setActiveSessionIdentity(sessionId: String?, userId: String?, scheduledEndAt: Long? = null) {
             activeSessionId = sessionId
             activeUserId = userId
+            activeScheduledEndAt = scheduledEndAt
         }
 
         fun getActiveSessionId(): String? = activeSessionId
         fun getActiveUserId(): String? = activeUserId
+        fun getActiveScheduledEndAt(): Long? = activeScheduledEndAt
     }
 
     override fun onServiceConnected() {
@@ -75,7 +92,8 @@ class IronMindProtectionService : AccessibilityService() {
                     getEligibleRestrictionsForEnforcementUseCase = GetEligibleRestrictionsForEnforcementUseCase(
                         getAppRestrictionConfigsUseCase = GetAppRestrictionConfigsUseCase(container.protectionRepository),
                         installedAppDiscoveryProvider = AndroidInstalledAppDiscoveryProvider(applicationContext)
-                    )
+                    ),
+                    eventRepository = container.eventRepository
                 )
             } else null
 
@@ -88,7 +106,7 @@ class IronMindProtectionService : AccessibilityService() {
                     Log.e(TAG, "Failed to evaluate authoritative protection recovery: ${e.message}")
                     setProtectionActive(false)
                     setProtectedPackages(emptySet())
-                    setActiveSessionIdentity(null, null)
+                    setActiveSessionIdentity(null, null, null)
                 }
             }
         } else {
@@ -100,12 +118,20 @@ class IronMindProtectionService : AccessibilityService() {
             }
             setProtectionActive(false)
             setProtectedPackages(emptySet())
-            setActiveSessionIdentity(null, null)
+            setActiveSessionIdentity(null, null, null)
             Log.w(TAG, "IronMindLifecycle [Protection] [RECOVERY_FAILED_NO_CONTAINER] failed closed")
         }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        val endAt = activeScheduledEndAt
+        if (isActive && endAt != null && currentTime() >= endAt) {
+            Log.i(TAG, "IronMindLifecycle [Protection] [SESSION_EXPIRED] scheduledEndAt=$endAt")
+            setProtectionActive(false)
+            rehydrateState()
+            return
+        }
+
         if (!isActive || protectedPkgs.isEmpty()) return
 
         if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {

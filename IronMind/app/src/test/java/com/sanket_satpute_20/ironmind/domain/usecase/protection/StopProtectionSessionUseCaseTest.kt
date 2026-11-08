@@ -93,6 +93,53 @@ class StopProtectionSessionUseCaseTest {
         assertEquals(ProtectionSessionStatus.ACTIVE, updatedSession.status)
     }
 
+    @Test
+    fun `stopping session with EXPIRED reason sets status EXPIRED and effective endedAt`() = runTest {
+        val session = createActiveSession("s_expire").copy(scheduledEndAt = 2000L)
+        protectionRepository.saveProtectionSession(session)
+        clock.setTime(2500L)
+
+        val result = stopProtectionSessionUseCase("s_expire", StopProtectionSessionUseCase.StopReason.EXPIRED)
+        assertTrue(result is Result.Success)
+
+        val updatedSession = (protectionRepository.getProtectionSession("s_expire") as Result.Success).data
+        assertEquals(ProtectionSessionStatus.EXPIRED, updatedSession.status)
+        assertEquals(2000L, updatedSession.endedAt)
+    }
+
+    @Test
+    fun `calling EXPIRED reason on already EXPIRED session is idempotent`() = runTest {
+        val session = createActiveSession("s_already_exp").copy(
+            status = ProtectionSessionStatus.EXPIRED,
+            scheduledEndAt = 2000L,
+            endedAt = 2000L
+        )
+        protectionRepository.saveProtectionSession(session)
+
+        val result = stopProtectionSessionUseCase("s_already_exp", StopProtectionSessionUseCase.StopReason.EXPIRED)
+        assertTrue(result is Result.Success)
+
+        val updatedSession = (protectionRepository.getProtectionSession("s_already_exp") as Result.Success).data
+        assertEquals(ProtectionSessionStatus.EXPIRED, updatedSession.status)
+    }
+
+    @Test
+    fun `calling EXPIRED reason on OVERRIDDEN session fails and preserves OVERRIDDEN`() = runTest {
+        val session = createActiveSession("s_overridden").copy(
+            status = ProtectionSessionStatus.OVERRIDDEN,
+            scheduledEndAt = 2000L,
+            endedAt = 1500L
+        )
+        protectionRepository.saveProtectionSession(session)
+
+        val result = stopProtectionSessionUseCase("s_overridden", StopProtectionSessionUseCase.StopReason.EXPIRED)
+        assertTrue(result is Result.Failure)
+
+        val updatedSession = (protectionRepository.getProtectionSession("s_overridden") as Result.Success).data
+        assertEquals(ProtectionSessionStatus.OVERRIDDEN, updatedSession.status)
+        assertEquals(1500L, updatedSession.endedAt)
+    }
+
     private fun createActiveSession(id: String): ProtectionSession {
         return ProtectionSession(
             id = id,

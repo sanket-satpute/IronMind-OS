@@ -13,6 +13,13 @@ interface AppProtectionProvider {
         userId: String?
     ): Result<Unit, Exception> = applyProtection(targetPackages)
 
+    suspend fun applyProtection(
+        targetPackages: List<String>,
+        sessionId: String?,
+        userId: String?,
+        scheduledEndAt: Long? = null
+    ): Result<Unit, Exception> = applyProtection(targetPackages, sessionId, userId)
+    
     suspend fun removeProtection(): Result<Unit, Exception>
     fun isProtectionActive(): Boolean
     fun getEnforcedPackages(): Set<String> = emptySet()

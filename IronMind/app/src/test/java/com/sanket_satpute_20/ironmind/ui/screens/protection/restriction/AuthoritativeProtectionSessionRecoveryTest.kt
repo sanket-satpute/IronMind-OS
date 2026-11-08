@@ -114,6 +114,7 @@ class AuthoritativeProtectionSessionRecoveryTest {
         fakeDiscoveryProvider = FakeInstalledAppDiscoveryProvider()
         fakeProtectionProvider = FakeAlwaysPermittedProtectionProvider(store)
         clock = FakeClock(currentTime = 1_000_000L)
+        IronMindProtectionService.clock = clock
 
         getConfigsUseCase = GetAppRestrictionConfigsUseCase(protectionRepository)
         getEligibleUseCase = GetEligibleRestrictionsForEnforcementUseCase(getConfigsUseCase, fakeDiscoveryProvider)
@@ -141,7 +142,8 @@ class AuthoritativeProtectionSessionRecoveryTest {
             clock = clock,
             appProtectionProvider = fakeProtectionProvider,
             enforcementStore = store,
-            getEligibleRestrictionsForEnforcementUseCase = getEligibleUseCase
+            getEligibleRestrictionsForEnforcementUseCase = getEligibleUseCase,
+            eventRepository = eventRepository
         )
     }
 
@@ -150,7 +152,8 @@ class AuthoritativeProtectionSessionRecoveryTest {
         store.clearEnforcementState()
         IronMindProtectionService.setProtectionActive(false)
         IronMindProtectionService.setProtectedPackages(emptySet())
-        IronMindProtectionService.setActiveSessionIdentity(null, null)
+        IronMindProtectionService.setActiveSessionIdentity(null, null, null)
+        IronMindProtectionService.clock = null
         db.close()
     }
 
@@ -512,6 +515,275 @@ class AuthoritativeProtectionSessionRecoveryTest {
         assertFalse(IronMindProtectionService.isProtectionActive())
     }
 
+    // 11. Session exactly at scheduledEndAt rejects recovery and transitions Room to EXPIRED
+    @Test
+    fun `scenario 11 - session exactly at scheduledEndAt rejects enforcement and transitions Room to EXPIRED`() = runTest {
+        saveConfigUseCase(testUserId, "com.target.app", "Target App", isEnabled = true)
+
+        val scheduledEnd = 1_500_000L
+        val session = ProtectionSession(
+            id = "session_exact_end",
+            userId = testUserId,
+            startedAt = 1_000_000L,
+            scheduledEndAt = scheduledEnd,
+            endedAt = null,
+            status = ProtectionSessionStatus.ACTIVE,
+            source = EntitySource.USER,
+            overrideAllowed = true,
+            createdAt = 1_000_000L,
+            updatedAt = 1_000_000L
+        )
+        protectionRepository.saveProtectionSession(session)
+
+        store.saveEnforcementState(
+            sessionId = session.id,
+            userId = testUserId,
+            isActive = true,
+            packages = setOf("com.target.app"),
+            scheduledEndAt = scheduledEnd
+        )
+
+        // Set clock EXACTLY at scheduledEndAt
+        clock.setTime(scheduledEnd)
+
+        val result = recoveryUseCase()
+        assertTrue(result is ProtectionRecoveryResult.FailedClosed)
+        assertEquals(
+            ProtectionRecoveryResult.FailClosedReason.SESSION_EXPIRED,
+            (result as ProtectionRecoveryResult.FailedClosed).reason
+        )
+
+        // Room status must be EXPIRED
+        val dbSession = (protectionRepository.getProtectionSession(session.id) as Result.Success).data
+        assertEquals(ProtectionSessionStatus.EXPIRED, dbSession.status)
+        assertEquals(scheduledEnd, dbSession.endedAt)
+
+        assertFalse(IronMindProtectionService.isProtectionActive())
+        assertTrue(IronMindProtectionService.getProtectedPackages().isEmpty())
+        assertFalse(store.getEnforcementState()?.isActive == true)
+    }
+
+    // 12. Session after scheduledEndAt rejects recovery and transitions Room to EXPIRED
+    @Test
+    fun `scenario 12 - session after scheduledEndAt rejects enforcement and transitions Room to EXPIRED`() = runTest {
+        saveConfigUseCase(testUserId, "com.target.app", "Target App", isEnabled = true)
+
+        val scheduledEnd = 1_500_000L
+        val session = ProtectionSession(
+            id = "session_after_end",
+            userId = testUserId,
+            startedAt = 1_000_000L,
+            scheduledEndAt = scheduledEnd,
+            endedAt = null,
+            status = ProtectionSessionStatus.ACTIVE,
+            source = EntitySource.USER,
+            overrideAllowed = true,
+            createdAt = 1_000_000L,
+            updatedAt = 1_000_000L
+        )
+        protectionRepository.saveProtectionSession(session)
+
+        store.saveEnforcementState(
+            sessionId = session.id,
+            userId = testUserId,
+            isActive = true,
+            packages = setOf("com.target.app"),
+            scheduledEndAt = scheduledEnd
+        )
+
+        // Advance clock past scheduledEndAt
+        clock.setTime(scheduledEnd + 50_000L)
+
+        val result = recoveryUseCase()
+        assertTrue(result is ProtectionRecoveryResult.FailedClosed)
+        assertEquals(
+            ProtectionRecoveryResult.FailClosedReason.SESSION_EXPIRED,
+            (result as ProtectionRecoveryResult.FailedClosed).reason
+        )
+
+        val dbSession = (protectionRepository.getProtectionSession(session.id) as Result.Success).data
+        assertEquals(ProtectionSessionStatus.EXPIRED, dbSession.status)
+        assertEquals(scheduledEnd, dbSession.endedAt)
+
+        assertFalse(IronMindProtectionService.isProtectionActive())
+        assertTrue(IronMindProtectionService.getProtectedPackages().isEmpty())
+    }
+
+    // 13. Expired session with stale active SharedPreferences does not restore enforcement
+    @Test
+    fun `scenario 13 - expired session with stale active SharedPreferences does not restore enforcement`() = runTest {
+        saveConfigUseCase(testUserId, "com.target.app", "Target App", isEnabled = true)
+
+        val scheduledEnd = 1_500_000L
+        val session = ProtectionSession(
+            id = "session_stale_prefs",
+            userId = testUserId,
+            startedAt = 1_000_000L,
+            scheduledEndAt = scheduledEnd,
+            endedAt = null,
+            status = ProtectionSessionStatus.ACTIVE,
+            source = EntitySource.USER,
+            overrideAllowed = true,
+            createdAt = 1_000_000L,
+            updatedAt = 1_000_000L
+        )
+        protectionRepository.saveProtectionSession(session)
+
+        // Store has isActive = true and package set
+        store.saveEnforcementState(
+            sessionId = session.id,
+            userId = testUserId,
+            isActive = true,
+            packages = setOf("com.target.app"),
+            scheduledEndAt = scheduledEnd
+        )
+
+        // Clock is in the future
+        clock.setTime(2_000_000L)
+
+        // Store evaluates isActive as false due to expiration
+        assertFalse(store.getEnforcementState()?.isActive == true)
+
+        val result = recoveryUseCase()
+        assertTrue(result is ProtectionRecoveryResult.FailedClosed)
+        assertEquals(
+            ProtectionRecoveryResult.FailClosedReason.SESSION_EXPIRED,
+            (result as ProtectionRecoveryResult.FailedClosed).reason
+        )
+
+        assertFalse(IronMindProtectionService.isProtectionActive())
+        assertTrue(IronMindProtectionService.getProtectedPackages().isEmpty())
+        assertNull(store.getEnforcementState()?.sessionId)
+    }
+
+    // 14. Repeated expiry processing is idempotent
+    @Test
+    fun `scenario 14 - repeated expiry processing is idempotent`() = runTest {
+        saveConfigUseCase(testUserId, "com.target.app", "Target App", isEnabled = true)
+
+        val scheduledEnd = 1_500_000L
+        val session = ProtectionSession(
+            id = "session_idempotent_expiry",
+            userId = testUserId,
+            startedAt = 1_000_000L,
+            scheduledEndAt = scheduledEnd,
+            endedAt = null,
+            status = ProtectionSessionStatus.ACTIVE,
+            source = EntitySource.USER,
+            overrideAllowed = true,
+            createdAt = 1_000_000L,
+            updatedAt = 1_000_000L
+        )
+        protectionRepository.saveProtectionSession(session)
+
+        store.saveEnforcementState(
+            sessionId = session.id,
+            userId = testUserId,
+            isActive = true,
+            packages = setOf("com.target.app"),
+            scheduledEndAt = scheduledEnd
+        )
+
+        clock.setTime(1_600_000L)
+
+        // First recovery transitions to EXPIRED
+        val firstResult = recoveryUseCase()
+        assertTrue(firstResult is ProtectionRecoveryResult.FailedClosed)
+        assertEquals(ProtectionRecoveryResult.FailClosedReason.SESSION_EXPIRED, (firstResult as ProtectionRecoveryResult.FailedClosed).reason)
+
+        val dbSessionFirst = (protectionRepository.getProtectionSession(session.id) as Result.Success).data
+        assertEquals(ProtectionSessionStatus.EXPIRED, dbSessionFirst.status)
+        assertEquals(scheduledEnd, dbSessionFirst.endedAt)
+
+        // Direct stop with StopReason.EXPIRED on already-expired session must succeed idempotently
+        val stopResult = stopProtectionSessionUseCase(session.id, StopProtectionSessionUseCase.StopReason.EXPIRED)
+        assertTrue(stopResult is Result.Success)
+
+        // Second recovery check remains clean and fails closed without modifying Room state
+        store.saveEnforcementState(
+            sessionId = session.id,
+            userId = testUserId,
+            isActive = true,
+            packages = setOf("com.target.app"),
+            scheduledEndAt = scheduledEnd
+        )
+        val secondResult = recoveryUseCase()
+        assertTrue(secondResult is ProtectionRecoveryResult.FailedClosed)
+        assertEquals(ProtectionRecoveryResult.FailClosedReason.SESSION_EXPIRED, (secondResult as ProtectionRecoveryResult.FailedClosed).reason)
+
+        val dbSessionSecond = (protectionRepository.getProtectionSession(session.id) as Result.Success).data
+        assertEquals(ProtectionSessionStatus.EXPIRED, dbSessionSecond.status)
+        assertEquals(scheduledEnd, dbSessionSecond.endedAt)
+    }
+
+    // 15. OVERRIDDEN session with past scheduledEndAt remains OVERRIDDEN
+    @Test
+    fun `scenario 15 - OVERRIDDEN session past scheduledEndAt remains OVERRIDDEN and is not changed to EXPIRED`() = runTest {
+        val scheduledEnd = 1_200_000L
+        val session = ProtectionSession(
+            id = "session_overridden_preserved",
+            userId = testUserId,
+            startedAt = 1_000_000L,
+            scheduledEndAt = scheduledEnd,
+            endedAt = 1_100_000L,
+            status = ProtectionSessionStatus.OVERRIDDEN,
+            source = EntitySource.USER,
+            overrideAllowed = true,
+            createdAt = 1_000_000L,
+            updatedAt = 1_100_000L
+        )
+        protectionRepository.saveProtectionSession(session)
+
+        store.saveEnforcementState(
+            sessionId = session.id,
+            userId = testUserId,
+            isActive = true,
+            packages = setOf("com.target.app"),
+            scheduledEndAt = scheduledEnd
+        )
+
+        // Clock is past scheduledEndAt
+        clock.setTime(1_500_000L)
+
+        val result = recoveryUseCase()
+        assertTrue(result is ProtectionRecoveryResult.FailedClosed)
+        assertEquals(
+            ProtectionRecoveryResult.FailClosedReason.SESSION_OVERRIDDEN,
+            (result as ProtectionRecoveryResult.FailedClosed).reason
+        )
+
+        // Status in Room must remain OVERRIDDEN, never overwritten to EXPIRED
+        val dbSession = (protectionRepository.getProtectionSession(session.id) as Result.Success).data
+        assertEquals(ProtectionSessionStatus.OVERRIDDEN, dbSession.status)
+        assertEquals(1_100_000L, dbSession.endedAt)
+
+        // Calling stopProtection with EXPIRED reason on OVERRIDDEN session must fail
+        val stopResult = stopProtectionSessionUseCase(session.id, StopProtectionSessionUseCase.StopReason.EXPIRED)
+        assertTrue(stopResult is Result.Failure)
+        val finalDbSession = (protectionRepository.getProtectionSession(session.id) as Result.Success).data
+        assertEquals(ProtectionSessionStatus.OVERRIDDEN, finalDbSession.status)
+    }
+
+    // 16. In-memory service expires when clock reaches scheduledEndAt
+    @Test
+    fun `scenario 16 - in-memory service protection automatically drops when scheduledEndAt passes`() = runTest {
+        val scheduledEnd = 1_500_000L
+        clock.setTime(1_000_000L)
+
+        IronMindProtectionService.setActiveSessionIdentity("session_live", testUserId, scheduledEnd)
+        IronMindProtectionService.setProtectedPackages(setOf("com.target.app"))
+        IronMindProtectionService.setProtectionActive(true)
+
+        assertTrue(IronMindProtectionService.isProtectionActive())
+        assertEquals(setOf("com.target.app"), IronMindProtectionService.getProtectedPackages())
+
+        // Advance clock past scheduledEndAt
+        clock.setTime(1_500_000L)
+
+        assertFalse(IronMindProtectionService.isProtectionActive())
+        assertTrue(IronMindProtectionService.getProtectedPackages().isEmpty())
+    }
+
     // --- Helpers & Doubles ---
 
     private class FakeInstalledAppDiscoveryProvider : InstalledAppDiscoveryProvider {
@@ -546,13 +818,22 @@ class AuthoritativeProtectionSessionRecoveryTest {
         override fun hasRequiredPermissions(): Boolean = true
 
         override suspend fun applyProtection(targetPackages: List<String>): Result<Unit, Exception> {
-            return applyProtection(targetPackages, sessionId = null, userId = null)
+            return applyProtection(targetPackages, sessionId = null, userId = null, scheduledEndAt = null)
         }
 
         override suspend fun applyProtection(
             targetPackages: List<String>,
             sessionId: String?,
             userId: String?
+        ): Result<Unit, Exception> {
+            return applyProtection(targetPackages, sessionId, userId, scheduledEndAt = null)
+        }
+
+        override suspend fun applyProtection(
+            targetPackages: List<String>,
+            sessionId: String?,
+            userId: String?,
+            scheduledEndAt: Long?
         ): Result<Unit, Exception> {
             val sanitized = targetPackages.filter { it != ProtectionEnforcementStore.IRONMIND_PACKAGE }
             isActive = true
@@ -562,9 +843,10 @@ class AuthoritativeProtectionSessionRecoveryTest {
                 sessionId = sessionId,
                 userId = userId ?: "active_session",
                 isActive = true,
-                packages = sanitized.toSet()
+                packages = sanitized.toSet(),
+                scheduledEndAt = scheduledEndAt
             )
-            IronMindProtectionService.setActiveSessionIdentity(sessionId, userId)
+            IronMindProtectionService.setActiveSessionIdentity(sessionId, userId, scheduledEndAt)
             IronMindProtectionService.setProtectedPackages(sanitized)
             IronMindProtectionService.setProtectionActive(true)
             return Result.Success(Unit)
@@ -576,7 +858,7 @@ class AuthoritativeProtectionSessionRecoveryTest {
             store.clearEnforcementState()
             IronMindProtectionService.setProtectionActive(false)
             IronMindProtectionService.setProtectedPackages(emptySet())
-            IronMindProtectionService.setActiveSessionIdentity(null, null)
+            IronMindProtectionService.setActiveSessionIdentity(null, null, null)
             return Result.Success(Unit)
         }
 

@@ -35,6 +35,10 @@ class StartProtectionSessionUseCase(
         }
 
         val now = clock.currentTimeMillis()
+        if (scheduledEndAt != null && scheduledEndAt <= now) {
+            return Result.Failure(IllegalArgumentException("Scheduled end time ($scheduledEndAt) must be in the future (current time: $now)"))
+        }
+
         val session = ProtectionSession(
             id = idGenerator.generateId(),
             userId = userId,
@@ -54,7 +58,8 @@ class StartProtectionSessionUseCase(
         val applyResult = protectionProvider.applyProtection(
             targetPackages = targetPackages,
             sessionId = session.id,
-            userId = userId
+            userId = userId,
+            scheduledEndAt = session.scheduledEndAt
         )
         if (applyResult is Result.Failure) {
             return Result.Failure(Exception("Failed to apply protection: ${applyResult.error.message}"))

@@ -27,6 +27,14 @@ class StopProtectionSessionUseCase(
         }
 
         val session = getResult.data
+        if (session.status == ProtectionSessionStatus.EXPIRED && reason == StopReason.EXPIRED) {
+            // Idempotent: already expired. Ensure protection is removed and return success.
+            appProtectionProvider.removeProtection()
+            return Result.Success(Unit)
+        }
+        if (session.status == ProtectionSessionStatus.OVERRIDDEN) {
+            return Result.Failure(Exception("Session is already OVERRIDDEN"))
+        }
         if (session.status != ProtectionSessionStatus.ACTIVE && session.status != ProtectionSessionStatus.SCHEDULED) {
             return Result.Failure(Exception("Session is not active or scheduled, current status: ${session.status}"))
         }
@@ -44,9 +52,15 @@ class StopProtectionSessionUseCase(
             return Result.Failure(Exception("Failed to remove protection: ${removeResult.error.message}"))
         }
 
+        val effectiveEndedAt = if (reason == StopReason.EXPIRED && session.scheduledEndAt != null) {
+            session.scheduledEndAt
+        } else {
+            now
+        }
+
         val updatedSession = session.copy(
             status = finalStatus,
-            endedAt = now,
+            endedAt = effectiveEndedAt,
             updatedAt = now
         )
 
