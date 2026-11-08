@@ -1136,6 +1136,52 @@ class AuthoritativeProtectionSessionRecoveryTest {
         assertTrue(IronMindProtectionService.getProtectedPackages().isEmpty())
     }
 
+    // 25. Permission restoration preserves original scheduledEndAt and does not extend duration
+    @Test
+    fun `scenario 25 - permission restoration preserves original scheduledEndAt and does not extend duration`() = runTest {
+        saveConfigUseCase(testUserId, "com.target.app", "Target App", isEnabled = true)
+
+        val originalScheduledEndAt = 1_500_000L
+        val session = ProtectionSession(
+            id = "session_preserve_duration",
+            userId = testUserId,
+            startedAt = 1_000_000L,
+            scheduledEndAt = originalScheduledEndAt,
+            endedAt = null,
+            status = ProtectionSessionStatus.ACTIVE,
+            source = EntitySource.USER,
+            overrideAllowed = true,
+            createdAt = 1_000_000L,
+            updatedAt = 1_000_000L
+        )
+        protectionRepository.saveProtectionSession(session)
+
+        // Simulate permission revoked at t = 1_100_000L
+        clock.setTime(1_100_000L)
+        fakeProtectionProvider.hasPermissions = false
+        val revokeResult = recoveryUseCase()
+        assertTrue(revokeResult is ProtectionRecoveryResult.FailedClosed)
+
+        // Advance clock to t = 1_300_000L (200s elapsed during revocation, but before scheduledEndAt)
+        clock.setTime(1_300_000L)
+
+        // Re-enable permission
+        fakeProtectionProvider.hasPermissions = true
+        val restoreResult = recoveryUseCase()
+        assertTrue(restoreResult is ProtectionRecoveryResult.Restored)
+
+        // Verify scheduledEndAt in Room was NOT extended or modified
+        val restoredSession = (protectionRepository.getProtectionSession(session.id) as Result.Success).data
+        assertEquals(originalScheduledEndAt, restoredSession.scheduledEndAt)
+
+        // Verify stored scheduledEndAt is preserved
+        val storedState = store.getEnforcementState()
+        assertEquals(originalScheduledEndAt, storedState?.scheduledEndAt)
+
+        // Verify in-memory service scheduledEndAt is preserved
+        assertEquals(originalScheduledEndAt, IronMindProtectionService.getActiveScheduledEndAt())
+    }
+
     // --- Helpers & Doubles ---
 
     private class FakeInstalledAppDiscoveryProvider : InstalledAppDiscoveryProvider {

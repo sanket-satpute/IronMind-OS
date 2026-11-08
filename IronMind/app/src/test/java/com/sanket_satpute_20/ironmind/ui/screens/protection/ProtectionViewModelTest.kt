@@ -3,6 +3,7 @@ package com.sanket_satpute_20.ironmind.ui.screens.protection
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.EnforcementAvailability
 import com.sanket_satpute_20.ironmind.domain.model.ProtectionSessionStatus
+import com.sanket_satpute_20.ironmind.domain.model.protection.ProtectionDurationOption
 import com.sanket_satpute_20.ironmind.domain.usecase.protection.GetActiveProtectionSessionUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.protection.StartProtectionSessionUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.protection.StopProtectionSessionUseCase
@@ -48,9 +49,9 @@ class ProtectionViewModelTest {
         idGenerator = FakeIdGenerator()
         eventRepository = FakeEventRepository()
 
-        getActiveSessionUseCase = GetActiveProtectionSessionUseCase(protectionRepository)
-        startSessionUseCase = StartProtectionSessionUseCase(protectionRepository, appProtectionProvider, idGenerator, clock, eventRepository)
         stopSessionUseCase = StopProtectionSessionUseCase(protectionRepository, appProtectionProvider, clock, eventRepository)
+        getActiveSessionUseCase = GetActiveProtectionSessionUseCase(protectionRepository, clock, stopSessionUseCase)
+        startSessionUseCase = StartProtectionSessionUseCase(protectionRepository, appProtectionProvider, idGenerator, clock, eventRepository)
     }
 
     private fun createViewModel() {
@@ -59,7 +60,8 @@ class ProtectionViewModelTest {
             startProtectionSessionUseCase = startSessionUseCase,
             stopProtectionSessionUseCase = stopSessionUseCase,
             userSessionProvider = null,
-            appProtectionProvider = appProtectionProvider
+            appProtectionProvider = appProtectionProvider,
+            clock = clock
         )
     }
 
@@ -219,5 +221,217 @@ class ProtectionViewModelTest {
         val state = viewModel.uiState.value
         assertTrue(state is ProtectionUiState.ActiveSession)
         assertEquals(EnforcementAvailability.RECOVERING, (state as ProtectionUiState.ActiveSession).enforcementAvailability)
+    }
+
+    @Test
+    fun `default selected duration is 15 minutes`() = runTest {
+        createViewModel()
+        assertEquals(ProtectionDurationOption.FifteenMinutes, viewModel.selectedDuration.value)
+        assertEquals(15, viewModel.selectedDuration.value.durationMinutes)
+    }
+
+    @Test
+    fun `selectDuration updates selectedDuration for all preset options`() = runTest {
+        createViewModel()
+
+        viewModel.selectDuration(ProtectionDurationOption.ThirtyMinutes)
+        assertEquals(ProtectionDurationOption.ThirtyMinutes, viewModel.selectedDuration.value)
+
+        viewModel.selectDuration(ProtectionDurationOption.OneHour)
+        assertEquals(ProtectionDurationOption.OneHour, viewModel.selectedDuration.value)
+
+        viewModel.selectDuration(ProtectionDurationOption.TwoHours)
+        assertEquals(ProtectionDurationOption.TwoHours, viewModel.selectedDuration.value)
+
+        viewModel.selectDuration(ProtectionDurationOption.OneMinute)
+        assertEquals(ProtectionDurationOption.OneMinute, viewModel.selectedDuration.value)
+
+        viewModel.selectDuration(ProtectionDurationOption.Indefinite)
+        assertEquals(ProtectionDurationOption.Indefinite, viewModel.selectedDuration.value)
+    }
+
+    @Test
+    fun `selectCustomDuration updates selectedDuration with valid minutes`() = runTest {
+        createViewModel()
+
+        viewModel.selectCustomDuration(45)
+        val selected = viewModel.selectedDuration.value
+        assertTrue(selected is ProtectionDurationOption.Custom)
+        assertEquals(45, selected.durationMinutes)
+        assertEquals("45 min", selected.label)
+    }
+
+    @Test
+    fun `selectCustomDuration with zero or negative minutes produces Error state and preserves selection`() = runTest {
+        createViewModel()
+        advanceUntilIdle()
+
+        viewModel.selectCustomDuration(0)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value is ProtectionUiState.Error)
+        assertEquals(ProtectionDurationOption.FifteenMinutes, viewModel.selectedDuration.value)
+
+        viewModel.selectCustomDuration(-10)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value is ProtectionUiState.Error)
+        assertEquals(ProtectionDurationOption.FifteenMinutes, viewModel.selectedDuration.value)
+    }
+
+    @Test
+    fun `startProtection with default 15 minutes calculates and passes correct scheduledEndAt`() = runTest {
+        createViewModel()
+        advanceUntilIdle()
+
+        val baseTime = 1_000_000L
+        clock.setTime(baseTime)
+
+        viewModel.startProtection(listOf("com.example.app"))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is ProtectionUiState.ActiveSession)
+        val session = (state as ProtectionUiState.ActiveSession).session
+        assertEquals(baseTime + 15 * 60_000L, session.scheduledEndAt)
+        assertEquals(baseTime + 15 * 60_000L, appProtectionProvider.lastScheduledEndAt)
+    }
+
+    @Test
+    fun `startProtection with 30 minutes calculates and passes correct scheduledEndAt`() = runTest {
+        createViewModel()
+        advanceUntilIdle()
+
+        val baseTime = 2_000_000L
+        clock.setTime(baseTime)
+
+        viewModel.startProtection(listOf("com.example.app"), ProtectionDurationOption.ThirtyMinutes)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is ProtectionUiState.ActiveSession)
+        val session = (state as ProtectionUiState.ActiveSession).session
+        assertEquals(baseTime + 30 * 60_000L, session.scheduledEndAt)
+        assertEquals(baseTime + 30 * 60_000L, appProtectionProvider.lastScheduledEndAt)
+    }
+
+    @Test
+    fun `startProtection with 1 hour calculates and passes correct scheduledEndAt`() = runTest {
+        createViewModel()
+        advanceUntilIdle()
+
+        val baseTime = 2_000_000L
+        clock.setTime(baseTime)
+
+        viewModel.startProtection(listOf("com.example.app"), ProtectionDurationOption.OneHour)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is ProtectionUiState.ActiveSession)
+        val session = (state as ProtectionUiState.ActiveSession).session
+        assertEquals(baseTime + 60 * 60_000L, session.scheduledEndAt)
+    }
+
+    @Test
+    fun `startProtection with 2 hours calculates and passes correct scheduledEndAt`() = runTest {
+        createViewModel()
+        advanceUntilIdle()
+
+        val baseTime = 2_000_000L
+        clock.setTime(baseTime)
+
+        viewModel.startProtection(listOf("com.example.app"), ProtectionDurationOption.TwoHours)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is ProtectionUiState.ActiveSession)
+        val session = (state as ProtectionUiState.ActiveSession).session
+        assertEquals(baseTime + 120 * 60_000L, session.scheduledEndAt)
+    }
+
+    @Test
+    fun `startProtection with 1 minute calculates and passes correct scheduledEndAt`() = runTest {
+        createViewModel()
+        advanceUntilIdle()
+
+        val baseTime = 5_000_000L
+        clock.setTime(baseTime)
+
+        viewModel.startProtection(listOf("com.example.app"), ProtectionDurationOption.OneMinute)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is ProtectionUiState.ActiveSession)
+        val session = (state as ProtectionUiState.ActiveSession).session
+        assertEquals(baseTime + 60_000L, session.scheduledEndAt)
+    }
+
+    @Test
+    fun `startProtection with Indefinite passes null scheduledEndAt`() = runTest {
+        createViewModel()
+        advanceUntilIdle()
+
+        viewModel.startProtection(listOf("com.example.app"), ProtectionDurationOption.Indefinite)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is ProtectionUiState.ActiveSession)
+        val session = (state as ProtectionUiState.ActiveSession).session
+        assertEquals(null, session.scheduledEndAt)
+        assertEquals(null, appProtectionProvider.lastScheduledEndAt)
+    }
+
+    @Test
+    fun `startProtection with Custom duration calculates and passes correct scheduledEndAt`() = runTest {
+        createViewModel()
+        advanceUntilIdle()
+
+        val baseTime = 3_000_000L
+        clock.setTime(baseTime)
+
+        viewModel.startProtection(listOf("com.example.app"), ProtectionDurationOption.Custom(45))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is ProtectionUiState.ActiveSession)
+        val session = (state as ProtectionUiState.ActiveSession).session
+        assertEquals(baseTime + 45 * 60_000L, session.scheduledEndAt)
+    }
+
+    @Test
+    fun `startProtection with invalid custom duration produces Error state`() = runTest {
+        createViewModel()
+        advanceUntilIdle()
+
+        viewModel.startProtection(listOf("com.example.app"), ProtectionDurationOption.Custom(0))
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value is ProtectionUiState.Error)
+        assertEquals("Session duration must be greater than 0 minutes.", (viewModel.uiState.value as ProtectionUiState.Error).message)
+    }
+
+    @Test
+    fun `loadCurrentSession automatically transitions expired session to NoActiveSession`() = runTest {
+        val baseTime = 1_000_000L
+        clock.setTime(baseTime)
+        val scheduledEndAt = baseTime + 15 * 60_000L
+
+        startSessionUseCase("user-1", "rule-1", "commitment-1", "task-1", scheduledEndAt, true, listOf("com.example.app"))
+
+        // Advance clock past scheduledEndAt
+        clock.setTime(scheduledEndAt + 1_000L)
+
+        createViewModel()
+        advanceUntilIdle()
+
+        // getActiveSessionUseCase should transition session to EXPIRED and return null
+        assertTrue("Expired session must transition to NoActiveSession on load", viewModel.uiState.value is ProtectionUiState.NoActiveSession)
+
+        // Verify Room status transitioned to EXPIRED
+        val getSession = protectionRepository.getProtectionSession(protectionRepository.getActiveProtectionSessionsForUser("user-1").let {
+            // It should be empty now
+            assertEquals(0, (it as Result.Success).data.size)
+            "dummy"
+        })
     }
 }

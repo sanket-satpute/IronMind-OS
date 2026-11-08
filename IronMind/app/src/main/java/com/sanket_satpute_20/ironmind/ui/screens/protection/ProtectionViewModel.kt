@@ -6,13 +6,16 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.sanket_satpute_20.ironmind.IronMindApplication
+import com.sanket_satpute_20.ironmind.domain.common.Clock
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.EnforcementAvailability
 import com.sanket_satpute_20.ironmind.domain.model.ProtectionSession
+import com.sanket_satpute_20.ironmind.domain.model.protection.ProtectionDurationOption
 import com.sanket_satpute_20.ironmind.domain.provider.AppProtectionProvider
 import com.sanket_satpute_20.ironmind.domain.session.SessionState
 import com.sanket_satpute_20.ironmind.domain.session.UserSessionProvider
 import com.sanket_satpute_20.ironmind.domain.session.runWithSession
+import com.sanket_satpute_20.ironmind.infrastructure.common.SystemClock
 import kotlinx.coroutines.CancellationException
 import com.sanket_satpute_20.ironmind.domain.usecase.protection.GetActiveProtectionSessionUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.protection.StartProtectionSessionUseCase
@@ -38,11 +41,15 @@ class ProtectionViewModel(
     private val startProtectionSessionUseCase: StartProtectionSessionUseCase,
     private val stopProtectionSessionUseCase: StopProtectionSessionUseCase,
     private val userSessionProvider: UserSessionProvider? = null,
-    private val appProtectionProvider: AppProtectionProvider? = null
+    private val appProtectionProvider: AppProtectionProvider? = null,
+    private val clock: Clock = SystemClock()
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ProtectionUiState>(ProtectionUiState.Loading)
     val uiState: StateFlow<ProtectionUiState> = _uiState.asStateFlow()
+
+    private val _selectedDuration = MutableStateFlow<ProtectionDurationOption>(ProtectionDurationOption.DEFAULT)
+    val selectedDuration: StateFlow<ProtectionDurationOption> = _selectedDuration.asStateFlow()
 
     private val defaultUserId: String
         get() = userSessionProvider?.getActiveUserId() ?: SessionState.DEFAULT_LEGACY_USER_ID
@@ -135,20 +142,52 @@ class ProtectionViewModel(
         }
     }
 
-    fun startProtection(targetPackages: List<String>) {
+    fun selectDuration(option: ProtectionDurationOption) {
+        val minutes = option.durationMinutes
+        if (minutes != null && minutes <= 0) {
+            println("IronMindLifecycle [Protection] [VALIDATION_FAILURE] reason=invalid_duration minutes=$minutes")
+            _uiState.value = ProtectionUiState.Error("Session duration must be greater than 0 minutes.")
+            return
+        }
+        _selectedDuration.value = option
+    }
+
+    fun selectCustomDuration(minutes: Int) {
+        if (minutes <= 0) {
+            println("IronMindLifecycle [Protection] [VALIDATION_FAILURE] reason=invalid_duration minutes=$minutes")
+            _uiState.value = ProtectionUiState.Error("Session duration must be greater than 0 minutes.")
+            return
+        }
+        _selectedDuration.value = ProtectionDurationOption.Custom(minutes)
+    }
+
+    fun startProtection(
+        targetPackages: List<String>,
+        durationOption: ProtectionDurationOption = _selectedDuration.value
+    ) {
         if (targetPackages.isEmpty()) {
             println("IronMindLifecycle [Protection] [VALIDATION_FAILURE] reason=empty_targets")
             _uiState.value = ProtectionUiState.Error("Please select at least one application to protect.")
             return
         }
+        val durationMinutes = durationOption.durationMinutes
+        if (durationMinutes != null && durationMinutes <= 0) {
+            println("IronMindLifecycle [Protection] [VALIDATION_FAILURE] reason=invalid_duration minutes=$durationMinutes")
+            _uiState.value = ProtectionUiState.Error("Session duration must be greater than 0 minutes.")
+            return
+        }
+        val now = clock.currentTimeMillis()
+        val scheduledEndAt = durationMinutes?.let { now + (it.toLong() * 60_000L) }
+
         viewModelScope.launch {
-            println("IronMindLifecycle [Protection] [START_REQUEST] targetCount=${targetPackages.size}")
+            println("IronMindLifecycle [Protection] [START_REQUEST] targetCount=${targetPackages.size} duration=${durationOption.label} scheduledEndAt=$scheduledEndAt")
             try {
                 userSessionProvider.runWithSession { activeUid ->
                     if (!isCurrentSession(activeUid)) return@runWithSession
                     when (val result = startProtectionSessionUseCase(
                         userId = activeUid,
-                        targetPackages = targetPackages
+                        targetPackages = targetPackages,
+                        scheduledEndAt = scheduledEndAt
                     )) {
                         is Result.Success -> if (isCurrentSession(activeUid) && result.data.userId == activeUid) {
                             println("IronMindLifecycle [Protection] [START_SUCCESS] sessionId=${result.data.id}")
@@ -215,7 +254,8 @@ class ProtectionViewModel(
                     startProtectionSessionUseCase = container.startProtectionSessionUseCase,
                     stopProtectionSessionUseCase = container.stopProtectionSessionUseCase,
                     userSessionProvider = container.userSessionProvider,
-                    appProtectionProvider = container.appProtectionProvider
+                    appProtectionProvider = container.appProtectionProvider,
+                    clock = container.clock
                 )
             }
         }
