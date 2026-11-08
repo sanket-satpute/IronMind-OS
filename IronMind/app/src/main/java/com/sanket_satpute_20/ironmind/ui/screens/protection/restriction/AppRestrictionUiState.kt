@@ -12,6 +12,7 @@ data class AppRestrictionUiState(
     val activeEnforcedPackageNames: Set<String> = emptySet(),
     val uninstalledConfiguredPackages: Set<String> = emptySet(),
     val isAccessibilityPermissionGranted: Boolean = false,
+    val isProtectionActive: Boolean = false,
     val errorMessage: String? = null
 ) {
     val configuredPackages: Set<String>

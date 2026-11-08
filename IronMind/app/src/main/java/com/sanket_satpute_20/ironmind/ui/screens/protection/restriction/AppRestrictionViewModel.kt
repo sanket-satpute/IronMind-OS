@@ -15,9 +15,11 @@ import com.sanket_satpute_20.ironmind.domain.session.SessionState
 import com.sanket_satpute_20.ironmind.domain.session.UserSessionProvider
 import com.sanket_satpute_20.ironmind.domain.session.runWithSession
 import com.sanket_satpute_20.ironmind.domain.usecase.digital.GetAppRestrictionConfigsUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.digital.GetEligibleRestrictionsForEnforcementUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.digital.GetInstalledApplicationsUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.digital.SaveAppRestrictionConfigUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.digital.ToggleAppRestrictionConfigUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.protection.StopProtectionSessionUseCase
 import com.sanket_satpute_20.ironmind.data.provider.AndroidInstalledAppDiscoveryProvider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -35,7 +37,9 @@ class AppRestrictionViewModel(
     private val installedAppDiscoveryProvider: InstalledAppDiscoveryProvider,
     private val appProtectionProvider: AppProtectionProvider,
     private val protectionRepository: ProtectionRepository,
-    private val userSessionProvider: UserSessionProvider? = null
+    private val userSessionProvider: UserSessionProvider? = null,
+    private val getEligibleRestrictionsForEnforcementUseCase: GetEligibleRestrictionsForEnforcementUseCase = GetEligibleRestrictionsForEnforcementUseCase(getAppRestrictionConfigsUseCase, installedAppDiscoveryProvider),
+    private val stopProtectionSessionUseCase: StopProtectionSessionUseCase? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AppRestrictionUiState(isLoading = true))
@@ -96,14 +100,14 @@ class AppRestrictionViewModel(
                     val isAccessibilityGranted = appProtectionProvider.hasRequiredPermissions()
                     val isProtectionActive = appProtectionProvider.isProtectionActive()
 
-                    // Check active protection sessions
+                    // Check active protection sessions in repository
                     val activeSessionsResult = protectionRepository.getActiveProtectionSessionsForUser(activeUid)
                     val activeSessions = when (activeSessionsResult) {
                         is Result.Success -> activeSessionsResult.data.filter { it.status == ProtectionSessionStatus.ACTIVE }
                         is Result.Failure -> emptyList()
                     }
 
-                    // Query configured restrictions
+                    // Query configured restrictions for active user
                     val configsResult = getAppRestrictionConfigsUseCase(activeUid)
                     val configs = when (configsResult) {
                         is Result.Success -> configsResult.data
@@ -117,10 +121,14 @@ class AppRestrictionViewModel(
                         .toSet()
 
                     // Determine actively enforced packages:
-                    // An app is actively enforced ONLY when protection is running for the active user
-                    // and the app restriction is configured and enabled.
+                    // Relies on active protection running AND active session for the active user
                     val activelyEnforced = if (isProtectionActive && activeSessions.isNotEmpty()) {
-                        configs.filter { it.isEnabled }.map { it.packageName }.toSet()
+                        val enforcedFromProvider = appProtectionProvider.getEnforcedPackages()
+                        if (enforcedFromProvider.isNotEmpty()) {
+                            enforcedFromProvider
+                        } else {
+                            configs.filter { it.isEnabled }.map { it.packageName }.toSet()
+                        }
                     } else {
                         emptySet()
                     }
@@ -138,6 +146,7 @@ class AppRestrictionViewModel(
                                 activeEnforcedPackageNames = activelyEnforced,
                                 uninstalledConfiguredPackages = uninstalledPackages,
                                 isAccessibilityPermissionGranted = isAccessibilityGranted,
+                                isProtectionActive = isProtectionActive && activeSessions.isNotEmpty(),
                                 errorMessage = if (configsResult is Result.Failure) {
                                     configsResult.error.message ?: "Failed to load configurations"
                                 } else null
@@ -235,6 +244,32 @@ class AppRestrictionViewModel(
         }
     }
 
+    fun emergencyOverride() {
+        viewModelScope.launch {
+            try {
+                userSessionProvider.runWithSession { activeUid ->
+                    println("IronMindLifecycle [Protection] [EMERGENCY_OVERRIDE_TRIGGERED] user=$activeUid")
+                    val activeSessionsResult = protectionRepository.getActiveProtectionSessionsForUser(activeUid)
+                    if (activeSessionsResult is Result.Success && stopProtectionSessionUseCase != null) {
+                        for (session in activeSessionsResult.data) {
+                            stopProtectionSessionUseCase(
+                                sessionId = session.id,
+                                reason = StopProtectionSessionUseCase.StopReason.OVERRIDDEN
+                            )
+                        }
+                    }
+                    // Guarantee enforcement is completely removed
+                    appProtectionProvider.removeProtection()
+                    loadData(activeUid)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.message ?: "Emergency override failed") }
+            }
+        }
+    }
+
     fun refresh() {
         loadData(defaultUserId)
     }
@@ -260,12 +295,15 @@ class AppRestrictionViewModel(
                 val application = (this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as IronMindApplication)
                 val container = application.container
                 val discoveryProvider = AndroidInstalledAppDiscoveryProvider(application)
+                val getConfigsUseCase = GetAppRestrictionConfigsUseCase(container.protectionRepository)
 
                 AppRestrictionViewModel(
                     getInstalledApplicationsUseCase = GetInstalledApplicationsUseCase(discoveryProvider),
-                    getAppRestrictionConfigsUseCase = GetAppRestrictionConfigsUseCase(container.protectionRepository),
+                    getAppRestrictionConfigsUseCase = getConfigsUseCase,
+                    getEligibleRestrictionsForEnforcementUseCase = GetEligibleRestrictionsForEnforcementUseCase(getConfigsUseCase, discoveryProvider),
                     saveAppRestrictionConfigUseCase = SaveAppRestrictionConfigUseCase(container.protectionRepository, container.clock),
                     toggleAppRestrictionConfigUseCase = ToggleAppRestrictionConfigUseCase(container.protectionRepository, container.clock),
+                    stopProtectionSessionUseCase = container.stopProtectionSessionUseCase,
                     installedAppDiscoveryProvider = discoveryProvider,
                     appProtectionProvider = container.appProtectionProvider,
                     protectionRepository = container.protectionRepository,

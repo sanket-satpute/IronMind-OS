@@ -7,4 +7,5 @@ interface AppProtectionProvider {
     suspend fun applyProtection(targetPackages: List<String>): Result<Unit, Exception>
     suspend fun removeProtection(): Result<Unit, Exception>
     fun isProtectionActive(): Boolean
+    fun getEnforcedPackages(): Set<String> = emptySet()
 }

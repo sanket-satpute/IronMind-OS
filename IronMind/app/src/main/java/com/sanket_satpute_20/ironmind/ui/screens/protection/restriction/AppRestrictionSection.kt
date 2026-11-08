@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -30,6 +31,7 @@ fun AppRestrictionSection(
     onSaveSelectedRestrictions: () -> Unit,
     onClearSelection: () -> Unit,
     onToggleRestrictionEnabled: (String, Boolean) -> Unit,
+    onEmergencyOverride: () -> Unit,
     onRetry: () -> Unit
 ) {
     val context = LocalContext.current
@@ -101,6 +103,16 @@ fun AppRestrictionSection(
                             }
                         }
                     }
+                }
+            }
+
+            // Emergency Override Card when active enforcement is running
+            if (uiState.isProtectionActive) {
+                item {
+                    ActiveEnforcementOverrideCard(
+                        enforcedCount = uiState.activeEnforcedPackageNames.size,
+                        onEmergencyOverride = onEmergencyOverride
+                    )
                 }
             }
 
@@ -207,6 +219,52 @@ fun AppRestrictionSection(
 
             item {
                 Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActiveEnforcementOverrideCard(
+    enforcedCount: Int,
+    onEmergencyOverride: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Lock,
+                    contentDescription = "Active Enforcement",
+                    tint = MaterialTheme.colorScheme.error
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Active Restriction Enforcement in Progress",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "IronMind is actively enforcing restrictions on $enforcedCount application(s). Opening restricted apps returns you to the home screen.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Button(
+                    onClick = onEmergencyOverride,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Emergency Override")
+                }
             }
         }
     }

@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -113,6 +114,10 @@ fun ProtectionScreen(
                             onSaveSelectedRestrictions = { restrictionViewModel.saveSelectedRestrictions() },
                             onClearSelection = { restrictionViewModel.clearSelection() },
                             onToggleRestrictionEnabled = { id, enabled -> restrictionViewModel.toggleRestriction(id, enabled) },
+                            onEmergencyOverride = {
+                                restrictionViewModel.emergencyOverride()
+                                viewModel.loadCurrentSession()
+                            },
                             onRetry = { restrictionViewModel.acknowledgeError() }
                         )
                     }
@@ -155,7 +160,21 @@ fun ProtectionScreen(
                                         text = "Select apps to protect your focus. When a protected app is opened, IronMind will immediately return you to the home screen. You must grant the Accessibility permission to enable this.",
                                         style = MaterialTheme.typography.bodyMedium
                                     )
-                                    Spacer(modifier = Modifier.height(24.dp))
+                                    Spacer(modifier = Modifier.height(16.dp))
+
+                                    // Quick action: Select All Configured Restrictions
+                                    if (restrictionUiState.enabledConfiguredPackages.isNotEmpty()) {
+                                        OutlinedButton(
+                                            onClick = {
+                                                selectedPackages.clear()
+                                                selectedPackages.addAll(restrictionUiState.enabledConfiguredPackages)
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text("Select All Enabled Restrictions (${restrictionUiState.enabledConfiguredPackages.size})")
+                                        }
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                    }
 
                                     Text(
                                         text = "Targets",
@@ -211,7 +230,7 @@ fun ProtectionScreen(
                                         modifier = Modifier.fillMaxWidth(),
                                         enabled = selectedPackages.isNotEmpty()
                                     ) {
-                                        Text("Start Protection")
+                                        Text("Start Protection (${selectedPackages.size} Apps)")
                                     }
                                 }
                             }
@@ -230,7 +249,7 @@ fun ProtectionScreen(
                                         Column(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(32.dp),
+                                                .padding(24.dp),
                                             horizontalAlignment = Alignment.CenterHorizontally
                                         ) {
                                             Text(
@@ -244,17 +263,49 @@ fun ProtectionScreen(
                                                 text = "Protected apps will be closed immediately upon opening.",
                                                 style = MaterialTheme.typography.bodyLarge
                                             )
+                                            if (restrictionUiState.activeEnforcedPackageNames.isNotEmpty()) {
+                                                Spacer(modifier = Modifier.height(12.dp))
+                                                Text(
+                                                    text = "Actively enforcing ${restrictionUiState.activeEnforcedPackageNames.size} restriction(s)",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
                                         }
                                     }
 
-                                    Spacer(modifier = Modifier.height(32.dp))
+                                    Spacer(modifier = Modifier.height(24.dp))
 
-                                    Button(
-                                        onClick = { viewModel.stopProtection() },
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
-                                        Text("Stop Protection")
+                                        OutlinedButton(
+                                            onClick = { viewModel.stopProtection() },
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text("Stop Protection")
+                                        }
+
+                                        Button(
+                                            onClick = {
+                                                restrictionViewModel.emergencyOverride()
+                                                viewModel.loadCurrentSession()
+                                            },
+                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text("Emergency Override")
+                                        }
                                     }
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Text(
+                                        text = "Emergency override immediately stops all active restriction enforcement without deleting your configured rules.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
                             }
                         }
