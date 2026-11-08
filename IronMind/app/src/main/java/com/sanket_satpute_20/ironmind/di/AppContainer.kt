@@ -354,6 +354,8 @@ interface AppContainer {
     val getAppUsageObservationSettingsUseCase: GetAppUsageObservationSettingsUseCase
     val setAppUsageObservationEnabledUseCase: SetAppUsageObservationEnabledUseCase
     val collectAppUsageObservationsUseCase: CollectAppUsageObservationsUseCase
+    val appUsageObservationCheckpointDao: com.sanket_satpute_20.ironmind.data.local.dao.AppUsageObservationCheckpointDao
+    val appUsageCheckpointStore: com.sanket_satpute_20.ironmind.domain.repository.AppUsageCheckpointStore
 
     // V4.2 Notification Observation
     val notificationObservationSettingsRepository: NotificationObservationSettingsRepository
@@ -455,7 +457,8 @@ class DefaultAppContainer(
             IronMindDatabase.MIGRATION_24_25,
             IronMindDatabase.MIGRATION_25_26,
             IronMindDatabase.MIGRATION_26_27,
-            IronMindDatabase.MIGRATION_27_28
+            IronMindDatabase.MIGRATION_27_28,
+            IronMindDatabase.MIGRATION_28_29
         ).build()
     }
 
@@ -1585,13 +1588,26 @@ class DefaultAppContainer(
         SetAppUsageObservationEnabledUseCase(appUsageObservationSettingsRepository, getAppUsageObservationSettingsUseCase, observationSchedulingCoordinator)
     }
 
+    override val appUsageObservationCheckpointDao: com.sanket_satpute_20.ironmind.data.local.dao.AppUsageObservationCheckpointDao by lazy {
+        database.appUsageObservationCheckpointDao()
+    }
+
+    override val appUsageCheckpointStore: com.sanket_satpute_20.ironmind.domain.repository.AppUsageCheckpointStore by lazy {
+        com.sanket_satpute_20.ironmind.data.repository.RoomAppUsageCheckpointStore(
+            database = database,
+            observationDao = database.observationDao(),
+            checkpointDao = appUsageObservationCheckpointDao
+        )
+    }
+
     override val collectAppUsageObservationsUseCase: CollectAppUsageObservationsUseCase by lazy {
         CollectAppUsageObservationsUseCase(
             settingsRepository = appUsageObservationSettingsRepository,
             observationRepository = observationRepository,
             appUsageObservationProvider = appUsageObservationProvider,
             idGenerator = idGenerator,
-            clock = clock
+            clock = clock,
+            checkpointStore = appUsageCheckpointStore
         )
     }
 
