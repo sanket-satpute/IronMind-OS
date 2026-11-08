@@ -1099,6 +1099,7 @@ class DefaultAppContainer(
             appUsageObservationProvider = appUsageObservationProvider,
             appUsageSettingsRepository = appUsageObservationSettingsRepository,
             observationRepository = observationRepository,
+            checkpointStore = appUsageCheckpointStore,
             getDueTasksUseCase = getDueTasksUseCase,
             getGoalProgressUseCase = getGoalProgressUseCase,
             getPlanProgressUseCase = getPlanProgressUseCase

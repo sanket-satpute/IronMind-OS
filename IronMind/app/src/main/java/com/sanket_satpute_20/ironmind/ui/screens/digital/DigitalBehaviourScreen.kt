@@ -383,6 +383,7 @@ private fun DailyUsageSummaryCard(
                 text = when (availability) {
                     SourceAvailability.AVAILABLE -> "Observed screen time"
                     SourceAvailability.EMPTY_NO_DATA -> "No device activity recorded for this date"
+                    SourceAvailability.PARTIAL_HISTORY -> "Partial observation history"
                     SourceAvailability.PERMISSION_DENIED -> "Permission denied: Duration unavailable"
                     SourceAvailability.PERMISSION_NOT_REQUESTED -> "Observation disabled: Duration unavailable"
                     SourceAvailability.UNAVAILABLE_HARDWARE -> "Hardware stats unavailable"
@@ -587,6 +588,8 @@ private fun EmptyUsageCard(availability: SourceAvailability) {
                 text = when (availability) {
                     SourceAvailability.PERMISSION_DENIED -> "Usage Access permission required to observe applications."
                     SourceAvailability.PERMISSION_NOT_REQUESTED -> "Observation disabled. Enable in Settings."
+                    SourceAvailability.PARTIAL_HISTORY -> "Collection history is incomplete for this interval."
+                    SourceAvailability.STALE_DATA -> "Usage data is outdated. Pull to refresh."
                     else -> "No application usage recorded for this date."
                 },
                 style = MaterialTheme.typography.bodyMedium,

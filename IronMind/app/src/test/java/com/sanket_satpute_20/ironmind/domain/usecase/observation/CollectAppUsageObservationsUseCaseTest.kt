@@ -14,6 +14,8 @@ import com.sanket_satpute_20.ironmind.domain.repository.AppUsageObservationSetti
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeObservationRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -431,6 +433,92 @@ class CollectAppUsageObservationsUseCaseTest {
 
         val cp = (checkpointStore.getCheckpoint(userId) as Result.Success).data
         assertEquals("Checkpoint must not advance when user consent is disabled", baseEpoch, cp?.lastCollectedIntervalEndMs)
+    }
+
+    // =========================================================================
+    // 6. Concurrency, Serialization & Idempotence
+    // =========================================================================
+
+    @Test
+    fun `same-user collection is serialized across concurrent invocations`() = runTest {
+        val userId = "user-serialize"
+        val event = AppUsageEvent("com.app.test", baseEpoch - 10000, baseEpoch, 10000)
+        appUsageObservationProvider.mockEvents = listOf(event)
+
+        // Launch two concurrent invocations for the same user
+        val deferred1 = async(Dispatchers.Default) { useCase(userId) }
+        val deferred2 = async(Dispatchers.Default) { useCase(userId) }
+
+        val res1 = deferred1.await()
+        val res2 = deferred2.await()
+
+        assertTrue(res1 is Result.Success)
+        assertTrue(res2 is Result.Success)
+
+        // One should collect the event, the second sees up-to-date checkpoint and collects 0
+        val data1 = (res1 as Result.Success<Int>).data
+        val data2 = (res2 as Result.Success<Int>).data
+        val counts = listOf(data1, data2)
+        assertEquals("Total batches committed must be 1 (no duplicate insertion)", 1, checkpointStore.committedObservationBatches.size)
+        assertTrue("One call collects 1 observation, serialized duplicate collects 0", counts.contains(1) && counts.contains(0))
+    }
+
+    @Test
+    fun `different-user collection remains isolated across concurrent invocations`() = runTest {
+        val user1 = "user-concurrent-1"
+        val user2 = "user-concurrent-2"
+        val event1 = AppUsageEvent("com.app.one", baseEpoch - 10000, baseEpoch, 10000)
+        val event2 = AppUsageEvent("com.app.two", baseEpoch - 10000, baseEpoch, 10000)
+        appUsageObservationProvider.mockEvents = listOf(event1, event2)
+
+        val deferred1 = async(Dispatchers.Default) { useCase(user1) }
+        val deferred2 = async(Dispatchers.Default) { useCase(user2) }
+
+        val res1 = deferred1.await()
+        val res2 = deferred2.await()
+
+        assertTrue("User 1 collection must succeed", res1 is Result.Success)
+        assertTrue("User 2 collection must succeed", res2 is Result.Success)
+
+        val cp1 = (checkpointStore.getCheckpoint(user1) as Result.Success<AppUsageCheckpoint?>).data
+        val cp2 = (checkpointStore.getCheckpoint(user2) as Result.Success<AppUsageCheckpoint?>).data
+        assertEquals(baseEpoch, cp1?.lastCollectedIntervalEndMs)
+        assertEquals(baseEpoch, cp2?.lastCollectedIntervalEndMs)
+    }
+
+    @Test
+    fun `failure during persistence rolls back and does not advance checkpoint`() = runTest {
+        val userId = "user-fail-rollback"
+        val initialCheckpoint = baseEpoch - 3600_000L
+        checkpointStore.saveCheckpoint(AppUsageCheckpoint(userId, initialCheckpoint, null, null, initialCheckpoint))
+
+        val event = AppUsageEvent("com.app.test", baseEpoch - 10000, baseEpoch, 10000)
+        appUsageObservationProvider.mockEvents = listOf(event)
+        checkpointStore.shouldFailTransaction = true
+
+        val result = useCase(userId)
+        assertTrue("Collection must fail on transaction error", result is Result.Failure)
+
+        val cp = (checkpointStore.getCheckpoint(userId) as Result.Success).data
+        assertEquals("Checkpoint must remain at initial position on failure", initialCheckpoint, cp?.lastCollectedIntervalEndMs)
+    }
+
+    @Test
+    fun `retried collection remains idempotent without creating duplicate observations`() = runTest {
+        val userId = "user-idempotent"
+        val event = AppUsageEvent("com.app.test", baseEpoch - 10000, baseEpoch, 10000)
+        appUsageObservationProvider.mockEvents = listOf(event)
+
+        val firstRun = useCase(userId)
+        assertTrue(firstRun is Result.Success)
+        assertEquals(1, (firstRun as Result.Success).data)
+        assertEquals(1, checkpointStore.committedObservationBatches.size)
+
+        // Run collection a second time with same clock / data
+        val secondRun = useCase(userId)
+        assertTrue(secondRun is Result.Success)
+        assertEquals(0, (secondRun as Result.Success).data)
+        assertEquals("No second observation batch must be committed", 1, checkpointStore.committedObservationBatches.size)
     }
 
     // =========================================================================

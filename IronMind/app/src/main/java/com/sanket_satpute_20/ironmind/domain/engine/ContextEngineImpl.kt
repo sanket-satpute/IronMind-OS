@@ -15,6 +15,7 @@ import com.sanket_satpute_20.ironmind.domain.model.context.*
 import com.sanket_satpute_20.ironmind.domain.model.observation.ObservationType
 import com.sanket_satpute_20.ironmind.domain.model.pattern.PatternStatus
 import com.sanket_satpute_20.ironmind.domain.provider.AppUsageObservationProvider
+import com.sanket_satpute_20.ironmind.domain.repository.AppUsageCheckpointStore
 import com.sanket_satpute_20.ironmind.domain.repository.AppUsageObservationSettingsRepository
 import com.sanket_satpute_20.ironmind.domain.repository.BarrierRepository
 import com.sanket_satpute_20.ironmind.domain.repository.CommitmentRepository
@@ -53,6 +54,8 @@ class ContextEngineImpl(
     private val appUsageObservationProvider: AppUsageObservationProvider? = null,
     private val appUsageSettingsRepository: AppUsageObservationSettingsRepository? = null,
     private val observationRepository: ObservationRepository? = null,
+    private val checkpointStore: AppUsageCheckpointStore? = null,
+    private val maxStaleDelayMs: Long = 4 * 60 * 60 * 1000L, // 4 hours
     private val getDueTasksUseCase: GetDueTasksUseCase? = null,
     private val getGoalProgressUseCase: GetGoalProgressUseCase? = null,
     private val getPlanProgressUseCase: GetPlanProgressUseCase? = null
@@ -439,69 +442,46 @@ class ContextEngineImpl(
 
             val isUsagePermissionGranted = appUsageObservationProvider?.isPermissionGranted() ?: false
 
-            val (permStatus, digitalAvailability, digitalNotes) = when {
+            val (permStatus, baseAvailability, digitalNotes) = when {
                 appUsageObservationProvider == null ->
                     Triple(UsagePermissionStatus.UNAVAILABLE, SourceAvailability.UNAVAILABLE_HARDWARE, "AppUsageObservationProvider not configured")
                 !isUsageSettingEnabled ->
                     Triple(UsagePermissionStatus.DENIED, SourceAvailability.PERMISSION_NOT_REQUESTED, "Digital usage observation disabled in user settings")
                 !isUsagePermissionGranted ->
                     Triple(UsagePermissionStatus.DENIED, SourceAvailability.PERMISSION_DENIED, "PACKAGE_USAGE_STATS permission not granted in Android Settings")
+                observationRepository == null ->
+                    Triple(UsagePermissionStatus.UNAVAILABLE, SourceAvailability.UNAVAILABLE_HARDWARE, "ObservationRepository not configured")
                 else ->
                     Triple(UsagePermissionStatus.GRANTED, SourceAvailability.AVAILABLE, null)
             }
 
             val appSummaries = mutableListOf<AppUsageSummary>()
             var lastObservedUsageTime: Long? = null
+            var finalDigitalAvailability = baseAvailability
+            var isDigitalStale = false
 
-            if (permStatus == UsagePermissionStatus.GRANTED) {
-                if (observationRepository != null) {
-                    val obsResult = observationRepository.getObservationsForTimeWindow(
-                        userId = userId,
-                        type = ObservationType.APP_USAGE_SESSION,
-                        startTimeMs = startTime,
-                        endTimeMs = endTime
-                    )
-                    if (obsResult is Result.Success) {
-                        val observations = obsResult.data.filter { it.userId == userId }
-                        val grouped = observations.groupBy { it.value }
-                        for ((pkg, obsList) in grouped) {
-                            val totalDuration = obsList.sumOf { obs ->
-                                obs.context.removePrefix("duration_ms=").toLongOrNull() ?: 0L
-                            }
-                            val firstObs = obsList.minOfOrNull { it.occurredAt }
-                            val lastObs = obsList.maxOfOrNull { obs ->
-                                val dur = obs.context.removePrefix("duration_ms=").toLongOrNull() ?: 0L
-                                obs.occurredAt + dur
-                            }
-                            if (lastObs != null && (lastObservedUsageTime == null || lastObs > lastObservedUsageTime)) {
-                                lastObservedUsageTime = lastObs
-                            }
-                            appSummaries.add(
-                                AppUsageSummary(
-                                    packageName = pkg,
-                                    totalDurationMs = totalDuration,
-                                    sessionCount = obsList.size,
-                                    firstObservedAt = firstObs,
-                                    lastObservedAt = lastObs,
-                                    authority = EpistemicAuthority.SYSTEM_RECORDED_OBSERVATION
-                                )
-                            )
+            val checkpointResult = checkpointStore?.getCheckpoint(userId)
+            val checkpoint = (checkpointResult as? Result.Success)?.data
+
+            if (permStatus == UsagePermissionStatus.GRANTED && observationRepository != null) {
+                val obsResult = observationRepository.getObservationsForTimeWindow(
+                    userId = userId,
+                    type = ObservationType.APP_USAGE_SESSION,
+                    startTimeMs = startTime,
+                    endTimeMs = endTime
+                )
+                if (obsResult is Result.Success) {
+                    val observations = obsResult.data.filter { it.userId == userId }
+                    val grouped = observations.groupBy { it.value }
+                    for ((pkg, obsList) in grouped) {
+                        val totalDuration = obsList.sumOf { obs ->
+                            obs.context.removePrefix("duration_ms=").toLongOrNull() ?: 0L
                         }
-                        appSummaries.sortWith(
-                            compareByDescending<AppUsageSummary> { it.totalDurationMs }
-                                .thenBy { it.packageName }
-                        )
-                    }
-                } else if (appUsageObservationProvider != null) {
-                    // Fallback for tests/environments where observationRepository is not configured
-                    val rawEvents = appUsageObservationProvider.getAppUsageSince(startTime)
-                    val windowEvents = rawEvents.filter { it.startTimeMillis < endTime && it.endTimeMillis >= startTime }
-
-                    val grouped = windowEvents.groupBy { it.packageName }
-                    for ((pkg, events) in grouped) {
-                        val totalDuration = events.sumOf { it.totalDurationMillis }
-                        val firstObs = events.minOfOrNull { it.startTimeMillis }
-                        val lastObs = events.maxOfOrNull { it.endTimeMillis }
+                        val firstObs = obsList.minOfOrNull { it.occurredAt }
+                        val lastObs = obsList.maxOfOrNull { obs ->
+                            val dur = obs.context.removePrefix("duration_ms=").toLongOrNull() ?: 0L
+                            obs.occurredAt + dur
+                        }
                         if (lastObs != null && (lastObservedUsageTime == null || lastObs > lastObservedUsageTime)) {
                             lastObservedUsageTime = lastObs
                         }
@@ -509,7 +489,7 @@ class ContextEngineImpl(
                             AppUsageSummary(
                                 packageName = pkg,
                                 totalDurationMs = totalDuration,
-                                sessionCount = events.size,
+                                sessionCount = obsList.size,
                                 firstObservedAt = firstObs,
                                 lastObservedAt = lastObs,
                                 authority = EpistemicAuthority.SYSTEM_RECORDED_OBSERVATION
@@ -520,13 +500,46 @@ class ContextEngineImpl(
                         compareByDescending<AppUsageSummary> { it.totalDurationMs }
                             .thenBy { it.packageName }
                     )
+                } else if (obsResult is Result.Failure) {
+                    finalDigitalAvailability = SourceAvailability.UNAVAILABLE_HARDWARE
                 }
-            }
 
-            val finalDigitalAvailability = when {
-                permStatus != UsagePermissionStatus.GRANTED -> digitalAvailability
-                appSummaries.isEmpty() -> SourceAvailability.EMPTY_NO_DATA
-                else -> SourceAvailability.AVAILABLE
+                if (finalDigitalAvailability != SourceAvailability.UNAVAILABLE_HARDWARE) {
+                    val dataAge = checkpoint?.lastCollectedIntervalEndMs?.let { now - it }
+                    isDigitalStale = dataAge?.let { it > maxStaleDelayMs } ?: false
+
+                    if (checkpoint != null && isDigitalStale) {
+                        finalDigitalAvailability = SourceAvailability.STALE_DATA
+                    } else if (appSummaries.isNotEmpty()) {
+                        // Persisted observations exist. Verify that collection has reached requested window end.
+                        if (checkpoint == null || checkpoint.lastCollectedIntervalEndMs < endTime) {
+                            finalDigitalAvailability = SourceAvailability.PARTIAL_HISTORY
+                        } else {
+                            finalDigitalAvailability = SourceAvailability.AVAILABLE
+                        }
+                    } else {
+                        // 0 observations in requested window.
+                        if (checkpoint != null && checkpoint.lastCollectedIntervalEndMs >= endTime) {
+                            // Check whether collection history proves coverage at or before startTime
+                            val priorResult = observationRepository.getObservationsForTimeWindow(
+                                userId = userId,
+                                type = ObservationType.APP_USAGE_SESSION,
+                                startTimeMs = 0L,
+                                endTimeMs = startTime
+                            )
+                            val hasPriorCoverage = (priorResult is Result.Success && priorResult.data.any { it.userId == userId }) ||
+                                (checkpoint.activeSessionStartTimeMs != null && checkpoint.activeSessionStartTimeMs <= startTime)
+
+                            if (hasPriorCoverage) {
+                                finalDigitalAvailability = SourceAvailability.EMPTY_NO_DATA
+                            } else {
+                                finalDigitalAvailability = SourceAvailability.PARTIAL_HISTORY
+                            }
+                        } else {
+                            finalDigitalAvailability = SourceAvailability.PARTIAL_HISTORY
+                        }
+                    }
+                }
             }
 
             // Focus and Protection Activity
@@ -549,13 +562,18 @@ class ContextEngineImpl(
             )
 
             provenanceMap["AppUsage"] = SourceProvenanceAndFreshness(
-                sourceName = if (observationRepository != null) "Room_Observation" else "UsageStatsManager",
+                sourceName = "Room_Observation",
                 availability = finalDigitalAvailability,
                 isPermissionGranted = isUsagePermissionGranted,
-                lastRecordedAt = lastObservedUsageTime,
-                dataAgeMs = lastObservedUsageTime?.let { now - it },
-                isStale = lastObservedUsageTime?.let { (now - it) > 86_400_000L } ?: false,
-                notes = digitalNotes
+                lastRecordedAt = lastObservedUsageTime ?: checkpoint?.lastCollectedIntervalEndMs,
+                dataAgeMs = checkpoint?.lastCollectedIntervalEndMs?.let { now - it }
+                    ?: (lastObservedUsageTime?.let { now - it }),
+                isStale = isDigitalStale,
+                notes = digitalNotes ?: when (finalDigitalAvailability) {
+                    SourceAvailability.PARTIAL_HISTORY -> "Collection history is incomplete for requested window [${startTime}, ${endTime}]"
+                    SourceAvailability.STALE_DATA -> "Collection checkpoint is older than freshness threshold (${maxStaleDelayMs / 3600_000}h)"
+                    else -> null
+                }
             )
 
             provenanceMap["FocusProtection"] = SourceProvenanceAndFreshness(

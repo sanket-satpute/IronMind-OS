@@ -88,7 +88,7 @@ class ExecuteObservationCollectionUseCaseTest {
     }
 
     @Test
-    fun `Concurrency protection prevents overlapping executions`() = runTest {
+    fun `Concurrency protection prevents overlapping executions for same user`() = runTest {
         val fakeCollector = FakeCollector("C1") { 
             delay(100) // Simulate work
             Result.Success(5)
@@ -96,7 +96,7 @@ class ExecuteObservationCollectionUseCaseTest {
         val collectObservationsUseCase = CollectObservationsUseCase(listOf(fakeCollector))
         val useCase = ExecuteObservationCollectionUseCase(collectObservationsUseCase)
         
-        // Launch two concurrent executions
+        // Launch two concurrent executions for the same user
         val deferred1 = async(Dispatchers.Default) { useCase("user-1") }
         val deferred2 = async(Dispatchers.Default) { useCase("user-1") }
         
@@ -110,6 +110,27 @@ class ExecuteObservationCollectionUseCaseTest {
         val failure = results.filterIsInstance<Result.Failure<ObservationExecutionError>>().firstOrNull()
         assertTrue(failure != null)
         assertTrue(failure?.error is ObservationExecutionError.AlreadyRunning)
+    }
+
+    @Test
+    fun `Different users remain isolated and can execute concurrently`() = runTest {
+        val fakeCollector = FakeCollector("C1") { 
+            delay(50) // Simulate work
+            Result.Success(5)
+        }
+        val collectObservationsUseCase = CollectObservationsUseCase(listOf(fakeCollector))
+        val useCase = ExecuteObservationCollectionUseCase(collectObservationsUseCase)
+        
+        // Launch concurrent executions for two different users
+        val deferred1 = async(Dispatchers.Default) { useCase("user-A") }
+        val deferred2 = async(Dispatchers.Default) { useCase("user-B") }
+        
+        val result1 = deferred1.await()
+        val result2 = deferred2.await()
+        
+        // Both different users must succeed without blocking or failing each other
+        assertTrue("user-A collection must succeed", result1 is Result.Success)
+        assertTrue("user-B collection must succeed", result2 is Result.Success)
     }
     
     @Test

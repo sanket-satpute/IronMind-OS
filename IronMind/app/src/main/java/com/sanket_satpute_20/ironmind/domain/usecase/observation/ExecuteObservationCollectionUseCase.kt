@@ -1,7 +1,7 @@
 package com.sanket_satpute_20.ironmind.domain.usecase.observation
 
 import com.sanket_satpute_20.ironmind.domain.common.Result
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.ConcurrentHashMap
 
 sealed class ObservationExecutionError {
     data class CollectionFailed(val exception: Exception) : ObservationExecutionError()
@@ -11,19 +11,21 @@ sealed class ObservationExecutionError {
 /**
  * A controlled execution boundary for observation collection.
  * 
- * Serves as the single entry point for all observation collection triggers (e.g., manual, future WorkManager).
- * Uses a lightweight in-process guard (AtomicBoolean) to prevent concurrent execution overlaps
- * which could cause redundant database I/O or race conditions across providers.
+ * Serves as the single entry point for all observation collection triggers (e.g., manual, lifecycle, WorkManager).
+ * Uses a per-user in-process guard to prevent concurrent execution overlaps for the same user
+ * while preserving multi-user isolation.
  * 
  * Does NOT implement background scheduling.
  */
 class ExecuteObservationCollectionUseCase(
     private val collectObservationsUseCase: CollectObservationsUseCase
 ) {
-    private val isRunning = AtomicBoolean(false)
+    companion object {
+        private val runningUsers = ConcurrentHashMap.newKeySet<String>()
+    }
 
     suspend operator fun invoke(userId: String): Result<ObservationCollectionSummary, ObservationExecutionError> {
-        if (!isRunning.compareAndSet(false, true)) {
+        if (!runningUsers.add(userId)) {
             println("IronMindLifecycle ObservationExecution [SKIPPED_ALREADY_RUNNING] userId=$userId")
             return Result.Failure(ObservationExecutionError.AlreadyRunning)
         }
@@ -47,13 +49,13 @@ class ExecuteObservationCollectionUseCase(
                     Result.Failure(ObservationExecutionError.CollectionFailed(result.error))
                 }
             }
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             val duration = System.currentTimeMillis() - startTime
             // Log a safe failure event without arbitrary exception dumps
             println("IronMindLifecycle ObservationExecution [FAILED] userId=$userId error=unexpected_exception durationMs=$duration")
             Result.Failure(ObservationExecutionError.CollectionFailed(e))
         } finally {
-            isRunning.set(false)
+            runningUsers.remove(userId)
         }
     }
 }

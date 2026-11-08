@@ -17,10 +17,13 @@ import com.sanket_satpute_20.ironmind.domain.repository.AppUsageObservationSetti
 import com.sanket_satpute_20.ironmind.domain.repository.ObservationRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.ZoneId
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Collects app usage observations from the OS and persists them.
@@ -48,157 +51,164 @@ class CollectAppUsageObservationsUseCase(
     private val maxChunkDurationMillis: Long = 6L * 60 * 60 * 1000L // 6 hours per chunk
 ) : ObservationCollector {
 
+    companion object {
+        private val userMutexes = ConcurrentHashMap<String, Mutex>()
+    }
+
     override val collectorName: String = "AppUsage"
 
     override suspend operator fun invoke(userId: String): Result<Int, Exception> = withContext(Dispatchers.IO) {
-        try {
-            // Guard 1: User consent
-            val settingsResult = settingsRepository.getSettings(userId)
-            if (settingsResult is Result.Failure) return@withContext Result.Failure(settingsResult.error)
-            val settings = (settingsResult as Result.Success).data
+        val mutex = userMutexes.computeIfAbsent(userId) { Mutex() }
+        mutex.withLock {
+            try {
+                // Guard 1: User consent
+                val settingsResult = settingsRepository.getSettings(userId)
+                if (settingsResult is Result.Failure) return@withLock Result.Failure(settingsResult.error)
+                val settings = (settingsResult as Result.Success).data
 
-            if (!settings.isEnabled) {
-                println("IronMindLifecycle [AppUsageObservation] [SKIPPED] reason=disabled userId=$userId")
-                return@withContext Result.Success(0)
-            }
-
-            // Guard 2: OS permission (Special App Access: Usage Access)
-            if (!appUsageObservationProvider.isPermissionGranted()) {
-                println("IronMindLifecycle [AppUsageObservation] [SKIPPED] reason=permission_not_granted userId=$userId")
-                return@withContext Result.Success(0)
-            }
-
-            val now = clock.currentTimeMillis()
-
-            // Step 2 & 5: Load persistent checkpoint cursor
-            val existingCheckpoint = if (checkpointStore != null) {
-                when (val cpResult = checkpointStore.getCheckpoint(userId)) {
-                    is Result.Success -> cpResult.data
-                    is Result.Failure -> return@withContext Result.Failure(cpResult.error)
-                }
-            } else {
-                null
-            }
-
-            // Determine fromTime and initial active foreground state
-            val fromTime: Long
-            var currentActiveSession: ActiveForegroundSession?
-
-            if (existingCheckpoint != null) {
-                val lastCollected = existingCheckpoint.lastCollectedIntervalEndMs
-                if (lastCollected >= now) {
-                    println("IronMindLifecycle [AppUsageObservation] [UP_TO_DATE] userId=$userId lastCollected=$lastCollected now=$now")
-                    return@withContext Result.Success(0)
+                if (!settings.isEnabled) {
+                    println("IronMindLifecycle [AppUsageObservation] [SKIPPED] reason=disabled userId=$userId")
+                    return@withLock Result.Success(0)
                 }
 
-                // Protect against checkpoints older than Android's available UsageEvents retention
-                if (lastCollected < now - maxRetentionMillis) {
-                    val gapMs = (now - maxRetentionMillis) - lastCollected
-                    println("IronMindLifecycle [AppUsageObservation] [DATA_GAP_BEYOND_RETENTION] userId=$userId gapMs=$gapMs")
-                    fromTime = now - maxRetentionMillis
-                    currentActiveSession = null // active session state from > 7 days ago is stale
+                // Guard 2: OS permission (Special App Access: Usage Access)
+                if (!appUsageObservationProvider.isPermissionGranted()) {
+                    println("IronMindLifecycle [AppUsageObservation] [SKIPPED] reason=permission_not_granted userId=$userId")
+                    return@withLock Result.Success(0)
+                }
+
+                val now = clock.currentTimeMillis()
+
+                // Step 2 & 5: Load persistent checkpoint cursor
+                val existingCheckpoint = if (checkpointStore != null) {
+                    when (val cpResult = checkpointStore.getCheckpoint(userId)) {
+                        is Result.Success -> cpResult.data
+                        is Result.Failure -> return@withLock Result.Failure(cpResult.error)
+                    }
                 } else {
-                    fromTime = lastCollected
-                    currentActiveSession = existingCheckpoint.activePackageName?.let { pkg ->
-                        existingCheckpoint.activeSessionStartTimeMs?.let { start ->
-                            ActiveForegroundSession(pkg, start)
+                    null
+                }
+
+                // Determine fromTime and initial active foreground state
+                val fromTime: Long
+                var currentActiveSession: ActiveForegroundSession?
+
+                if (existingCheckpoint != null) {
+                    val lastCollected = existingCheckpoint.lastCollectedIntervalEndMs
+                    if (lastCollected >= now) {
+                        println("IronMindLifecycle [AppUsageObservation] [UP_TO_DATE] userId=$userId lastCollected=$lastCollected now=$now")
+                        return@withLock Result.Success(0)
+                    }
+
+                    // Protect against checkpoints older than Android's available UsageEvents retention
+                    if (lastCollected < now - maxRetentionMillis) {
+                        val gapMs = (now - maxRetentionMillis) - lastCollected
+                        println("IronMindLifecycle [AppUsageObservation] [DATA_GAP_BEYOND_RETENTION] userId=$userId gapMs=$gapMs")
+                        fromTime = now - maxRetentionMillis
+                        currentActiveSession = null // active session state from > 7 days ago is stale
+                    } else {
+                        fromTime = lastCollected
+                        currentActiveSession = existingCheckpoint.activePackageName?.let { pkg ->
+                            existingCheckpoint.activeSessionStartTimeMs?.let { start ->
+                                ActiveForegroundSession(pkg, start)
+                            }
                         }
                     }
+                } else {
+                    // Initial run for this user
+                    fromTime = now - defaultInitialLookbackMillis
+                    currentActiveSession = null
                 }
-            } else {
-                // Initial run for this user
-                fromTime = now - defaultInitialLookbackMillis
-                currentActiveSession = null
-            }
 
-            // Process collection in bounded sequential chunks to avoid memory spikes and huge transactions
-            var chunkStart = fromTime
-            var totalSavedCount = 0
+                // Process collection in bounded sequential chunks to avoid memory spikes and huge transactions
+                var chunkStart = fromTime
+                var totalSavedCount = 0
 
-            while (chunkStart < now) {
-                val chunkEnd = minOf(chunkStart + maxChunkDurationMillis, now)
+                while (chunkStart < now) {
+                    val chunkEnd = minOf(chunkStart + maxChunkDurationMillis, now)
 
-                val reconstruction = appUsageObservationProvider.getAppUsageBetween(
-                    fromTimeMillis = chunkStart,
-                    toTimeMillis = chunkEnd,
-                    initialActiveSession = currentActiveSession
-                )
+                    val reconstruction = appUsageObservationProvider.getAppUsageBetween(
+                        fromTimeMillis = chunkStart,
+                        toTimeMillis = chunkEnd,
+                        initialActiveSession = currentActiveSession
+                    )
 
-                currentActiveSession = reconstruction.activeSession
+                    currentActiveSession = reconstruction.activeSession
 
-                val chunkObservations = mutableListOf<Observation>()
+                    val chunkObservations = mutableListOf<Observation>()
 
-                for (event in reconstruction.events) {
-                    // Step 3: Split sessions crossing midnight into daily bounded slices
-                    val slices = splitEventByDay(event, zoneId)
+                    for (event in reconstruction.events) {
+                        // Step 3: Split sessions crossing midnight into daily bounded slices
+                        val slices = splitEventByDay(event, zoneId)
 
-                    for (slice in slices) {
-                        // Deterministic ID generation based on user, package, and slice start time
-                        val deterministicId = UUID.nameUUIDFromBytes(
-                            "appusage_${userId}_${slice.packageName}_${slice.startTimeMillis}".toByteArray()
-                        ).toString()
+                        for (slice in slices) {
+                            // Deterministic ID generation based on user, package, and slice start time
+                            val deterministicId = UUID.nameUUIDFromBytes(
+                                "appusage_${userId}_${slice.packageName}_${slice.startTimeMillis}".toByteArray()
+                            ).toString()
 
-                        chunkObservations.add(
-                            Observation(
-                                id = deterministicId,
-                                userId = userId,
-                                type = ObservationType.APP_USAGE_SESSION,
-                                source = ObservationSource.APP_USAGE,
-                                occurredAt = slice.startTimeMillis,
-                                recordedAt = now,
-                                subjectId = null,
-                                value = slice.packageName,
-                                context = "duration_ms=${slice.totalDurationMillis}",
-                                confidence = null,
-                                provenance = ObservationProvenance(
+                            chunkObservations.add(
+                                Observation(
+                                    id = deterministicId,
+                                    userId = userId,
+                                    type = ObservationType.APP_USAGE_SESSION,
                                     source = ObservationSource.APP_USAGE,
-                                    sourceReference = "UsageStatsManager",
-                                    capturedAt = now
+                                    occurredAt = slice.startTimeMillis,
+                                    recordedAt = now,
+                                    subjectId = null,
+                                    value = slice.packageName,
+                                    context = "duration_ms=${slice.totalDurationMillis}",
+                                    confidence = null,
+                                    provenance = ObservationProvenance(
+                                        source = ObservationSource.APP_USAGE,
+                                        sourceReference = "UsageStatsManager",
+                                        capturedAt = now
+                                    )
                                 )
                             )
-                        )
-                    }
-                }
-
-                val newCheckpoint = AppUsageCheckpoint(
-                    userId = userId,
-                    lastCollectedIntervalEndMs = chunkEnd,
-                    activePackageName = currentActiveSession?.packageName,
-                    activeSessionStartTimeMs = currentActiveSession?.startTimeMillis,
-                    updatedAt = now,
-                    schemaVersion = 1
-                )
-
-                // Step 4: Atomic persistence
-                if (checkpointStore != null) {
-                    val saveResult = checkpointStore.saveObservationsWithCheckpoint(
-                        observations = chunkObservations,
-                        checkpoint = newCheckpoint
-                    )
-                    if (saveResult is Result.Failure) {
-                        println("IronMindLifecycle [AppUsageObservation] [CHUNK_PERSIST_FAILED] userId=$userId chunk=[$chunkStart, $chunkEnd] error=${saveResult.error.message}")
-                        return@withContext Result.Failure(saveResult.error)
-                    }
-                } else {
-                    for (obs in chunkObservations) {
-                        val insertResult = observationRepository.insertObservation(obs)
-                        if (insertResult is Result.Failure) {
-                            return@withContext Result.Failure(insertResult.error)
                         }
                     }
+
+                    val newCheckpoint = AppUsageCheckpoint(
+                        userId = userId,
+                        lastCollectedIntervalEndMs = chunkEnd,
+                        activePackageName = currentActiveSession?.packageName,
+                        activeSessionStartTimeMs = currentActiveSession?.startTimeMillis,
+                        updatedAt = now,
+                        schemaVersion = 1
+                    )
+
+                    // Step 4: Atomic persistence
+                    if (checkpointStore != null) {
+                        val saveResult = checkpointStore.saveObservationsWithCheckpoint(
+                            observations = chunkObservations,
+                            checkpoint = newCheckpoint
+                        )
+                        if (saveResult is Result.Failure) {
+                            println("IronMindLifecycle [AppUsageObservation] [CHUNK_PERSIST_FAILED] userId=$userId chunk=[$chunkStart, $chunkEnd] error=${saveResult.error.message}")
+                            return@withLock Result.Failure(saveResult.error)
+                        }
+                    } else {
+                        for (obs in chunkObservations) {
+                            val insertResult = observationRepository.insertObservation(obs)
+                            if (insertResult is Result.Failure) {
+                                return@withLock Result.Failure(insertResult.error)
+                            }
+                        }
+                    }
+
+                    totalSavedCount += chunkObservations.size
+                    chunkStart = chunkEnd
                 }
 
-                totalSavedCount += chunkObservations.size
-                chunkStart = chunkEnd
+                println("IronMindLifecycle [AppUsageObservation] [COLLECTED] userId=$userId count=$totalSavedCount active=${currentActiveSession?.packageName}")
+                Result.Success(totalSavedCount)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                println("IronMindLifecycle [AppUsageObservation] [COLLECT_FAILED] userId=$userId error=${e.message}")
+                Result.Failure(e)
             }
-
-            println("IronMindLifecycle [AppUsageObservation] [COLLECTED] userId=$userId count=$totalSavedCount active=${currentActiveSession?.packageName}")
-            Result.Success(totalSavedCount)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            println("IronMindLifecycle [AppUsageObservation] [COLLECT_FAILED] userId=$userId error=${e.message}")
-            Result.Failure(e)
         }
     }
 

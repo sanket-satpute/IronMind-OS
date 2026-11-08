@@ -432,9 +432,43 @@ class ContextEngineImplTest {
     // Phase 3.6.6.3: Unified Digital Behaviour & Observation Ingestion Tests
     // =========================================================================
 
-    private class FakeTestAppUsageProvider(var permissionGranted: Boolean = true) : AppUsageObservationProvider {
+    private class FakeTestAppUsageProvider(
+        var permissionGranted: Boolean = true,
+        val allowDirectQuery: Boolean = false
+    ) : AppUsageObservationProvider {
         override fun isPermissionGranted(): Boolean = permissionGranted
-        override fun getAppUsageSince(fromTimeMillis: Long): List<AppUsageEvent> = emptyList()
+        override fun getAppUsageSince(fromTimeMillis: Long): List<AppUsageEvent> {
+            if (!allowDirectQuery) {
+                throw UnsupportedOperationException("ContextEngine must never query AppUsageObservationProvider.getAppUsageSince directly; Room is authoritative source")
+            }
+            return emptyList()
+        }
+    }
+
+    private class FakeTestAppUsageCheckpointStore : AppUsageCheckpointStore {
+        val checkpoints = mutableMapOf<String, AppUsageCheckpoint>()
+
+        override suspend fun getCheckpoint(userId: String): Result<AppUsageCheckpoint?, Exception> {
+            return Result.Success(checkpoints[userId])
+        }
+
+        override suspend fun saveCheckpoint(checkpoint: AppUsageCheckpoint): Result<Unit, Exception> {
+            checkpoints[checkpoint.userId] = checkpoint
+            return Result.Success(Unit)
+        }
+
+        override suspend fun saveObservationsWithCheckpoint(
+            observations: List<Observation>,
+            checkpoint: AppUsageCheckpoint
+        ): Result<Unit, Exception> {
+            checkpoints[checkpoint.userId] = checkpoint
+            return Result.Success(Unit)
+        }
+
+        override suspend fun clearCheckpointForUser(userId: String): Result<Unit, Exception> {
+            checkpoints.remove(userId)
+            return Result.Success(Unit)
+        }
     }
 
     private class FakeTestAppUsageSettingsRepo(var isEnabled: Boolean = true) : AppUsageObservationSettingsRepository {
@@ -453,8 +487,18 @@ class ContextEngineImplTest {
         val userId = "user-unified-obs"
 
         val obsRepo = FakeObservationRepository()
-        val appUsageProvider = FakeTestAppUsageProvider(permissionGranted = true)
+        val appUsageProvider = FakeTestAppUsageProvider(permissionGranted = true, allowDirectQuery = false)
         val appUsageSettingsRepo = FakeTestAppUsageSettingsRepo(isEnabled = true)
+        val checkpointStore = FakeTestAppUsageCheckpointStore()
+        checkpointStore.saveCheckpoint(
+            AppUsageCheckpoint(
+                userId = userId,
+                lastCollectedIntervalEndMs = now,
+                activePackageName = null,
+                activeSessionStartTimeMs = null,
+                updatedAt = now
+            )
+        )
 
         val obs1 = Observation(
             id = "obs-1",
@@ -511,7 +555,8 @@ class ContextEngineImplTest {
             patternRepository = patternRepository,
             appUsageObservationProvider = appUsageProvider,
             appUsageSettingsRepository = appUsageSettingsRepo,
-            observationRepository = obsRepo
+            observationRepository = obsRepo,
+            checkpointStore = checkpointStore
         )
 
         val result = customEngine.getUnifiedContext(userId, windowStart, now)
@@ -542,13 +587,12 @@ class ContextEngineImplTest {
     }
 
     @Test
-    fun `getUnifiedContext returns EMPTY_NO_DATA when permission granted but no observations exist`() = runTest {
+    fun `getUnifiedContext handles observation repository absence explicitly without falling back to provider`() = runTest {
         val now = 1700000000000L
         val windowStart = now - 86_400_000L
-        val userId = "user-unified-empty"
+        val userId = "user-no-repo"
 
-        val obsRepo = FakeObservationRepository()
-        val appUsageProvider = FakeTestAppUsageProvider(permissionGranted = true)
+        val appUsageProvider = FakeTestAppUsageProvider(permissionGranted = true, allowDirectQuery = false)
         val appUsageSettingsRepo = FakeTestAppUsageSettingsRepo(isEnabled = true)
 
         val customEngine = ContextEngineImpl(
@@ -562,7 +606,118 @@ class ContextEngineImplTest {
             patternRepository = patternRepository,
             appUsageObservationProvider = appUsageProvider,
             appUsageSettingsRepository = appUsageSettingsRepo,
-            observationRepository = obsRepo
+            observationRepository = null // Absent repository
+        )
+
+        val result = customEngine.getUnifiedContext(userId, windowStart, now)
+        assertTrue(result is Result.Success)
+        val unified = (result as Result.Success).data
+        val digitalContext = unified.digitalBehaviour
+
+        assertEquals(UsagePermissionStatus.UNAVAILABLE, digitalContext.permissionStatus)
+        assertEquals(SourceAvailability.UNAVAILABLE_HARDWARE, digitalContext.availability)
+        assertTrue("appUsages should be empty when observation repository is absent", digitalContext.appUsages.isEmpty())
+        assertEquals("Room_Observation", unified.provenanceMap["AppUsage"]?.sourceName)
+    }
+
+    @Test
+    fun `getUnifiedContext marks partial requested window as PARTIAL_HISTORY when coverage cannot prove start of interval`() = runTest {
+        val now = 1700000000000L
+        val windowStart = now - 86_400_000L // 24 hours ago
+        val userId = "user-partial-history"
+
+        val obsRepo = FakeObservationRepository()
+        val appUsageProvider = FakeTestAppUsageProvider(permissionGranted = true, allowDirectQuery = false)
+        val appUsageSettingsRepo = FakeTestAppUsageSettingsRepo(isEnabled = true)
+        val checkpointStore = FakeTestAppUsageCheckpointStore()
+        
+        // Checkpoint exists at now, but NO prior history exists before windowStart (e.g., initial 1-hour collection)
+        checkpointStore.saveCheckpoint(
+            AppUsageCheckpoint(
+                userId = userId,
+                lastCollectedIntervalEndMs = now,
+                activePackageName = null,
+                activeSessionStartTimeMs = null,
+                updatedAt = now
+            )
+        )
+
+        val customEngine = ContextEngineImpl(
+            clock = clock,
+            commitmentRepository = commitmentRepository,
+            eventRepository = eventRepository,
+            buildFactualContextSnapshotUseCase = buildFactualContextSnapshotUseCase,
+            reflectionRepository = reflectionRepository,
+            protectionRepository = protectionRepository,
+            goalRepository = goalRepository,
+            patternRepository = patternRepository,
+            appUsageObservationProvider = appUsageProvider,
+            appUsageSettingsRepository = appUsageSettingsRepo,
+            observationRepository = obsRepo,
+            checkpointStore = checkpointStore
+        )
+
+        val result = customEngine.getUnifiedContext(userId, windowStart, now)
+        assertTrue(result is Result.Success)
+        val unified = (result as Result.Success).data
+        val digitalContext = unified.digitalBehaviour
+
+        assertEquals(UsagePermissionStatus.GRANTED, digitalContext.permissionStatus)
+        assertEquals(SourceAvailability.PARTIAL_HISTORY, digitalContext.availability)
+        assertTrue("appUsages should be empty", digitalContext.appUsages.isEmpty())
+    }
+
+    @Test
+    fun `getUnifiedContext returns EMPTY_NO_DATA for fully covered empty window`() = runTest {
+        val now = 1700000000000L
+        val windowStart = now - 86_400_000L
+        val userId = "user-unified-empty"
+
+        val obsRepo = FakeObservationRepository()
+        val appUsageProvider = FakeTestAppUsageProvider(permissionGranted = true, allowDirectQuery = false)
+        val appUsageSettingsRepo = FakeTestAppUsageSettingsRepo(isEnabled = true)
+        val checkpointStore = FakeTestAppUsageCheckpointStore()
+
+        // Prior observation proves collection was active before windowStart
+        val priorObs = Observation(
+            id = "obs-prior",
+            userId = userId,
+            type = ObservationType.APP_USAGE_SESSION,
+            source = ObservationSource.APP_USAGE,
+            occurredAt = windowStart - 100_000L,
+            recordedAt = windowStart - 100_000L,
+            subjectId = null,
+            value = "com.android.launcher",
+            context = "duration_ms=5000",
+            confidence = null,
+            provenance = ObservationProvenance(ObservationSource.APP_USAGE, "UsageStatsManager", windowStart - 100_000L)
+        )
+        obsRepo.insertObservation(priorObs)
+
+        // Checkpoint has reached now
+        checkpointStore.saveCheckpoint(
+            AppUsageCheckpoint(
+                userId = userId,
+                lastCollectedIntervalEndMs = now,
+                activePackageName = null,
+                activeSessionStartTimeMs = null,
+                updatedAt = now
+            )
+        )
+
+        val customEngine = ContextEngineImpl(
+            clock = clock,
+            commitmentRepository = commitmentRepository,
+            eventRepository = eventRepository,
+            buildFactualContextSnapshotUseCase = buildFactualContextSnapshotUseCase,
+            reflectionRepository = reflectionRepository,
+            protectionRepository = protectionRepository,
+            goalRepository = goalRepository,
+            patternRepository = patternRepository,
+            appUsageObservationProvider = appUsageProvider,
+            appUsageSettingsRepository = appUsageSettingsRepo,
+            observationRepository = obsRepo,
+            checkpointStore = checkpointStore
         )
 
         val result = customEngine.getUnifiedContext(userId, windowStart, now)
@@ -572,17 +727,65 @@ class ContextEngineImplTest {
 
         assertEquals(UsagePermissionStatus.GRANTED, digitalContext.permissionStatus)
         assertEquals(SourceAvailability.EMPTY_NO_DATA, digitalContext.availability)
-        assertTrue("appUsages should be empty when no observations exist", digitalContext.appUsages.isEmpty())
+        assertTrue("appUsages should be empty when no observations exist in target window", digitalContext.appUsages.isEmpty())
     }
 
     @Test
-    fun `getUnifiedContext returns PERMISSION_DENIED and never false zero when permission is revoked`() = runTest {
+    fun `getUnifiedContext returns STALE_DATA when checkpoint is older than freshness threshold`() = runTest {
+        val now = 1700000000000L
+        val windowStart = now - 86_400_000L
+        val userId = "user-stale"
+
+        val obsRepo = FakeObservationRepository()
+        val appUsageProvider = FakeTestAppUsageProvider(permissionGranted = true, allowDirectQuery = false)
+        val appUsageSettingsRepo = FakeTestAppUsageSettingsRepo(isEnabled = true)
+        val checkpointStore = FakeTestAppUsageCheckpointStore()
+
+        // Checkpoint is 6 hours old (exceeding default 4 hour freshness threshold)
+        val staleCheckpointTime = now - (6 * 3600_000L)
+        checkpointStore.saveCheckpoint(
+            AppUsageCheckpoint(
+                userId = userId,
+                lastCollectedIntervalEndMs = staleCheckpointTime,
+                activePackageName = null,
+                activeSessionStartTimeMs = null,
+                updatedAt = staleCheckpointTime
+            )
+        )
+
+        val customEngine = ContextEngineImpl(
+            clock = clock,
+            commitmentRepository = commitmentRepository,
+            eventRepository = eventRepository,
+            buildFactualContextSnapshotUseCase = buildFactualContextSnapshotUseCase,
+            reflectionRepository = reflectionRepository,
+            protectionRepository = protectionRepository,
+            goalRepository = goalRepository,
+            patternRepository = patternRepository,
+            appUsageObservationProvider = appUsageProvider,
+            appUsageSettingsRepository = appUsageSettingsRepo,
+            observationRepository = obsRepo,
+            checkpointStore = checkpointStore,
+            maxStaleDelayMs = 4 * 3600_000L
+        )
+
+        val result = customEngine.getUnifiedContext(userId, windowStart, now)
+        assertTrue(result is Result.Success)
+        val unified = (result as Result.Success).data
+        val digitalContext = unified.digitalBehaviour
+
+        assertEquals(SourceAvailability.STALE_DATA, digitalContext.availability)
+        assertTrue("provenance isStale must be true", unified.provenanceMap["AppUsage"]?.isStale == true)
+    }
+
+    @Test
+    fun `getUnifiedContext preserves PERMISSION_DENIED and never false zero when permission is revoked`() = runTest {
         val now = 1700000000000L
         val windowStart = now - 86_400_000L
         val userId = "user-unified-denied"
 
         val obsRepo = FakeObservationRepository()
-        val appUsageProvider = FakeTestAppUsageProvider(permissionGranted = false)
+        val appUsageProvider = FakeTestAppUsageProvider(permissionGranted = false, allowDirectQuery = false)
         val appUsageSettingsRepo = FakeTestAppUsageSettingsRepo(isEnabled = true)
 
         val customEngine = ContextEngineImpl(
@@ -607,5 +810,90 @@ class ContextEngineImplTest {
         assertEquals(UsagePermissionStatus.DENIED, digitalContext.permissionStatus)
         assertEquals(SourceAvailability.PERMISSION_DENIED, digitalContext.availability)
         assertTrue("appUsages must be empty on permission denied", digitalContext.appUsages.isEmpty())
+    }
+
+    @Test
+    fun `getUnifiedContext isolates user observations and checkpoints`() = runTest {
+        val now = 1700000000000L
+        val windowStart = now - 86_400_000L
+        val targetUser = "user-target"
+        val otherUser = "user-other"
+
+        val obsRepo = FakeObservationRepository()
+        val appUsageProvider = FakeTestAppUsageProvider(permissionGranted = true, allowDirectQuery = false)
+        val appUsageSettingsRepo = FakeTestAppUsageSettingsRepo(isEnabled = true)
+        val checkpointStore = FakeTestAppUsageCheckpointStore()
+
+        checkpointStore.saveCheckpoint(
+            AppUsageCheckpoint(
+                userId = targetUser,
+                lastCollectedIntervalEndMs = now,
+                activePackageName = null,
+                activeSessionStartTimeMs = null,
+                updatedAt = now
+            )
+        )
+        checkpointStore.saveCheckpoint(
+            AppUsageCheckpoint(
+                userId = otherUser,
+                lastCollectedIntervalEndMs = now,
+                activePackageName = null,
+                activeSessionStartTimeMs = null,
+                updatedAt = now
+            )
+        )
+
+        val targetObs = Observation(
+            id = "obs-target",
+            userId = targetUser,
+            type = ObservationType.APP_USAGE_SESSION,
+            source = ObservationSource.APP_USAGE,
+            occurredAt = windowStart + 10_000L,
+            recordedAt = now,
+            subjectId = null,
+            value = "com.target.app",
+            context = "duration_ms=60000",
+            confidence = null,
+            provenance = ObservationProvenance(ObservationSource.APP_USAGE, "UsageStatsManager", now)
+        )
+        val otherObs = Observation(
+            id = "obs-other",
+            userId = otherUser,
+            type = ObservationType.APP_USAGE_SESSION,
+            source = ObservationSource.APP_USAGE,
+            occurredAt = windowStart + 20_000L,
+            recordedAt = now,
+            subjectId = null,
+            value = "com.other.app",
+            context = "duration_ms=90000",
+            confidence = null,
+            provenance = ObservationProvenance(ObservationSource.APP_USAGE, "UsageStatsManager", now)
+        )
+
+        obsRepo.insertObservation(targetObs)
+        obsRepo.insertObservation(otherObs)
+
+        val customEngine = ContextEngineImpl(
+            clock = clock,
+            commitmentRepository = commitmentRepository,
+            eventRepository = eventRepository,
+            buildFactualContextSnapshotUseCase = buildFactualContextSnapshotUseCase,
+            reflectionRepository = reflectionRepository,
+            protectionRepository = protectionRepository,
+            goalRepository = goalRepository,
+            patternRepository = patternRepository,
+            appUsageObservationProvider = appUsageProvider,
+            appUsageSettingsRepository = appUsageSettingsRepo,
+            observationRepository = obsRepo,
+            checkpointStore = checkpointStore
+        )
+
+        val result = customEngine.getUnifiedContext(targetUser, windowStart, now)
+        assertTrue(result is Result.Success)
+        val unified = (result as Result.Success).data
+        val digitalContext = unified.digitalBehaviour
+
+        assertEquals(1, digitalContext.appUsages.size)
+        assertEquals("com.target.app", digitalContext.appUsages[0].packageName)
     }
 }
