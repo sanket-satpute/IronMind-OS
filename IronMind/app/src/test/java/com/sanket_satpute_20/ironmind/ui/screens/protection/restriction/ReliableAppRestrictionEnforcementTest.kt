@@ -391,6 +391,14 @@ class ReliableAppRestrictionEnforcementTest {
         override fun hasRequiredPermissions(): Boolean = hasPermissions
 
         override suspend fun applyProtection(targetPackages: List<String>): Result<Unit, Exception> {
+            return applyProtection(targetPackages, null, null)
+        }
+
+        override suspend fun applyProtection(
+            targetPackages: List<String>,
+            sessionId: String?,
+            userId: String?
+        ): Result<Unit, Exception> {
             if (!hasPermissions) {
                 return Result.Failure(SecurityException("Accessibility permission not granted"))
             }

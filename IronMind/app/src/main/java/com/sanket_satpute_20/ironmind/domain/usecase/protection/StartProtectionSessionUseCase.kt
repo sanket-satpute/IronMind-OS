@@ -51,7 +51,11 @@ class StartProtectionSessionUseCase(
             updatedAt = now
         )
 
-        val applyResult = protectionProvider.applyProtection(targetPackages)
+        val applyResult = protectionProvider.applyProtection(
+            targetPackages = targetPackages,
+            sessionId = session.id,
+            userId = userId
+        )
         if (applyResult is Result.Failure) {
             return Result.Failure(Exception("Failed to apply protection: ${applyResult.error.message}"))
         }

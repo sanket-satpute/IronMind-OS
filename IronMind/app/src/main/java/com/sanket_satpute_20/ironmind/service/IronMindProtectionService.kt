@@ -4,7 +4,12 @@ import android.accessibilityservice.AccessibilityService
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.widget.Toast
+import com.sanket_satpute_20.ironmind.IronMindApplication
+import com.sanket_satpute_20.ironmind.data.provider.AndroidInstalledAppDiscoveryProvider
 import com.sanket_satpute_20.ironmind.data.provider.ProtectionEnforcementStore
+import com.sanket_satpute_20.ironmind.domain.usecase.digital.GetAppRestrictionConfigsUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.digital.GetEligibleRestrictionsForEnforcementUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.protection.AuthoritativeProtectionSessionRecoveryUseCase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -15,11 +20,17 @@ class IronMindProtectionService : AccessibilityService() {
         private const val TAG = "IronMindProtection"
         private var isActive = false
         private val protectedPkgs = mutableSetOf<String>()
+        private var activeUserId: String? = null
+        private var activeSessionId: String? = null
+
+        var recoveryUseCaseProvider: (() -> AuthoritativeProtectionSessionRecoveryUseCase)? = null
 
         fun setProtectionActive(active: Boolean) {
             isActive = active
             if (!active) {
                 protectedPkgs.clear()
+                activeUserId = null
+                activeSessionId = null
             }
         }
 
@@ -35,6 +46,14 @@ class IronMindProtectionService : AccessibilityService() {
         fun getProtectedPackages(): Set<String> {
             return protectedPkgs.toSet()
         }
+
+        fun setActiveSessionIdentity(sessionId: String?, userId: String?) {
+            activeSessionId = sessionId
+            activeUserId = userId
+        }
+
+        fun getActiveSessionId(): String? = activeSessionId
+        fun getActiveUserId(): String? = activeUserId
     }
 
     override fun onServiceConnected() {
@@ -42,23 +61,47 @@ class IronMindProtectionService : AccessibilityService() {
         rehydrateState()
     }
 
-    fun rehydrateState() {
-        try {
-            val store = ProtectionEnforcementStore(applicationContext)
-            val state = store.getEnforcementState()
-            if (state != null && state.isActive && state.protectedPackages.isNotEmpty()) {
-                setProtectedPackages(state.protectedPackages)
-                setProtectionActive(true)
-                Log.i(TAG, "IronMindLifecycle [Protection] [SERVICE_REHYDRATED] user=${state.userId} count=${state.protectedPackages.size}")
-            } else {
-                setProtectionActive(false)
-                setProtectedPackages(emptySet())
-                Log.i(TAG, "IronMindLifecycle [Protection] [SERVICE_REHYDRATED_IDLE]")
+    fun rehydrateState(scope: CoroutineScope = CoroutineScope(Dispatchers.IO)) {
+        val app = applicationContext as? IronMindApplication
+        val container = app?.container
+        val recoveryUseCase = recoveryUseCaseProvider?.invoke()
+            ?: if (container != null) {
+                AuthoritativeProtectionSessionRecoveryUseCase(
+                    protectionRepository = container.protectionRepository,
+                    userSessionProvider = container.userSessionProvider,
+                    clock = container.clock,
+                    appProtectionProvider = container.appProtectionProvider,
+                    enforcementStore = ProtectionEnforcementStore(applicationContext),
+                    getEligibleRestrictionsForEnforcementUseCase = GetEligibleRestrictionsForEnforcementUseCase(
+                        getAppRestrictionConfigsUseCase = GetAppRestrictionConfigsUseCase(container.protectionRepository),
+                        installedAppDiscoveryProvider = AndroidInstalledAppDiscoveryProvider(applicationContext)
+                    )
+                )
+            } else null
+
+        if (recoveryUseCase != null) {
+            scope.launch {
+                try {
+                    val result = recoveryUseCase()
+                    Log.i(TAG, "IronMindLifecycle [Protection] [RECOVERY_EVALUATED] result=$result")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to evaluate authoritative protection recovery: ${e.message}")
+                    setProtectionActive(false)
+                    setProtectedPackages(emptySet())
+                    setActiveSessionIdentity(null, null)
+                }
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to rehydrate protection state: ${e.message}")
+        } else {
+            // No authoritative recovery use case available -> fail closed immediately
+            try {
+                ProtectionEnforcementStore(applicationContext).clearEnforcementState()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to clear enforcement store: ${e.message}")
+            }
             setProtectionActive(false)
             setProtectedPackages(emptySet())
+            setActiveSessionIdentity(null, null)
+            Log.w(TAG, "IronMindLifecycle [Protection] [RECOVERY_FAILED_NO_CONTAINER] failed closed")
         }
     }
 

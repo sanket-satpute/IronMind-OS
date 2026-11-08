@@ -230,7 +230,26 @@ class AppRestrictionViewModel(
                         isEnabled = isEnabled
                     )
                     when (result) {
-                        is Result.Success -> loadData(activeUid)
+                        is Result.Success -> {
+                            if (appProtectionProvider.isProtectionActive()) {
+                                val eligible = getEligibleRestrictionsForEnforcementUseCase(activeUid)
+                                if (eligible is Result.Success) {
+                                    val newTargets = eligible.data.map { it.packageName }
+                                    if (newTargets.isNotEmpty()) {
+                                        val activeSessions = protectionRepository.getActiveProtectionSessionsForUser(activeUid)
+                                        val currentSessionId = (activeSessions as? Result.Success)?.data?.firstOrNull()?.id
+                                        appProtectionProvider.applyProtection(
+                                            targetPackages = newTargets,
+                                            sessionId = currentSessionId,
+                                            userId = activeUid
+                                        )
+                                    } else {
+                                        appProtectionProvider.removeProtection()
+                                    }
+                                }
+                            }
+                            loadData(activeUid)
+                        }
                         is Result.Failure -> _uiState.update {
                             it.copy(errorMessage = result.error.message ?: "Failed to update restriction")
                         }
