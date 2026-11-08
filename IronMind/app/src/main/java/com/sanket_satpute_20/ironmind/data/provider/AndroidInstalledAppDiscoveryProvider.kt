@@ -25,11 +25,11 @@ class AndroidInstalledAppDiscoveryProvider(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 pm.queryIntentActivities(
                     launcherIntent,
-                    PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong())
+                    PackageManager.ResolveInfoFlags.of(0L)
                 )
             } else {
                 @Suppress("DEPRECATION")
-                pm.queryIntentActivities(launcherIntent, PackageManager.MATCH_DEFAULT_ONLY)
+                pm.queryIntentActivities(launcherIntent, 0)
             }
         } catch (e: Exception) {
             emptyList()
@@ -103,3 +103,4 @@ class AndroidInstalledAppDiscoveryProvider(
         }
     }
 }
+
