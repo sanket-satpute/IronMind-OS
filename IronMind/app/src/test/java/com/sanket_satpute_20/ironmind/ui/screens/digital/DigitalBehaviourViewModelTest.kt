@@ -17,6 +17,9 @@ import com.sanket_satpute_20.ironmind.domain.repository.ObservationRepository
 import com.sanket_satpute_20.ironmind.domain.repository.ProtectionRepository
 import com.sanket_satpute_20.ironmind.domain.session.SessionState
 import com.sanket_satpute_20.ironmind.domain.usecase.digital.GetDailyAppUsageIntelligenceUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectObservationsUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.observation.ExecuteObservationCollectionUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.observation.ObservationCollector
 import com.sanket_satpute_20.ironmind.testutil.FakeUserSessionProvider
 import com.sanket_satpute_20.ironmind.testutil.TestDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -369,7 +372,205 @@ class DigitalBehaviourViewModelTest {
         assertNull(viewModel.uiState.value.errorMessage)
     }
 
+    // =========================================================================
+    // Phase 3.6.6.3: Lifecycle Catchup Tests
+    // =========================================================================
+
+    @Test
+    fun `lifecycle catchup triggers on authenticated session and refreshes data on completion`() = runTest {
+        val collector = FakeObservationCollector(countToReturn = 3)
+        val executeUseCase = ExecuteObservationCollectionUseCase(
+            CollectObservationsUseCase(listOf(collector))
+        )
+
+        appUsageProvider.events = listOf(
+            AppUsageEvent("com.google.android.apps.translate", todayStartMs + 1000, todayStartMs + 61000, 60000)
+        )
+
+        val viewModel = DigitalBehaviourViewModel(
+            getDailyAppUsageIntelligenceUseCase = useCase,
+            appUsageObservationProvider = appUsageProvider,
+            appUsageSettingsRepository = settingsRepository,
+            protectionRepository = protectionRepository,
+            userSessionProvider = userSessionProvider,
+            appNameResolver = appNameResolver,
+            clock = testClock,
+            zoneId = zoneId,
+            executeObservationCollectionUseCase = executeUseCase,
+            ioDispatcher = dispatcherRule.testDispatcher
+        )
+
+        advanceUntilIdle()
+
+        // Collector was invoked with active user ID
+        assertEquals(1, collector.invocations)
+        assertEquals("user_test", collector.lastUserId)
+
+        // UI state reflects loaded intelligence
+        val state = viewModel.uiState.value
+        assertFalse(state.isLoading)
+        assertNotNull(state.dailyUsage)
+        assertEquals(60_000L, state.dailyUsage?.totalObservedDurationMs)
+    }
+
+    @Test
+    fun `refresh triggers lifecycle catchup and updates displayed intelligence`() = runTest {
+        val collector = FakeObservationCollector(countToReturn = 2)
+        val executeUseCase = ExecuteObservationCollectionUseCase(
+            CollectObservationsUseCase(listOf(collector))
+        )
+
+        val viewModel = DigitalBehaviourViewModel(
+            getDailyAppUsageIntelligenceUseCase = useCase,
+            appUsageObservationProvider = appUsageProvider,
+            appUsageSettingsRepository = settingsRepository,
+            protectionRepository = protectionRepository,
+            userSessionProvider = userSessionProvider,
+            appNameResolver = appNameResolver,
+            clock = testClock,
+            zoneId = zoneId,
+            executeObservationCollectionUseCase = executeUseCase,
+            ioDispatcher = dispatcherRule.testDispatcher
+        )
+
+        advanceUntilIdle()
+        assertEquals(1, collector.invocations)
+
+        // Add new events and call refresh() (which simulates ON_RESUME or pull-to-refresh)
+        appUsageProvider.events = listOf(
+            AppUsageEvent("com.google.android.apps.translate", todayStartMs + 1000, todayStartMs + 121000, 120000)
+        )
+
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        // Collector was invoked a second time
+        assertEquals(2, collector.invocations)
+
+        // Intelligence data was reloaded
+        val state = viewModel.uiState.value
+        assertEquals(120_000L, state.dailyUsage?.totalObservedDurationMs)
+    }
+
+    @Test
+    fun `catchup is safely skipped when permission is not granted`() = runTest {
+        val collector = FakeObservationCollector()
+        val executeUseCase = ExecuteObservationCollectionUseCase(
+            CollectObservationsUseCase(listOf(collector))
+        )
+
+        appUsageProvider.permissionGranted = false
+
+        val viewModel = DigitalBehaviourViewModel(
+            getDailyAppUsageIntelligenceUseCase = useCase,
+            appUsageObservationProvider = appUsageProvider,
+            appUsageSettingsRepository = settingsRepository,
+            protectionRepository = protectionRepository,
+            userSessionProvider = userSessionProvider,
+            appNameResolver = appNameResolver,
+            clock = testClock,
+            zoneId = zoneId,
+            executeObservationCollectionUseCase = executeUseCase,
+            ioDispatcher = dispatcherRule.testDispatcher
+        )
+
+        advanceUntilIdle()
+
+        // Collector must NOT run if permission is denied
+        assertEquals(0, collector.invocations)
+
+        val state = viewModel.uiState.value
+        assertEquals(SourceAvailability.PERMISSION_DENIED, state.effectiveAvailability)
+        assertNull(state.dailyUsage?.totalObservedDurationMs)
+    }
+
+    @Test
+    fun `catchup is safely skipped when user consent setting is disabled`() = runTest {
+        val collector = FakeObservationCollector()
+        val executeUseCase = ExecuteObservationCollectionUseCase(
+            CollectObservationsUseCase(listOf(collector))
+        )
+
+        settingsRepository.isEnabled = false
+
+        val viewModel = DigitalBehaviourViewModel(
+            getDailyAppUsageIntelligenceUseCase = useCase,
+            appUsageObservationProvider = appUsageProvider,
+            appUsageSettingsRepository = settingsRepository,
+            protectionRepository = protectionRepository,
+            userSessionProvider = userSessionProvider,
+            appNameResolver = appNameResolver,
+            clock = testClock,
+            zoneId = zoneId,
+            executeObservationCollectionUseCase = executeUseCase,
+            ioDispatcher = dispatcherRule.testDispatcher
+        )
+
+        advanceUntilIdle()
+
+        // Collector must NOT run if user consent setting is disabled
+        assertEquals(0, collector.invocations)
+
+        val state = viewModel.uiState.value
+        assertEquals(SourceAvailability.PERMISSION_NOT_REQUESTED, state.effectiveAvailability)
+        assertNull(state.dailyUsage?.totalObservedDurationMs)
+    }
+
+    @Test
+    fun `catchup failure does not crash ViewModel or wipe existing rendered usage`() = runTest {
+        val collector = FakeObservationCollector(shouldFail = true)
+        val executeUseCase = ExecuteObservationCollectionUseCase(
+            CollectObservationsUseCase(listOf(collector))
+        )
+
+        appUsageProvider.events = listOf(
+            AppUsageEvent("com.google.android.apps.translate", todayStartMs + 1000, todayStartMs + 31000, 30000)
+        )
+
+        val viewModel = DigitalBehaviourViewModel(
+            getDailyAppUsageIntelligenceUseCase = useCase,
+            appUsageObservationProvider = appUsageProvider,
+            appUsageSettingsRepository = settingsRepository,
+            protectionRepository = protectionRepository,
+            userSessionProvider = userSessionProvider,
+            appNameResolver = appNameResolver,
+            clock = testClock,
+            zoneId = zoneId,
+            executeObservationCollectionUseCase = executeUseCase,
+            ioDispatcher = dispatcherRule.testDispatcher
+        )
+
+        advanceUntilIdle()
+
+        // Collection was attempted and failed gracefully
+        assertEquals(1, collector.invocations)
+
+        // Existing loaded data is preserved, no crash
+        val state = viewModel.uiState.value
+        assertFalse(state.isLoading)
+        assertEquals(30_000L, state.dailyUsage?.totalObservedDurationMs)
+    }
+
     // --- Fakes ---
+
+    private class FakeObservationCollector(
+        override val collectorName: String = "FakeAppUsage",
+        var countToReturn: Int = 5,
+        var shouldFail: Boolean = false
+    ) : ObservationCollector {
+        var invocations = 0
+        var lastUserId: String? = null
+
+        override suspend fun invoke(userId: String): Result<Int, Exception> {
+            invocations++
+            lastUserId = userId
+            return if (shouldFail) {
+                Result.Failure(Exception("Collection failed"))
+            } else {
+                Result.Success(countToReturn)
+            }
+        }
+    }
 
     private class FakeTestClock(var time: Long) : Clock {
         override fun currentTimeMillis(): Long = time
@@ -386,7 +587,7 @@ class DigitalBehaviourViewModelTest {
     }
 
     private class FakeAppUsageSettingsRepo : AppUsageObservationSettingsRepository {
-        private var isEnabled: Boolean = true
+        var isEnabled: Boolean = true
 
         override suspend fun getSettings(userId: String): Result<AppUsageObservationSettings, Exception> {
             return Result.Success(AppUsageObservationSettings(userId, isEnabled = isEnabled))

@@ -7,6 +7,8 @@ import com.sanket_satpute_20.ironmind.domain.model.Commitment
 import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
 import com.sanket_satpute_20.ironmind.domain.model.Event
 import com.sanket_satpute_20.ironmind.domain.model.Goal
+import com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState
+import com.sanket_satpute_20.ironmind.domain.model.pattern.PatternStatus
 import com.sanket_satpute_20.ironmind.domain.model.observation.FactualContextSnapshot
 import com.sanket_satpute_20.ironmind.domain.model.observation.AppUsageObservationAggregation
 import com.sanket_satpute_20.ironmind.domain.model.observation.ActivityObservationAggregation
@@ -15,8 +17,19 @@ import com.sanket_satpute_20.ironmind.domain.model.observation.LocationObservati
 import com.sanket_satpute_20.ironmind.domain.model.observation.NotificationObservationAggregation
 import com.sanket_satpute_20.ironmind.domain.model.ProtectionSession
 import com.sanket_satpute_20.ironmind.domain.model.Reflection
-import com.sanket_satpute_20.ironmind.domain.usecase.observation.BuildFactualContextSnapshotUseCase
+import com.sanket_satpute_20.ironmind.domain.model.AppUsageObservationSettings
+import com.sanket_satpute_20.ironmind.domain.model.context.EpistemicAuthority
+import com.sanket_satpute_20.ironmind.domain.model.context.SourceAvailability
+import com.sanket_satpute_20.ironmind.domain.model.context.UsagePermissionStatus
+import com.sanket_satpute_20.ironmind.domain.model.observation.Observation
+import com.sanket_satpute_20.ironmind.domain.model.observation.ObservationProvenance
+import com.sanket_satpute_20.ironmind.domain.model.observation.ObservationSource
+import com.sanket_satpute_20.ironmind.domain.model.observation.ObservationType
+import com.sanket_satpute_20.ironmind.domain.provider.AppUsageEvent
+import com.sanket_satpute_20.ironmind.domain.provider.AppUsageObservationProvider
 import com.sanket_satpute_20.ironmind.domain.repository.*
+import com.sanket_satpute_20.ironmind.domain.usecase.observation.BuildFactualContextSnapshotUseCase
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeObservationRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -45,8 +58,10 @@ class ContextEngineImplTest {
     }
     class FakeCommitmentRepository : CommitmentRepository {
         var commitments = emptyList<Commitment>()
+        var getCommitmentsForUserResult: Result<List<Commitment>, Exception>? = null
         override suspend fun getCommitment(id: String): Result<Commitment?, Exception> = Result.Failure(Exception())
-        override suspend fun getCommitmentsForUser(userId: String): Result<List<Commitment>, Exception> = Result.Success(commitments)
+        override suspend fun getCommitmentsForUser(userId: String): Result<List<Commitment>, Exception> =
+            getCommitmentsForUserResult ?: Result.Success(commitments)
         override suspend fun getActiveCommitmentsForUser(userId: String, statuses: List<CommitmentStatus>): Result<List<Commitment>, Exception> = Result.Success(commitments)
         override suspend fun getActiveCommitmentsForUser(userId: String, statuses: List<CommitmentStatus>, limit: Int): Result<List<Commitment>, Exception> = Result.Success(commitments.take(limit))
         override suspend fun getCommitmentsForDateRange(userId: String, startTime: Long, endTime: Long): Result<List<Commitment>, Exception> = Result.Success(commitments)
@@ -230,9 +245,24 @@ class ContextEngineImplTest {
         val reflection = mockk<Reflection> {
             io.mockk.every { createdAt } returns now
         }
-        val pattern = mockk<com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern> {
-            io.mockk.every { updatedAt } returns now
-        }
+        val pattern = com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern(
+            id = "pat-1",
+            userId = userId,
+            fingerprint = "fp-1",
+            type = com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType.TIME_PATTERN,
+            description = "Test pattern",
+            conditions = null,
+            predictedBehavior = null,
+            confidence = 0.8f,
+            evidenceCount = 1,
+            evidenceReferences = null,
+            firstObservedAt = now,
+            lastObservedAt = now,
+            status = PatternStatus.ACTIVE,
+            confirmationState = MemoryConfirmationState.USER_CONFIRMED,
+            createdAt = now,
+            updatedAt = now
+        )
 
         commitmentRepository.commitments = listOf(commitment)
         eventRepository.events = listOf(event)
@@ -259,7 +289,8 @@ class ContextEngineImplTest {
         val snapshot = (result as Result.Success).data
 
         // Verify fixtures are preserved
-        assertEquals(0, snapshot.activeCommitments.size) // Filtered by "ACTIVE" internally which doesn't exist on CommitmentStatus
+        assertEquals(1, snapshot.activeCommitments.size)
+        assertEquals(commitment, snapshot.activeCommitments.first())
         assertEquals(1, snapshot.recentEvents.size)
         assertEquals(1, snapshot.recentReflections.size)
         assertEquals(1, snapshot.activeGoals.size)
@@ -290,5 +321,291 @@ class ContextEngineImplTest {
         engine.getCurrentContext(userId)
 
         coVerify(exactly = 2) { buildFactualContextSnapshotUseCase(userId, expectedStartTimeMs, now) }
+    }
+
+    @Test
+    fun `active commitments filter includes actionable commitments and excludes terminal or inactive ones`() = runTest {
+        val now = 1700000000000L
+        val expectedStartTimeMs = now - 86_400_000L
+        val userId = "user-active-filter"
+
+        val planned = mockk<Commitment> { io.mockk.every { status } returns CommitmentStatus.PLANNED }
+        val committed = mockk<Commitment> { io.mockk.every { status } returns CommitmentStatus.COMMITTED }
+        val started = mockk<Commitment> { io.mockk.every { status } returns CommitmentStatus.STARTED }
+        val recovered = mockk<Commitment> { io.mockk.every { status } returns CommitmentStatus.RECOVERED }
+        val completed = mockk<Commitment> { io.mockk.every { status } returns CommitmentStatus.COMPLETED }
+        val postponed = mockk<Commitment> { io.mockk.every { status } returns CommitmentStatus.POSTPONED }
+        val missed = mockk<Commitment> { io.mockk.every { status } returns CommitmentStatus.MISSED }
+        val abandoned = mockk<Commitment> { io.mockk.every { status } returns CommitmentStatus.ABANDONED }
+
+        commitmentRepository.commitments = listOf(
+            planned, committed, started, recovered,
+            completed, postponed, missed, abandoned
+        )
+
+        val emptySnapshot = FactualContextSnapshot(
+            userId = userId,
+            startTimeMs = expectedStartTimeMs,
+            endTimeMs = now,
+            appUsage = AppUsageObservationAggregation(userId, expectedStartTimeMs, now, 0, 0L, 0),
+            activity = ActivityObservationAggregation(userId, expectedStartTimeMs, now, 0, 0, emptyMap(), null, null),
+            calendar = CalendarObservationAggregation(userId, expectedStartTimeMs, now, 0, 0, 0L, null, null),
+            location = LocationObservationAggregation(userId, expectedStartTimeMs, now, 0, 0, 0, null, null),
+            notifications = NotificationObservationAggregation(userId, expectedStartTimeMs, now, 0, 0, null, null)
+        )
+        coEvery { buildFactualContextSnapshotUseCase(userId, expectedStartTimeMs, now) } returns Result.Success(emptySnapshot)
+
+        val result = engine.getCurrentContext(userId)
+        assertTrue(result is Result.Success)
+        val snapshot = (result as Result.Success).data
+
+        // 1. Actionable commitments appear in snapshot
+        assertEquals(4, snapshot.activeCommitments.size)
+        assertTrue("PLANNED should be included", snapshot.activeCommitments.contains(planned))
+        assertTrue("COMMITTED should be included", snapshot.activeCommitments.contains(committed))
+        assertTrue("STARTED should be included", snapshot.activeCommitments.contains(started))
+        assertTrue("RECOVERED should be included", snapshot.activeCommitments.contains(recovered))
+
+        // 2, 3, 4, 5. Terminal and inactive statuses are excluded
+        assertTrue("COMPLETED must be excluded", !snapshot.activeCommitments.contains(completed))
+        assertTrue("POSTPONED must be excluded", !snapshot.activeCommitments.contains(postponed))
+        assertTrue("MISSED must be excluded", !snapshot.activeCommitments.contains(missed))
+        assertTrue("ABANDONED must be excluded", !snapshot.activeCommitments.contains(abandoned))
+    }
+
+    @Test
+    fun `active commitments filter handles empty commitment collection gracefully`() = runTest {
+        val now = 1700000000000L
+        val expectedStartTimeMs = now - 86_400_000L
+        val userId = "user-empty-commitments"
+
+        // 6. An empty commitment collection remains handled correctly
+        commitmentRepository.commitments = emptyList()
+
+        val emptySnapshot = FactualContextSnapshot(
+            userId = userId,
+            startTimeMs = expectedStartTimeMs,
+            endTimeMs = now,
+            appUsage = AppUsageObservationAggregation(userId, expectedStartTimeMs, now, 0, 0L, 0),
+            activity = ActivityObservationAggregation(userId, expectedStartTimeMs, now, 0, 0, emptyMap(), null, null),
+            calendar = CalendarObservationAggregation(userId, expectedStartTimeMs, now, 0, 0, 0L, null, null),
+            location = LocationObservationAggregation(userId, expectedStartTimeMs, now, 0, 0, 0, null, null),
+            notifications = NotificationObservationAggregation(userId, expectedStartTimeMs, now, 0, 0, null, null)
+        )
+        coEvery { buildFactualContextSnapshotUseCase(userId, expectedStartTimeMs, now) } returns Result.Success(emptySnapshot)
+
+        val result = engine.getCurrentContext(userId)
+        assertTrue(result is Result.Success)
+        val snapshot = (result as Result.Success).data
+
+        assertTrue("Empty commitments should produce empty activeCommitments list", snapshot.activeCommitments.isEmpty())
+    }
+
+    @Test
+    fun `active commitments filter handles commitment repository failure gracefully`() = runTest {
+        val now = 1700000000000L
+        val expectedStartTimeMs = now - 86_400_000L
+        val userId = "user-repo-failure"
+
+        commitmentRepository.getCommitmentsForUserResult = Result.Failure(Exception("DB query timeout"))
+
+        val emptySnapshot = FactualContextSnapshot(
+            userId = userId,
+            startTimeMs = expectedStartTimeMs,
+            endTimeMs = now,
+            appUsage = AppUsageObservationAggregation(userId, expectedStartTimeMs, now, 0, 0L, 0),
+            activity = ActivityObservationAggregation(userId, expectedStartTimeMs, now, 0, 0, emptyMap(), null, null),
+            calendar = CalendarObservationAggregation(userId, expectedStartTimeMs, now, 0, 0, 0L, null, null),
+            location = LocationObservationAggregation(userId, expectedStartTimeMs, now, 0, 0, 0, null, null),
+            notifications = NotificationObservationAggregation(userId, expectedStartTimeMs, now, 0, 0, null, null)
+        )
+        coEvery { buildFactualContextSnapshotUseCase(userId, expectedStartTimeMs, now) } returns Result.Success(emptySnapshot)
+
+        val result = engine.getCurrentContext(userId)
+        assertTrue(result is Result.Success)
+        val snapshot = (result as Result.Success).data
+
+        assertTrue("Repository failure should result in empty activeCommitments list without crashing", snapshot.activeCommitments.isEmpty())
+    }
+
+    // =========================================================================
+    // Phase 3.6.6.3: Unified Digital Behaviour & Observation Ingestion Tests
+    // =========================================================================
+
+    private class FakeTestAppUsageProvider(var permissionGranted: Boolean = true) : AppUsageObservationProvider {
+        override fun isPermissionGranted(): Boolean = permissionGranted
+        override fun getAppUsageSince(fromTimeMillis: Long): List<AppUsageEvent> = emptyList()
+    }
+
+    private class FakeTestAppUsageSettingsRepo(var isEnabled: Boolean = true) : AppUsageObservationSettingsRepository {
+        override suspend fun getSettings(userId: String): Result<AppUsageObservationSettings, Exception> =
+            Result.Success(AppUsageObservationSettings(userId, isEnabled = isEnabled))
+        override suspend fun setEnabled(userId: String, isEnabled: Boolean): Result<Unit, Exception> {
+            this.isEnabled = isEnabled
+            return Result.Success(Unit)
+        }
+    }
+
+    @Test
+    fun `getUnifiedContext consumes APP_USAGE_SESSION observations from observationRepository when present`() = runTest {
+        val now = 1700000000000L
+        val windowStart = now - 86_400_000L
+        val userId = "user-unified-obs"
+
+        val obsRepo = FakeObservationRepository()
+        val appUsageProvider = FakeTestAppUsageProvider(permissionGranted = true)
+        val appUsageSettingsRepo = FakeTestAppUsageSettingsRepo(isEnabled = true)
+
+        val obs1 = Observation(
+            id = "obs-1",
+            userId = userId,
+            type = ObservationType.APP_USAGE_SESSION,
+            source = ObservationSource.APP_USAGE,
+            occurredAt = windowStart + 10_000L,
+            recordedAt = now,
+            subjectId = null,
+            value = "com.google.android.apps.translate",
+            context = "duration_ms=120000",
+            confidence = null,
+            provenance = ObservationProvenance(ObservationSource.APP_USAGE, "UsageStatsManager", now)
+        )
+        val obs2 = Observation(
+            id = "obs-2",
+            userId = userId,
+            type = ObservationType.APP_USAGE_SESSION,
+            source = ObservationSource.APP_USAGE,
+            occurredAt = windowStart + 200_000L,
+            recordedAt = now,
+            subjectId = null,
+            value = "com.google.android.apps.translate",
+            context = "duration_ms=60000",
+            confidence = null,
+            provenance = ObservationProvenance(ObservationSource.APP_USAGE, "UsageStatsManager", now)
+        )
+        val obs3 = Observation(
+            id = "obs-3",
+            userId = userId,
+            type = ObservationType.APP_USAGE_SESSION,
+            source = ObservationSource.APP_USAGE,
+            occurredAt = windowStart + 400_000L,
+            recordedAt = now,
+            subjectId = null,
+            value = "com.android.settings",
+            context = "duration_ms=30000",
+            confidence = null,
+            provenance = ObservationProvenance(ObservationSource.APP_USAGE, "UsageStatsManager", now)
+        )
+
+        obsRepo.insertObservation(obs1)
+        obsRepo.insertObservation(obs2)
+        obsRepo.insertObservation(obs3)
+
+        val customEngine = ContextEngineImpl(
+            clock = clock,
+            commitmentRepository = commitmentRepository,
+            eventRepository = eventRepository,
+            buildFactualContextSnapshotUseCase = buildFactualContextSnapshotUseCase,
+            reflectionRepository = reflectionRepository,
+            protectionRepository = protectionRepository,
+            goalRepository = goalRepository,
+            patternRepository = patternRepository,
+            appUsageObservationProvider = appUsageProvider,
+            appUsageSettingsRepository = appUsageSettingsRepo,
+            observationRepository = obsRepo
+        )
+
+        val result = customEngine.getUnifiedContext(userId, windowStart, now)
+        assertTrue("getUnifiedContext should succeed", result is Result.Success)
+        val unified = (result as Result.Success).data
+        val digitalContext = unified.digitalBehaviour
+
+        assertEquals(UsagePermissionStatus.GRANTED, digitalContext.permissionStatus)
+        assertEquals(SourceAvailability.AVAILABLE, digitalContext.availability)
+        assertEquals(2, digitalContext.appUsages.size)
+
+        // Deterministic ordering: highest duration first
+        val topApp = digitalContext.appUsages[0]
+        assertEquals("com.google.android.apps.translate", topApp.packageName)
+        assertEquals(180_000L, topApp.totalDurationMs)
+        assertEquals(2, topApp.sessionCount)
+        assertEquals(windowStart + 10_000L, topApp.firstObservedAt)
+        assertEquals(windowStart + 260_000L, topApp.lastObservedAt)
+        assertEquals(EpistemicAuthority.SYSTEM_RECORDED_OBSERVATION, topApp.authority)
+
+        val secondApp = digitalContext.appUsages[1]
+        assertEquals("com.android.settings", secondApp.packageName)
+        assertEquals(30_000L, secondApp.totalDurationMs)
+        assertEquals(1, secondApp.sessionCount)
+        assertEquals(EpistemicAuthority.SYSTEM_RECORDED_OBSERVATION, secondApp.authority)
+
+        assertEquals("Room_Observation", unified.provenanceMap["AppUsage"]?.sourceName)
+    }
+
+    @Test
+    fun `getUnifiedContext returns EMPTY_NO_DATA when permission granted but no observations exist`() = runTest {
+        val now = 1700000000000L
+        val windowStart = now - 86_400_000L
+        val userId = "user-unified-empty"
+
+        val obsRepo = FakeObservationRepository()
+        val appUsageProvider = FakeTestAppUsageProvider(permissionGranted = true)
+        val appUsageSettingsRepo = FakeTestAppUsageSettingsRepo(isEnabled = true)
+
+        val customEngine = ContextEngineImpl(
+            clock = clock,
+            commitmentRepository = commitmentRepository,
+            eventRepository = eventRepository,
+            buildFactualContextSnapshotUseCase = buildFactualContextSnapshotUseCase,
+            reflectionRepository = reflectionRepository,
+            protectionRepository = protectionRepository,
+            goalRepository = goalRepository,
+            patternRepository = patternRepository,
+            appUsageObservationProvider = appUsageProvider,
+            appUsageSettingsRepository = appUsageSettingsRepo,
+            observationRepository = obsRepo
+        )
+
+        val result = customEngine.getUnifiedContext(userId, windowStart, now)
+        assertTrue(result is Result.Success)
+        val unified = (result as Result.Success).data
+        val digitalContext = unified.digitalBehaviour
+
+        assertEquals(UsagePermissionStatus.GRANTED, digitalContext.permissionStatus)
+        assertEquals(SourceAvailability.EMPTY_NO_DATA, digitalContext.availability)
+        assertTrue("appUsages should be empty when no observations exist", digitalContext.appUsages.isEmpty())
+    }
+
+    @Test
+    fun `getUnifiedContext returns PERMISSION_DENIED and never false zero when permission is revoked`() = runTest {
+        val now = 1700000000000L
+        val windowStart = now - 86_400_000L
+        val userId = "user-unified-denied"
+
+        val obsRepo = FakeObservationRepository()
+        val appUsageProvider = FakeTestAppUsageProvider(permissionGranted = false)
+        val appUsageSettingsRepo = FakeTestAppUsageSettingsRepo(isEnabled = true)
+
+        val customEngine = ContextEngineImpl(
+            clock = clock,
+            commitmentRepository = commitmentRepository,
+            eventRepository = eventRepository,
+            buildFactualContextSnapshotUseCase = buildFactualContextSnapshotUseCase,
+            reflectionRepository = reflectionRepository,
+            protectionRepository = protectionRepository,
+            goalRepository = goalRepository,
+            patternRepository = patternRepository,
+            appUsageObservationProvider = appUsageProvider,
+            appUsageSettingsRepository = appUsageSettingsRepo,
+            observationRepository = obsRepo
+        )
+
+        val result = customEngine.getUnifiedContext(userId, windowStart, now)
+        assertTrue(result is Result.Success)
+        val unified = (result as Result.Success).data
+        val digitalContext = unified.digitalBehaviour
+
+        assertEquals(UsagePermissionStatus.DENIED, digitalContext.permissionStatus)
+        assertEquals(SourceAvailability.PERMISSION_DENIED, digitalContext.availability)
+        assertTrue("appUsages must be empty on permission denied", digitalContext.appUsages.isEmpty())
     }
 }

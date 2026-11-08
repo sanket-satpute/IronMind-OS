@@ -16,7 +16,11 @@ import com.sanket_satpute_20.ironmind.domain.session.SessionState
 import com.sanket_satpute_20.ironmind.domain.session.UserSessionProvider
 import com.sanket_satpute_20.ironmind.domain.session.runWithSession
 import com.sanket_satpute_20.ironmind.domain.usecase.digital.GetDailyAppUsageIntelligenceUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.observation.ExecuteObservationCollectionUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.observation.ObservationExecutionError
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,7 +40,9 @@ class DigitalBehaviourViewModel(
     private val clock: Clock = object : Clock {
         override fun currentTimeMillis(): Long = System.currentTimeMillis()
     },
-    private val zoneId: ZoneId = ZoneId.systemDefault()
+    private val zoneId: ZoneId = ZoneId.systemDefault(),
+    private val executeObservationCollectionUseCase: ExecuteObservationCollectionUseCase? = null,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -52,6 +58,7 @@ class DigitalBehaviourViewModel(
 
     private var loadJob: Job? = null
     private var loadGeneration = 0L
+    private var catchupJob: Job? = null
 
     init {
         observeSession()
@@ -60,6 +67,7 @@ class DigitalBehaviourViewModel(
     private fun observeSession() {
         if (userSessionProvider == null) {
             loadData(targetDate = _uiState.value.selectedDate, userId = SessionState.DEFAULT_LEGACY_USER_ID)
+            triggerCatchup(userId = SessionState.DEFAULT_LEGACY_USER_ID)
             return
         }
 
@@ -69,6 +77,7 @@ class DigitalBehaviourViewModel(
                     is SessionState.Initializing -> {
                         loadGeneration++
                         loadJob?.cancel()
+                        catchupJob?.cancel()
                         _uiState.value = DigitalBehaviourUiState(
                             selectedDate = _uiState.value.selectedDate,
                             isLoading = true
@@ -77,6 +86,7 @@ class DigitalBehaviourViewModel(
                     is SessionState.ReconciliationFailed -> {
                         loadGeneration++
                         loadJob?.cancel()
+                        catchupJob?.cancel()
                         _uiState.value = DigitalBehaviourUiState(
                             selectedDate = _uiState.value.selectedDate,
                             isLoading = false,
@@ -86,6 +96,7 @@ class DigitalBehaviourViewModel(
                     is SessionState.OfflineFallback,
                     is SessionState.Authenticated -> {
                         loadData(targetDate = _uiState.value.selectedDate, userId = state.currentUserId)
+                        triggerCatchup(userId = state.currentUserId)
                     }
                 }
             }
@@ -99,6 +110,61 @@ class DigitalBehaviourViewModel(
 
     fun refresh() {
         loadData(targetDate = _uiState.value.selectedDate, userId = defaultUserId)
+        triggerCatchup(userId = defaultUserId)
+    }
+
+    fun triggerCatchup(userId: String = defaultUserId) {
+        if (executeObservationCollectionUseCase == null) return
+        if (catchupJob?.isActive == true) return
+
+        catchupJob = viewModelScope.launch(ioDispatcher) {
+            try {
+                userSessionProvider.runWithSession { activeUid ->
+                    if (activeUid != userId) return@runWithSession
+
+                    // 1. Verify Usage Access permission
+                    val isPermissionGranted = appUsageObservationProvider.isPermissionGranted()
+                    if (!isPermissionGranted) {
+                        println("IronMindLifecycle [DigitalBehaviourViewModel] [CATCHUP_SKIPPED] reason=PERMISSION_DENIED userId=$activeUid")
+                        return@runWithSession
+                    }
+
+                    // 2. Verify observation consent
+                    val settingsResult = appUsageSettingsRepository.getSettings(activeUid)
+                    val isObservationEnabled = when (settingsResult) {
+                        is Result.Success -> settingsResult.data.isEnabled
+                        is Result.Failure -> true
+                    }
+                    if (!isObservationEnabled) {
+                        println("IronMindLifecycle [DigitalBehaviourViewModel] [CATCHUP_SKIPPED] reason=CONSENT_DISABLED userId=$activeUid")
+                        return@runWithSession
+                    }
+
+                    println("IronMindLifecycle [DigitalBehaviourViewModel] [CATCHUP_STARTED] userId=$activeUid")
+                    val result = executeObservationCollectionUseCase(activeUid)
+                    when (result) {
+                        is Result.Success -> {
+                            println("IronMindLifecycle [DigitalBehaviourViewModel] [CATCHUP_COMPLETED] userId=$activeUid collected=${result.data.totalCollected}")
+                            loadData(targetDate = _uiState.value.selectedDate, userId = activeUid)
+                        }
+                        is Result.Failure -> {
+                            when (result.error) {
+                                is ObservationExecutionError.AlreadyRunning -> {
+                                    println("IronMindLifecycle [DigitalBehaviourViewModel] [CATCHUP_ALREADY_RUNNING] userId=$activeUid")
+                                }
+                                is ObservationExecutionError.CollectionFailed -> {
+                                    println("IronMindLifecycle [DigitalBehaviourViewModel] [CATCHUP_FAILED] userId=$activeUid error=${result.error.exception.message}")
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                println("IronMindLifecycle [DigitalBehaviourViewModel] [CATCHUP_EXCEPTION] error=${e.message}")
+            }
+        }
     }
 
     fun acknowledgeError() {
@@ -233,7 +299,8 @@ class DigitalBehaviourViewModel(
                     protectionRepository = container.protectionRepository,
                     userSessionProvider = container.userSessionProvider,
                     appNameResolver = appNameResolver,
-                    clock = container.clock
+                    clock = container.clock,
+                    executeObservationCollectionUseCase = container.executeObservationCollectionUseCase
                 )
             }
         }
