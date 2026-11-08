@@ -19,6 +19,8 @@ class IronMindProtectionService : AccessibilityService() {
     companion object {
         private const val TAG = "IronMindProtection"
         private var isActive = false
+        private var isConnected = false
+        private var isRecovering = false
         private val protectedPkgs = mutableSetOf<String>()
         private var activeUserId: String? = null
         private var activeSessionId: String? = null
@@ -28,6 +30,16 @@ class IronMindProtectionService : AccessibilityService() {
         private fun currentTime(): Long = clock?.currentTimeMillis() ?: System.currentTimeMillis()
 
         var recoveryUseCaseProvider: (() -> AuthoritativeProtectionSessionRecoveryUseCase)? = null
+
+        fun isServiceConnected(): Boolean = isConnected
+        fun setServiceConnected(connected: Boolean) {
+            isConnected = connected
+        }
+
+        fun isServiceRecovering(): Boolean = isRecovering
+        fun setServiceRecovering(recovering: Boolean) {
+            isRecovering = recovering
+        }
 
         fun setProtectionActive(active: Boolean) {
             isActive = active
@@ -75,7 +87,25 @@ class IronMindProtectionService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        Log.i(TAG, "IronMindLifecycle [Protection] [SERVICE_CONNECTED]")
+        setServiceConnected(true)
         rehydrateState()
+    }
+
+    override fun onUnbind(intent: android.content.Intent?): Boolean {
+        Log.i(TAG, "IronMindLifecycle [Protection] [SERVICE_UNBOUND]")
+        setServiceConnected(false)
+        setProtectionActive(false)
+        setActiveSessionIdentity(null, null, null)
+        return super.onUnbind(intent)
+    }
+
+    override fun onDestroy() {
+        Log.i(TAG, "IronMindLifecycle [Protection] [SERVICE_DESTROYED]")
+        setServiceConnected(false)
+        setProtectionActive(false)
+        setActiveSessionIdentity(null, null, null)
+        super.onDestroy()
     }
 
     fun rehydrateState(scope: CoroutineScope = CoroutineScope(Dispatchers.IO)) {
@@ -98,6 +128,7 @@ class IronMindProtectionService : AccessibilityService() {
             } else null
 
         if (recoveryUseCase != null) {
+            setServiceRecovering(true)
             scope.launch {
                 try {
                     val result = recoveryUseCase()
@@ -107,9 +138,12 @@ class IronMindProtectionService : AccessibilityService() {
                     setProtectionActive(false)
                     setProtectedPackages(emptySet())
                     setActiveSessionIdentity(null, null, null)
+                } finally {
+                    setServiceRecovering(false)
                 }
             }
         } else {
+            setServiceRecovering(false)
             // No authoritative recovery use case available -> fail closed immediately
             try {
                 ProtectionEnforcementStore(applicationContext).clearEnforcementState()

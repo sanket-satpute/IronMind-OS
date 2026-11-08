@@ -1,9 +1,13 @@
 package com.sanket_satpute_20.ironmind.domain.provider
 
 import com.sanket_satpute_20.ironmind.domain.common.Result
+import com.sanket_satpute_20.ironmind.domain.model.EnforcementAvailability
 
 interface AppProtectionProvider {
     fun hasRequiredPermissions(): Boolean
+
+    fun getEnforcementAvailability(): EnforcementAvailability =
+        if (hasRequiredPermissions()) EnforcementAvailability.AVAILABLE else EnforcementAvailability.PERMISSION_REQUIRED
 
     suspend fun applyProtection(targetPackages: List<String>): Result<Unit, Exception>
 

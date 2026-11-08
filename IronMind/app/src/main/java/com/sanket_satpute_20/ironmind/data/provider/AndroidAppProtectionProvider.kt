@@ -4,6 +4,7 @@ import android.content.Context
 import android.provider.Settings
 import android.text.TextUtils
 import com.sanket_satpute_20.ironmind.domain.common.Result
+import com.sanket_satpute_20.ironmind.domain.model.EnforcementAvailability
 import com.sanket_satpute_20.ironmind.domain.provider.AppProtectionProvider
 import com.sanket_satpute_20.ironmind.domain.session.UserSessionProvider
 import com.sanket_satpute_20.ironmind.service.IronMindProtectionService
@@ -74,43 +75,40 @@ class AndroidAppProtectionProvider(
         return Result.Success(Unit)
     }
 
+    override fun getEnforcementAvailability(): EnforcementAvailability {
+        if (!hasRequiredPermissions()) {
+            return EnforcementAvailability.PERMISSION_REQUIRED
+        }
+        if (IronMindProtectionService.isServiceRecovering()) {
+            return EnforcementAvailability.RECOVERING
+        }
+        if (!IronMindProtectionService.isServiceConnected()) {
+            return EnforcementAvailability.SERVICE_UNAVAILABLE
+        }
+        return EnforcementAvailability.AVAILABLE
+    }
+
     override fun isProtectionActive(): Boolean {
-        // Safe Epistemic Rule: If the user revoked accessibility permissions in settings,
-        // enforcement cannot be active regardless of stale memory or persistent flags.
+        // Safe Epistemic Rule:
+        // 1. Accessibility permissions must be granted in system settings.
+        // 2. The Accessibility Service must be actively connected.
+        // 3. Stale SharedPreferences can NEVER independently claim enforcement is actively running.
         if (!hasRequiredPermissions()) return false
+        if (!IronMindProtectionService.isServiceConnected()) return false
+        if (!IronMindProtectionService.isProtectionActive()) return false
 
         val activeUid = userSessionProvider?.getActiveUserId()
-        val serviceActive = IronMindProtectionService.isProtectionActive()
         val serviceUser = IronMindProtectionService.getActiveUserId()
 
-        if (serviceActive) {
-            if (activeUid != null && serviceUser != null && serviceUser != activeUid) {
-                return false
-            }
-            return true
+        if (activeUid != null && serviceUser != null && serviceUser != activeUid) {
+            return false
         }
-
-        val storedState = enforcementStore.getEnforcementState()
-        if (storedState?.isActive == true && !storedState.sessionId.isNullOrBlank()) {
-            if (activeUid != null && storedState.userId != activeUid) {
-                return false
-            }
-            if (storedState.scheduledEndAt != null && System.currentTimeMillis() >= storedState.scheduledEndAt) {
-                return false
-            }
-            return true
-        }
-
-        return false
+        return true
     }
 
     override fun getEnforcedPackages(): Set<String> {
         if (!isProtectionActive()) return emptySet()
-
-        val inMemory = IronMindProtectionService.getProtectedPackages()
-        if (inMemory.isNotEmpty()) return inMemory
-
-        return enforcementStore.getEnforcementState()?.protectedPackages ?: emptySet()
+        return IronMindProtectionService.getProtectedPackages()
     }
 
     private fun isAccessibilityServiceEnabled(context: Context, accessibilityService: Class<*>): Boolean {

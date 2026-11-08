@@ -13,6 +13,7 @@ import com.sanket_satpute_20.ironmind.data.repository.ProtectionRepositoryImpl
 import com.sanket_satpute_20.ironmind.domain.common.Clock
 import com.sanket_satpute_20.ironmind.domain.common.IdGenerator
 import com.sanket_satpute_20.ironmind.domain.common.Result
+import com.sanket_satpute_20.ironmind.domain.model.EnforcementAvailability
 import com.sanket_satpute_20.ironmind.domain.model.EntitySource
 import com.sanket_satpute_20.ironmind.domain.model.ProtectionSession
 import com.sanket_satpute_20.ironmind.domain.model.ProtectionSessionStatus
@@ -104,8 +105,13 @@ class AuthoritativeProtectionSessionRecoveryTest {
 
         protectionRepository = ProtectionRepositoryImpl(dao)
         eventRepository = EventRepositoryImpl(dao = dao, database = db)
-        store = ProtectionEnforcementStore(context)
+        clock = FakeClock(currentTime = 1_000_000L)
+        IronMindProtectionService.clock = clock
+        ProtectionEnforcementStore.clock = clock
+
+        store = ProtectionEnforcementStore(context, clock)
         store.clearEnforcementState()
+        IronMindProtectionService.setServiceConnected(true)
         IronMindProtectionService.setProtectionActive(false)
         IronMindProtectionService.setProtectedPackages(emptySet())
         IronMindProtectionService.setActiveSessionIdentity(null, null)
@@ -113,8 +119,6 @@ class AuthoritativeProtectionSessionRecoveryTest {
         userSessionProvider = FakeUserSessionProvider(SessionState.Authenticated(testUserId, isAnonymous = false))
         fakeDiscoveryProvider = FakeInstalledAppDiscoveryProvider()
         fakeProtectionProvider = FakeAlwaysPermittedProtectionProvider(store)
-        clock = FakeClock(currentTime = 1_000_000L)
-        IronMindProtectionService.clock = clock
 
         getConfigsUseCase = GetAppRestrictionConfigsUseCase(protectionRepository)
         getEligibleUseCase = GetEligibleRestrictionsForEnforcementUseCase(getConfigsUseCase, fakeDiscoveryProvider)
@@ -151,9 +155,11 @@ class AuthoritativeProtectionSessionRecoveryTest {
     fun tearDown() {
         store.clearEnforcementState()
         IronMindProtectionService.setProtectionActive(false)
+        IronMindProtectionService.setServiceConnected(false)
         IronMindProtectionService.setProtectedPackages(emptySet())
         IronMindProtectionService.setActiveSessionIdentity(null, null, null)
         IronMindProtectionService.clock = null
+        ProtectionEnforcementStore.clock = null
         db.close()
     }
 
@@ -784,6 +790,352 @@ class AuthoritativeProtectionSessionRecoveryTest {
         assertTrue(IronMindProtectionService.getProtectedPackages().isEmpty())
     }
 
+    // 17. Active Room session + Accessibility unavailable -> session remains ACTIVE, enforcement unavailable, configs intact
+    @Test
+    fun `scenario 17 - active room session remains ACTIVE when accessibility unavailable and enforcement fails closed`() = runTest {
+        saveConfigUseCase(testUserId, "com.target.app", "Target App", isEnabled = true)
+
+        val session = ProtectionSession(
+            id = "session_perm_loss",
+            userId = testUserId,
+            startedAt = 1_000_000L,
+            scheduledEndAt = 2_000_000L,
+            endedAt = null,
+            status = ProtectionSessionStatus.ACTIVE,
+            source = EntitySource.USER,
+            overrideAllowed = true,
+            createdAt = 1_000_000L,
+            updatedAt = 1_000_000L
+        )
+        protectionRepository.saveProtectionSession(session)
+
+        store.saveEnforcementState(
+            sessionId = session.id,
+            userId = testUserId,
+            isActive = true,
+            packages = setOf("com.target.app"),
+            scheduledEndAt = 2_000_000L
+        )
+
+        // Simulate Accessibility permission revocation
+        fakeProtectionProvider.hasPermissions = false
+
+        val result = recoveryUseCase()
+        assertTrue(result is ProtectionRecoveryResult.FailedClosed)
+        assertEquals(
+            ProtectionRecoveryResult.FailClosedReason.PERMISSION_REVOKED,
+            (result as ProtectionRecoveryResult.FailedClosed).reason
+        )
+
+        // Critical Invariant: Room session MUST remain ACTIVE
+        val dbSession = (protectionRepository.getProtectionSession(session.id) as Result.Success).data
+        assertEquals(ProtectionSessionStatus.ACTIVE, dbSession.status)
+        assertNull(dbSession.endedAt)
+
+        // Enforcement must be unavailable
+        assertFalse(IronMindProtectionService.isProtectionActive())
+        assertTrue(IronMindProtectionService.getProtectedPackages().isEmpty())
+        assertFalse(store.getEnforcementState()?.isActive == true)
+
+        // Configured restrictions must remain intact
+        val configs = (getConfigsUseCase(testUserId) as Result.Success).data
+        assertEquals(1, configs.size)
+        assertEquals("com.target.app", configs.first().packageName)
+        assertTrue(configs.first().isEnabled)
+    }
+
+    // 18. Permission re-enabled + valid active Room session -> authoritative recovery
+    @Test
+    fun `scenario 18 - permission re-enabled with valid active Room session authoritatively restores enforcement`() = runTest {
+        saveConfigUseCase(testUserId, "com.target.app", "Target App", isEnabled = true)
+
+        val session = ProtectionSession(
+            id = "session_reenabled",
+            userId = testUserId,
+            startedAt = 1_000_000L,
+            scheduledEndAt = 2_000_000L,
+            endedAt = null,
+            status = ProtectionSessionStatus.ACTIVE,
+            source = EntitySource.USER,
+            overrideAllowed = true,
+            createdAt = 1_000_000L,
+            updatedAt = 1_000_000L
+        )
+        protectionRepository.saveProtectionSession(session)
+
+        // Store preserved from previous revocation
+        store.saveEnforcementState(
+            sessionId = session.id,
+            userId = testUserId,
+            isActive = false,
+            packages = emptySet(),
+            scheduledEndAt = 2_000_000L
+        )
+
+        // Permission re-enabled
+        fakeProtectionProvider.hasPermissions = true
+
+        val result = recoveryUseCase()
+        assertTrue(result is ProtectionRecoveryResult.Restored)
+        val restored = result as ProtectionRecoveryResult.Restored
+        assertEquals(session.id, restored.sessionId)
+        assertEquals(testUserId, restored.userId)
+        assertEquals(setOf("com.target.app"), restored.enforcedPackages)
+
+        // In-memory service restored
+        assertTrue(IronMindProtectionService.isProtectionActive())
+        assertEquals(setOf("com.target.app"), IronMindProtectionService.getProtectedPackages())
+        assertTrue(store.getEnforcementState()?.isActive == true)
+
+        // Authoritative Room state confirmed: no duplicate sessions
+        val activeSessions = (protectionRepository.getActiveProtectionSessionsForUser(testUserId) as Result.Success).data
+        assertEquals(1, activeSessions.size)
+        assertEquals(session.id, activeSessions.first().id)
+    }
+
+    // 19. Permission re-enabled + expired session -> no enforcement
+    @Test
+    fun `scenario 19 - permission re-enabled after session expired does not restore enforcement and transitions to EXPIRED`() = runTest {
+        saveConfigUseCase(testUserId, "com.target.app", "Target App", isEnabled = true)
+
+        val scheduledEnd = 1_500_000L
+        val session = ProtectionSession(
+            id = "session_expired_during_revocation",
+            userId = testUserId,
+            startedAt = 1_000_000L,
+            scheduledEndAt = scheduledEnd,
+            endedAt = null,
+            status = ProtectionSessionStatus.ACTIVE,
+            source = EntitySource.USER,
+            overrideAllowed = true,
+            createdAt = 1_000_000L,
+            updatedAt = 1_000_000L
+        )
+        protectionRepository.saveProtectionSession(session)
+
+        store.saveEnforcementState(
+            sessionId = session.id,
+            userId = testUserId,
+            isActive = false,
+            packages = emptySet(),
+            scheduledEndAt = scheduledEnd
+        )
+
+        // Advance time past expiration while permission was off
+        clock.setTime(1_600_000L)
+
+        // Permission re-enabled
+        fakeProtectionProvider.hasPermissions = true
+
+        val result = recoveryUseCase()
+        assertTrue(result is ProtectionRecoveryResult.FailedClosed)
+        assertEquals(
+            ProtectionRecoveryResult.FailClosedReason.SESSION_EXPIRED,
+            (result as ProtectionRecoveryResult.FailedClosed).reason
+        )
+
+        // Session authoritatively marked EXPIRED in Room
+        val dbSession = (protectionRepository.getProtectionSession(session.id) as Result.Success).data
+        assertEquals(ProtectionSessionStatus.EXPIRED, dbSession.status)
+        assertEquals(scheduledEnd, dbSession.endedAt)
+
+        assertFalse(IronMindProtectionService.isProtectionActive())
+        assertTrue(IronMindProtectionService.getProtectedPackages().isEmpty())
+        assertFalse(store.getEnforcementState()?.isActive == true)
+    }
+
+    // 20. Permission re-enabled + OVERRIDDEN session -> no enforcement
+    @Test
+    fun `scenario 20 - permission re-enabled after emergency override does not restore enforcement`() = runTest {
+        saveConfigUseCase(testUserId, "com.target.app", "Target App", isEnabled = true)
+
+        val session = ProtectionSession(
+            id = "session_overridden_during_revocation",
+            userId = testUserId,
+            startedAt = 1_000_000L,
+            scheduledEndAt = 2_000_000L,
+            endedAt = 1_100_000L,
+            status = ProtectionSessionStatus.OVERRIDDEN,
+            source = EntitySource.USER,
+            overrideAllowed = true,
+            createdAt = 1_000_000L,
+            updatedAt = 1_100_000L
+        )
+        protectionRepository.saveProtectionSession(session)
+
+        store.saveEnforcementState(
+            sessionId = session.id,
+            userId = testUserId,
+            isActive = false,
+            packages = emptySet(),
+            scheduledEndAt = 2_000_000L
+        )
+
+        // Permission re-enabled
+        fakeProtectionProvider.hasPermissions = true
+
+        val result = recoveryUseCase()
+        assertTrue(result is ProtectionRecoveryResult.FailedClosed)
+        assertEquals(
+            ProtectionRecoveryResult.FailClosedReason.SESSION_OVERRIDDEN,
+            (result as ProtectionRecoveryResult.FailedClosed).reason
+        )
+
+        val dbSession = (protectionRepository.getProtectionSession(session.id) as Result.Success).data
+        assertEquals(ProtectionSessionStatus.OVERRIDDEN, dbSession.status)
+        assertFalse(IronMindProtectionService.isProtectionActive())
+    }
+
+    // 21. Permission re-enabled under a different user -> no unauthorized recovery
+    @Test
+    fun `scenario 21 - permission re-enabled under different user rejects recovery`() = runTest {
+        saveConfigUseCase(testUserId, "com.target.app", "Target App", isEnabled = true)
+
+        val session = ProtectionSession(
+            id = "session_user_switch",
+            userId = testUserId,
+            startedAt = 1_000_000L,
+            scheduledEndAt = 2_000_000L,
+            endedAt = null,
+            status = ProtectionSessionStatus.ACTIVE,
+            source = EntitySource.USER,
+            overrideAllowed = true,
+            createdAt = 1_000_000L,
+            updatedAt = 1_000_000L
+        )
+        protectionRepository.saveProtectionSession(session)
+
+        store.saveEnforcementState(
+            sessionId = session.id,
+            userId = testUserId,
+            isActive = false,
+            packages = emptySet(),
+            scheduledEndAt = 2_000_000L
+        )
+
+        // User switches to different account
+        userSessionProvider.setState(SessionState.Authenticated("other_user", isAnonymous = false))
+
+        fakeProtectionProvider.hasPermissions = true
+
+        val result = recoveryUseCase()
+        assertTrue(result is ProtectionRecoveryResult.FailedClosed)
+        assertEquals(
+            ProtectionRecoveryResult.FailClosedReason.USER_MISMATCH,
+            (result as ProtectionRecoveryResult.FailedClosed).reason
+        )
+
+        assertFalse(IronMindProtectionService.isProtectionActive())
+    }
+
+    // 22. Stale SharedPreferences + unavailable permission -> no enforcement claim
+    @Test
+    fun `scenario 22 - stale shared preferences with revoked permission fails closed and claims no enforcement`() = runTest {
+        store.saveEnforcementState(
+            sessionId = "stale_session_id",
+            userId = testUserId,
+            isActive = true,
+            packages = setOf("com.target.app"),
+            scheduledEndAt = 2_000_000L
+        )
+
+        fakeProtectionProvider.hasPermissions = false
+
+        val result = recoveryUseCase()
+        assertTrue(result is ProtectionRecoveryResult.FailedClosed)
+        assertEquals(
+            ProtectionRecoveryResult.FailClosedReason.PERMISSION_REVOKED,
+            (result as ProtectionRecoveryResult.FailedClosed).reason
+        )
+
+        assertFalse(fakeProtectionProvider.isProtectionActive())
+        assertFalse(IronMindProtectionService.isProtectionActive())
+        assertFalse(store.getEnforcementState()?.isActive == true)
+    }
+
+    // 23. Repeated permission state changes -> idempotent recovery
+    @Test
+    fun `scenario 23 - repeated permission toggles recover idempotently without session corruption`() = runTest {
+        saveConfigUseCase(testUserId, "com.target.app", "Target App", isEnabled = true)
+
+        val session = ProtectionSession(
+            id = "session_toggle_loop",
+            userId = testUserId,
+            startedAt = 1_000_000L,
+            scheduledEndAt = 2_000_000L,
+            endedAt = null,
+            status = ProtectionSessionStatus.ACTIVE,
+            source = EntitySource.USER,
+            overrideAllowed = true,
+            createdAt = 1_000_000L,
+            updatedAt = 1_000_000L
+        )
+        protectionRepository.saveProtectionSession(session)
+
+        store.saveEnforcementState(
+            sessionId = session.id,
+            userId = testUserId,
+            isActive = true,
+            packages = setOf("com.target.app"),
+            scheduledEndAt = 2_000_000L
+        )
+
+        // 1. Granted -> Restored
+        fakeProtectionProvider.hasPermissions = true
+        val res1 = recoveryUseCase()
+        assertTrue(res1 is ProtectionRecoveryResult.Restored)
+
+        // 2. Revoked -> FailedClosed(PERMISSION_REVOKED), session remains ACTIVE
+        fakeProtectionProvider.hasPermissions = false
+        val res2 = recoveryUseCase()
+        assertTrue(res2 is ProtectionRecoveryResult.FailedClosed)
+        assertEquals(ProtectionRecoveryResult.FailClosedReason.PERMISSION_REVOKED, (res2 as ProtectionRecoveryResult.FailedClosed).reason)
+
+        val dbSessionMid = (protectionRepository.getProtectionSession(session.id) as Result.Success).data
+        assertEquals(ProtectionSessionStatus.ACTIVE, dbSessionMid.status)
+
+        // 3. Re-enabled -> Restored again
+        fakeProtectionProvider.hasPermissions = true
+        val res3 = recoveryUseCase()
+        assertTrue(res3 is ProtectionRecoveryResult.Restored)
+
+        // 4. Revoked again -> FailedClosed
+        fakeProtectionProvider.hasPermissions = false
+        val res4 = recoveryUseCase()
+        assertTrue(res4 is ProtectionRecoveryResult.FailedClosed)
+
+        // 5. Re-enabled again -> Restored again
+        fakeProtectionProvider.hasPermissions = true
+        val res5 = recoveryUseCase()
+        assertTrue(res5 is ProtectionRecoveryResult.Restored)
+
+        // Still exactly 1 session in Room
+        val activeSessions = (protectionRepository.getActiveProtectionSessionsForUser(testUserId) as Result.Success).data
+        assertEquals(1, activeSessions.size)
+        assertEquals(session.id, activeSessions.first().id)
+    }
+
+    // 24. Service disconnected without explicit permission revocation -> fails open
+    @Test
+    fun `scenario 24 - service disconnected without permission revocation fails open and reports inactive`() = runTest {
+        saveConfigUseCase(testUserId, "com.target.app", "Target App", isEnabled = true)
+
+        fakeProtectionProvider.hasPermissions = true
+        IronMindProtectionService.setActiveSessionIdentity("session_disconnect", testUserId, 2_000_000L)
+        IronMindProtectionService.setProtectedPackages(setOf("com.target.app"))
+        IronMindProtectionService.setProtectionActive(true)
+
+        assertTrue(IronMindProtectionService.isProtectionActive())
+
+        // Service disconnected (simulate unbind or destroy lifecycle)
+        IronMindProtectionService.setServiceConnected(false)
+        IronMindProtectionService.setProtectionActive(false)
+        IronMindProtectionService.setActiveSessionIdentity(null, null, null)
+
+        assertFalse(IronMindProtectionService.isProtectionActive())
+        assertTrue(IronMindProtectionService.getProtectedPackages().isEmpty())
+    }
+
     // --- Helpers & Doubles ---
 
     private class FakeInstalledAppDiscoveryProvider : InstalledAppDiscoveryProvider {
@@ -812,10 +1164,14 @@ class AuthoritativeProtectionSessionRecoveryTest {
     private class FakeAlwaysPermittedProtectionProvider(
         private val store: ProtectionEnforcementStore
     ) : AppProtectionProvider {
+        var hasPermissions: Boolean = true
         private var isActive = false
         private val enforced = mutableSetOf<String>()
 
-        override fun hasRequiredPermissions(): Boolean = true
+        override fun hasRequiredPermissions(): Boolean = hasPermissions
+
+        override fun getEnforcementAvailability(): EnforcementAvailability =
+            if (hasPermissions) EnforcementAvailability.AVAILABLE else EnforcementAvailability.PERMISSION_REQUIRED
 
         override suspend fun applyProtection(targetPackages: List<String>): Result<Unit, Exception> {
             return applyProtection(targetPackages, sessionId = null, userId = null, scheduledEndAt = null)
@@ -862,7 +1218,7 @@ class AuthoritativeProtectionSessionRecoveryTest {
             return Result.Success(Unit)
         }
 
-        override fun isProtectionActive(): Boolean = isActive
+        override fun isProtectionActive(): Boolean = hasPermissions && isActive
 
         override fun getEnforcedPackages(): Set<String> = enforced.toSet()
     }

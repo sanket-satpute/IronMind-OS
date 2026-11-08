@@ -1,6 +1,7 @@
 package com.sanket_satpute_20.ironmind.testutil.fake
 
 import com.sanket_satpute_20.ironmind.domain.common.Result
+import com.sanket_satpute_20.ironmind.domain.model.EnforcementAvailability
 import com.sanket_satpute_20.ironmind.domain.provider.AppProtectionProvider
 
 class FakeAppProtectionProvider : AppProtectionProvider {
@@ -8,11 +9,18 @@ class FakeAppProtectionProvider : AppProtectionProvider {
     var isActive = false
     val protectedPackages = mutableListOf<String>()
     var shouldFailRemoval = false
+    var availabilityOverride: EnforcementAvailability? = null
 
     var lastScheduledEndAt: Long? = null
 
     override fun hasRequiredPermissions(): Boolean {
         return permissionsGranted
+    }
+
+    override fun getEnforcementAvailability(): EnforcementAvailability {
+        availabilityOverride?.let { return it }
+        if (!permissionsGranted) return EnforcementAvailability.PERMISSION_REQUIRED
+        return EnforcementAvailability.AVAILABLE
     }
 
     override suspend fun applyProtection(targetPackages: List<String>): Result<Unit, Exception> {
@@ -46,6 +54,7 @@ class FakeAppProtectionProvider : AppProtectionProvider {
     }
 
     override fun isProtectionActive(): Boolean {
+        if (!permissionsGranted) return false
         return isActive
     }
 }

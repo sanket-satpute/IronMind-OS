@@ -2,6 +2,7 @@ package com.sanket_satpute_20.ironmind.data.provider
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.sanket_satpute_20.ironmind.domain.common.Clock
 
 data class PersistentEnforcementState(
     val sessionId: String?,
@@ -22,8 +23,13 @@ data class PersistentEnforcementState(
  * Furthermore, an enforcement state whose [scheduledEndAt] timestamp has passed
  * is authoritatively inactive.
  */
-class ProtectionEnforcementStore(context: Context) {
+class ProtectionEnforcementStore(
+    context: Context,
+    private val clock: Clock? = null
+) {
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    private fun now(): Long = clock?.currentTimeMillis() ?: Companion.clock?.currentTimeMillis() ?: System.currentTimeMillis()
 
     fun saveEnforcementState(
         sessionId: String?,
@@ -33,7 +39,7 @@ class ProtectionEnforcementStore(context: Context) {
         scheduledEndAt: Long? = null
     ) {
         val filtered = packages.filter { it.isNotBlank() && it != IRONMIND_PACKAGE }.toSet()
-        val isExpired = scheduledEndAt != null && System.currentTimeMillis() >= scheduledEndAt
+        val isExpired = scheduledEndAt != null && now() >= scheduledEndAt
         val genuinelyActive = isActive && filtered.isNotEmpty() && !sessionId.isNullOrBlank() && !isExpired
         prefs.edit()
             .putString(KEY_SESSION_ID, sessionId)
@@ -41,7 +47,7 @@ class ProtectionEnforcementStore(context: Context) {
             .putBoolean(KEY_IS_ACTIVE, genuinelyActive)
             .putStringSet(KEY_PACKAGES, if (genuinelyActive) filtered else emptySet())
             .putLong(KEY_SCHEDULED_END_AT, scheduledEndAt ?: -1L)
-            .putLong(KEY_LAST_UPDATED, System.currentTimeMillis())
+            .putLong(KEY_LAST_UPDATED, now())
             .apply()
     }
 
@@ -72,7 +78,7 @@ class ProtectionEnforcementStore(context: Context) {
         val lastUpdated = prefs.getLong(KEY_LAST_UPDATED, 0L)
 
         val hasValidSession = !sessionId.isNullOrBlank()
-        val isExpired = scheduledEndAt != null && System.currentTimeMillis() >= scheduledEndAt
+        val isExpired = scheduledEndAt != null && now() >= scheduledEndAt
         val genuinelyActive = isActive && packages.isNotEmpty() && hasValidSession && !isExpired
 
         return PersistentEnforcementState(
@@ -86,6 +92,8 @@ class ProtectionEnforcementStore(context: Context) {
     }
 
     companion object {
+        var clock: Clock? = null
+
         const val IRONMIND_PACKAGE = "com.sanket_satpute_20.ironmind"
         private const val PREFS_NAME = "ironmind_protection_enforcement"
         private const val KEY_SESSION_ID = "originating_session_id"

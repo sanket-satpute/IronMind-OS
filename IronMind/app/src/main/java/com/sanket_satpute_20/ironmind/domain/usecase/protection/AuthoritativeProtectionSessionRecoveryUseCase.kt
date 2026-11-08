@@ -69,42 +69,59 @@ class AuthoritativeProtectionSessionRecoveryUseCase(
         try {
             // 1. Read persisted enforcement state from store
             val storedState = enforcementStore.getEnforcementState()
-            if (storedState == null) {
-                failClosed()
-                return ProtectionRecoveryResult.NoEnforcementPending
-            }
+            val activeUserId = userSessionProvider.getActiveUserId()
 
-            // 2. Validate originating session identity is present
-            val sessionId = storedState.sessionId
-            if (sessionId.isNullOrBlank()) {
-                failClosed()
-                return ProtectionRecoveryResult.FailedClosed(ProtectionRecoveryResult.FailClosedReason.MISSING_SESSION_ID)
+            // 2. Identify originating session identity
+            val sessionId = if (storedState != null) {
+                if (storedState.sessionId.isNullOrBlank()) {
+                    failClosed(clearStore = true)
+                    return ProtectionRecoveryResult.FailedClosed(ProtectionRecoveryResult.FailClosedReason.MISSING_SESSION_ID)
+                }
+                storedState.sessionId
+            } else {
+                // Store has no pending enforcement record; check if Room has an active session for the authenticated user
+                val activeSessionId = if (activeUserId.isNotBlank()) {
+                    val activeSessionsResult = protectionRepository.getActiveProtectionSessionsForUser(activeUserId)
+                    if (activeSessionsResult is Result.Success) {
+                        activeSessionsResult.data.firstOrNull { it.status == ProtectionSessionStatus.ACTIVE && it.endedAt == null }?.id
+                    } else null
+                } else null
+
+                if (activeSessionId == null) {
+                    failClosed(clearStore = true)
+                    return ProtectionRecoveryResult.NoEnforcementPending
+                }
+                activeSessionId
             }
 
             // 3. Validate accessibility permission is still granted
             if (!appProtectionProvider.hasRequiredPermissions()) {
-                failClosed()
+                failClosed(
+                    clearStore = false,
+                    preservedSessionId = sessionId,
+                    preservedUserId = storedState?.userId ?: activeUserId,
+                    preservedScheduledEndAt = storedState?.scheduledEndAt
+                )
                 return ProtectionRecoveryResult.FailedClosed(ProtectionRecoveryResult.FailClosedReason.PERMISSION_REVOKED)
             }
 
             // 4. Validate current authenticated user
-            val activeUserId = userSessionProvider.getActiveUserId()
-            if (activeUserId.isBlank() || activeUserId != storedState.userId) {
-                failClosed()
+            if (activeUserId.isBlank() || (storedState?.userId != null && storedState.userId.isNotBlank() && activeUserId != storedState.userId)) {
+                failClosed(clearStore = true)
                 return ProtectionRecoveryResult.FailedClosed(ProtectionRecoveryResult.FailClosedReason.USER_MISMATCH)
             }
 
             // 5. Query authoritative session record from Room repository
             val sessionResult = protectionRepository.getProtectionSession(sessionId)
             if (sessionResult !is Result.Success) {
-                failClosed()
+                failClosed(clearStore = true)
                 return ProtectionRecoveryResult.FailedClosed(ProtectionRecoveryResult.FailClosedReason.SESSION_NOT_FOUND)
             }
             val session = sessionResult.data
 
             // 6. Validate session belongs to current user
             if (session.userId != activeUserId) {
-                failClosed()
+                failClosed(clearStore = true)
                 return ProtectionRecoveryResult.FailedClosed(ProtectionRecoveryResult.FailClosedReason.USER_MISMATCH)
             }
 
@@ -115,7 +132,7 @@ class AuthoritativeProtectionSessionRecoveryUseCase(
                     ProtectionSessionStatus.EXPIRED -> ProtectionRecoveryResult.FailClosedReason.SESSION_EXPIRED
                     else -> ProtectionRecoveryResult.FailClosedReason.SESSION_NOT_ACTIVE
                 }
-                failClosed()
+                failClosed(clearStore = true)
                 return ProtectionRecoveryResult.FailedClosed(reason)
             }
 
@@ -142,18 +159,21 @@ class AuthoritativeProtectionSessionRecoveryUseCase(
                     )
                 )
                 println("IronMindLifecycle [Protection] [SESSION_STOPPED] sessionId=${session.id} reason=EXPIRED")
-                failClosed()
+                failClosed(clearStore = true)
                 return ProtectionRecoveryResult.FailedClosed(ProtectionRecoveryResult.FailClosedReason.SESSION_EXPIRED)
             }
 
             // 9. Recalculate eligible packages from current saved configurations
-            val storedPackages = storedState.protectedPackages
+            val storedPackages = storedState?.protectedPackages ?: emptySet()
             val packagesToEnforce: Set<String> = if (getEligibleRestrictionsForEnforcementUseCase != null) {
                 when (val eligibleResult = getEligibleRestrictionsForEnforcementUseCase.invoke(activeUserId)) {
                     is Result.Success -> {
                         val currentlyEligible = eligibleResult.data.map { it.packageName }.toSet()
-                        // Intersect stored packages with currently enabled and installed restrictions
-                        storedPackages.filter { currentlyEligible.contains(it) }.toSet()
+                        if (storedPackages.isNotEmpty()) {
+                            storedPackages.filter { currentlyEligible.contains(it) }.toSet()
+                        } else {
+                            currentlyEligible
+                        }
                     }
                     is Result.Failure -> storedPackages
                 }
@@ -162,7 +182,7 @@ class AuthoritativeProtectionSessionRecoveryUseCase(
             }
 
             if (packagesToEnforce.isEmpty()) {
-                failClosed()
+                failClosed(clearStore = true)
                 return ProtectionRecoveryResult.FailedClosed(ProtectionRecoveryResult.FailClosedReason.NO_ELIGIBLE_PACKAGES)
             }
 
@@ -186,13 +206,28 @@ class AuthoritativeProtectionSessionRecoveryUseCase(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            failClosed()
+            failClosed(clearStore = true)
             return ProtectionRecoveryResult.FailedClosed(ProtectionRecoveryResult.FailClosedReason.INTERNAL_ERROR)
         }
     }
 
-    private fun failClosed() {
-        enforcementStore.clearEnforcementState()
+    private fun failClosed(
+        clearStore: Boolean = true,
+        preservedSessionId: String? = null,
+        preservedUserId: String? = null,
+        preservedScheduledEndAt: Long? = null
+    ) {
+        if (clearStore) {
+            enforcementStore.clearEnforcementState()
+        } else {
+            enforcementStore.saveEnforcementState(
+                sessionId = preservedSessionId,
+                userId = preservedUserId ?: "",
+                isActive = false,
+                packages = emptySet(),
+                scheduledEndAt = preservedScheduledEndAt
+            )
+        }
         IronMindProtectionService.setProtectionActive(false)
         IronMindProtectionService.setProtectedPackages(emptySet())
         IronMindProtectionService.setActiveSessionIdentity(null, null, null)

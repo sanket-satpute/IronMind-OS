@@ -1,10 +1,13 @@
 package com.sanket_satpute_20.ironmind.ui.screens.protection
 
 import com.sanket_satpute_20.ironmind.domain.common.Result
+import com.sanket_satpute_20.ironmind.domain.model.EnforcementAvailability
 import com.sanket_satpute_20.ironmind.domain.model.ProtectionSessionStatus
 import com.sanket_satpute_20.ironmind.domain.usecase.protection.GetActiveProtectionSessionUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.protection.StartProtectionSessionUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.protection.StopProtectionSessionUseCase
+import com.sanket_satpute_20.ironmind.domain.session.SessionState
+import com.sanket_satpute_20.ironmind.testutil.FakeUserSessionProvider
 import com.sanket_satpute_20.ironmind.testutil.TestDispatcherRule
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeAppProtectionProvider
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
@@ -51,7 +54,13 @@ class ProtectionViewModelTest {
     }
 
     private fun createViewModel() {
-        viewModel = ProtectionViewModel(getActiveSessionUseCase, startSessionUseCase, stopSessionUseCase)
+        viewModel = ProtectionViewModel(
+            getActiveProtectionSessionUseCase = getActiveSessionUseCase,
+            startProtectionSessionUseCase = startSessionUseCase,
+            stopProtectionSessionUseCase = stopSessionUseCase,
+            userSessionProvider = null,
+            appProtectionProvider = appProtectionProvider
+        )
     }
 
     @Test
@@ -139,5 +148,76 @@ class ProtectionViewModelTest {
         val state = viewModel.uiState.value
         assertTrue(state is ProtectionUiState.Error)
         assertEquals("Failed to remove protection: Simulated removal failure", (state as ProtectionUiState.Error).message)
+    }
+
+    @Test
+    fun `session transition clears prior users active protection session`() = runTest {
+        startSessionUseCase("user-1", "rule-1", "commitment-1", "task-1", null, true, listOf("com.example.app"))
+        val provider = FakeUserSessionProvider(SessionState.OfflineFallback("user-1"))
+        viewModel = ProtectionViewModel(
+            getActiveSessionUseCase,
+            startSessionUseCase,
+            stopSessionUseCase,
+            provider
+        )
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value is ProtectionUiState.ActiveSession)
+
+        provider.setState(SessionState.Authenticated("user-2", isAnonymous = true))
+        advanceUntilIdle()
+
+        assertTrue("The former user's session must not remain visible", viewModel.uiState.value is ProtectionUiState.NoActiveSession)
+    }
+
+    @Test
+    fun `active session with permission granted produces ActiveSession with AVAILABLE`() = runTest {
+        startSessionUseCase("user-1", "rule-1", "commitment-1", "task-1", null, true, listOf("com.example.app"))
+        appProtectionProvider.permissionsGranted = true
+        createViewModel()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is ProtectionUiState.ActiveSession)
+        assertEquals(EnforcementAvailability.AVAILABLE, (state as ProtectionUiState.ActiveSession).enforcementAvailability)
+    }
+
+    @Test
+    fun `active session with accessibility revoked produces ActiveSession with PERMISSION_REQUIRED`() = runTest {
+        startSessionUseCase("user-1", "rule-1", "commitment-1", "task-1", null, true, listOf("com.example.app"))
+        appProtectionProvider.permissionsGranted = false
+        createViewModel()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is ProtectionUiState.ActiveSession)
+        val active = state as ProtectionUiState.ActiveSession
+        assertEquals(ProtectionSessionStatus.ACTIVE, active.session.status)
+        assertEquals(EnforcementAvailability.PERMISSION_REQUIRED, active.enforcementAvailability)
+    }
+
+    @Test
+    fun `active session with service disconnected produces ActiveSession with SERVICE_UNAVAILABLE`() = runTest {
+        startSessionUseCase("user-1", "rule-1", "commitment-1", "task-1", null, true, listOf("com.example.app"))
+        appProtectionProvider.permissionsGranted = true
+        appProtectionProvider.availabilityOverride = EnforcementAvailability.SERVICE_UNAVAILABLE
+        createViewModel()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is ProtectionUiState.ActiveSession)
+        assertEquals(EnforcementAvailability.SERVICE_UNAVAILABLE, (state as ProtectionUiState.ActiveSession).enforcementAvailability)
+    }
+
+    @Test
+    fun `active session during recovery produces ActiveSession with RECOVERING`() = runTest {
+        startSessionUseCase("user-1", "rule-1", "commitment-1", "task-1", null, true, listOf("com.example.app"))
+        appProtectionProvider.permissionsGranted = true
+        appProtectionProvider.availabilityOverride = EnforcementAvailability.RECOVERING
+        createViewModel()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is ProtectionUiState.ActiveSession)
+        assertEquals(EnforcementAvailability.RECOVERING, (state as ProtectionUiState.ActiveSession).enforcementAvailability)
     }
 }
