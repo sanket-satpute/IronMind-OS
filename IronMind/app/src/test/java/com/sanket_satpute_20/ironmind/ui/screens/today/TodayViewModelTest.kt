@@ -7,6 +7,12 @@ import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetActiveCommitm
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.UpdateCommitmentStatusUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.ScheduleCommitmentUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.CancelCommitmentScheduleUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.task.GetDueTasksUseCase
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeTaskRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakePlanRepository
+import com.sanket_satpute_20.ironmind.domain.model.Task
+import com.sanket_satpute_20.ironmind.domain.model.TaskStatus
+import com.sanket_satpute_20.ironmind.domain.model.EntitySource
 import com.sanket_satpute_20.ironmind.testutil.TestDispatcherRule
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeCommitmentRepository
@@ -24,13 +30,39 @@ import com.sanket_satpute_20.ironmind.domain.ai.InterventionType
 import com.sanket_satpute_20.ironmind.domain.model.EventType
 import com.sanket_satpute_20.ironmind.domain.model.intervention.CorrectionScope
 import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendationResult
+import com.sanket_satpute_20.ironmind.domain.session.SessionState
+import com.sanket_satpute_20.ironmind.testutil.FakeUserSessionProvider
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.OrchestrateInterventionGenerationUseCase
+import com.sanket_satpute_20.ironmind.domain.model.ResultStatus
+import com.sanket_satpute_20.ironmind.domain.model.Outcome
+import com.sanket_satpute_20.ironmind.domain.model.action.ActionCategory
+import com.sanket_satpute_20.ironmind.domain.model.action.ActionExecutionResult
+import com.sanket_satpute_20.ironmind.domain.model.action.ActionReviewStatus
+import com.sanket_satpute_20.ironmind.domain.model.action.ProposedAction
+import com.sanket_satpute_20.ironmind.domain.model.briefing.DailyBriefing
+import com.sanket_satpute_20.ironmind.domain.model.briefing.DiscoveredPatternItem
+import com.sanket_satpute_20.ironmind.domain.model.briefing.EvidenceBackedBarrierItem
+import com.sanket_satpute_20.ironmind.domain.model.context.EpistemicAuthority
+import com.sanket_satpute_20.ironmind.domain.model.context.SourceFreshness
+import com.sanket_satpute_20.ironmind.domain.model.insight.PersonalInsight
+import com.sanket_satpute_20.ironmind.domain.model.insight.InsightCategory
+import com.sanket_satpute_20.ironmind.domain.ai.BarrierCategory
+import com.sanket_satpute_20.ironmind.domain.repository.ActionRepository
+import com.sanket_satpute_20.ironmind.domain.usecase.action.ActionLifecycleUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.briefing.AssembleDailyBriefingUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.insight.ReviewPersonalInsightUseCase
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.every
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -88,17 +120,89 @@ class TodayViewModelTest {
         orchestrateInterventionGenerationUseCase = mockk()
     }
 
-    private fun createViewModel() {
+    private fun createViewModel(
+        userSessionProvider: FakeUserSessionProvider? = null,
+        taskRepo: FakeTaskRepository? = null,
+        planRepo: FakePlanRepository? = null,
+        assembleDailyBriefingUseCase: AssembleDailyBriefingUseCase? = null,
+        actionLifecycleUseCase: ActionLifecycleUseCase? = null,
+        actionRepository: ActionRepository? = null,
+        reviewPersonalInsightUseCase: ReviewPersonalInsightUseCase? = null
+    ) {
+        val dueTasksUseCase = if (taskRepo != null) {
+            GetDueTasksUseCase(taskRepo, planRepo, clock)
+        } else null
+
         viewModel = TodayViewModel(
-            getActiveCommitmentsUseCase,
-            updateCommitmentStatusUseCase,
-            scheduleCommitmentUseCase,
-            cancelCommitmentScheduleUseCase,
-            getPendingRecommendationsUseCase,
-            handleInterventionResultUseCase,
-            orchestrateInterventionGenerationUseCase
+            getActiveCommitmentsUseCase = getActiveCommitmentsUseCase,
+            updateCommitmentStatusUseCase = updateCommitmentStatusUseCase,
+            scheduleCommitmentUseCase = scheduleCommitmentUseCase,
+            cancelCommitmentScheduleUseCase = cancelCommitmentScheduleUseCase,
+            getPendingInterventionRecommendationsUseCase = getPendingRecommendationsUseCase,
+            handleInterventionResultUseCase = handleInterventionResultUseCase,
+            orchestrateInterventionGenerationUseCase = orchestrateInterventionGenerationUseCase,
+            userSessionProvider = userSessionProvider,
+            createCommitmentUseCase = createCommitmentUseCase,
+            getDueTasksUseCase = dueTasksUseCase,
+            assembleDailyBriefingUseCase = assembleDailyBriefingUseCase,
+            actionLifecycleUseCase = actionLifecycleUseCase,
+            actionRepository = actionRepository,
+            reviewPersonalInsightUseCase = reviewPersonalInsightUseCase
         )
     }
+
+    private fun testProposedAction(
+        id: String,
+        userId: String = "user-1",
+        status: ActionReviewStatus = ActionReviewStatus.PROPOSED,
+        category: ActionCategory = ActionCategory.TASK_RESCHEDULE,
+        epistemicAuthority: EpistemicAuthority = EpistemicAuthority.AI_HYPOTHESIS,
+        outcomeId: String? = null
+    ) = ProposedAction(
+        id = id,
+        userId = userId,
+        category = category,
+        title = "Action $id",
+        explanation = "Explanation $id",
+        suggestedSubTasks = listOf("Step 1", "Step 2"),
+        reviewStatus = status,
+        epistemicAuthority = epistemicAuthority,
+        outcomeId = outcomeId,
+        createdAt = 1_000L
+    )
+
+    private fun testDailyBriefing(
+        userId: String = "user-1",
+        attentionSummary: String = "Focus on your tasks today",
+        actions: List<ProposedAction> = emptyList(),
+        insights: List<PersonalInsight> = emptyList(),
+        patterns: List<DiscoveredPatternItem> = emptyList(),
+        barriers: List<EvidenceBackedBarrierItem> = emptyList(),
+        note: String? = null
+    ) = DailyBriefing(
+        userId = userId,
+        generatedAt = 1_000L,
+        attentionSummary = attentionSummary,
+        proposedNextActions = actions,
+        relevantInsights = insights,
+        discoveredPatterns = patterns,
+        evidenceBackedBarriers = barriers,
+        dataAvailabilityNote = note
+    )
+
+    private fun testRecommendation(id: String, userId: String) = InterventionRecommendation(
+        id = id,
+        userId = userId,
+        interventionType = InterventionType.BREAK_DOWN,
+        objective = com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.INITIATE_ACTION,
+        targetEntityId = "task-$id",
+        targetEntityType = "Task",
+        suggestedAction = "Action",
+        rationale = "Reason",
+        status = InterventionRecommendationStatus.PENDING,
+        createdAt = 1_000L,
+        expiresAt = 2_000L
+    )
 
     @Test
     fun `loadCommitments success updates state with active commitments`() = runTest {
@@ -189,6 +293,26 @@ class TodayViewModelTest {
         val successState = state as TodayUiState.Success
         assertEquals(1, successState.pendingRecommendations.size)
         assertEquals("Take a break", successState.pendingRecommendations[0].suggestedAction)
+    }
+
+    @Test
+    fun `pending recommendation flow switches UID and cancels old subscription`() = runTest {
+        val oldRecommendation = testRecommendation(id = "old-rec", userId = "user-1")
+        val newRecommendation = testRecommendation(id = "new-rec", userId = "user-2")
+        recommendationRepository.recommendations[oldRecommendation.id] = oldRecommendation
+        recommendationRepository.recommendations[newRecommendation.id] = newRecommendation
+        val provider = FakeUserSessionProvider(SessionState.OfflineFallback("user-1"))
+
+        createViewModel(provider)
+        advanceUntilIdle()
+        assertTrue("The old UID flow should be collected", "user-1" in recommendationRepository.startedUsers)
+        assertEquals(listOf("old-rec"), (viewModel.uiState.value as TodayUiState.Success).pendingRecommendations.map { it.id })
+
+        provider.setState(SessionState.Authenticated("user-2", isAnonymous = true))
+        advanceUntilIdle()
+
+        assertTrue("Session transition must cancel the old UID flow", "user-1" in recommendationRepository.cancelledUsers)
+        assertEquals(listOf("new-rec"), (viewModel.uiState.value as TodayUiState.Success).pendingRecommendations.map { it.id })
     }
 
     @Test
@@ -545,10 +669,489 @@ class TodayViewModelTest {
         state = viewModel.uiState.value as TodayUiState.Success
         assertEquals("Suggestion ignored", state.userMessage)
     }
+
+    @Test
+    fun `quickAddCommitment updates form and saves commitment successfully`() = runTest {
+        createViewModel()
+        advanceUntilIdle()
+
+        viewModel.openQuickAdd()
+        assertTrue(viewModel.showQuickAddDialog.value)
+
+        viewModel.updateQuickAddTitle("Morning Run")
+        viewModel.updateQuickAddDescription("5k run")
+        viewModel.updateQuickAddPriority(3)
+
+        viewModel.saveQuickAddCommitment()
+        advanceUntilIdle()
+
+        org.junit.Assert.assertFalse(viewModel.showQuickAddDialog.value)
+        val state = viewModel.uiState.value as TodayUiState.Success
+        assertEquals("Commitment added for today", state.userMessage)
+        assertEquals(1, state.activeCommitments.size)
+        assertEquals("Morning Run", state.activeCommitments[0].title)
+    }
+
+    @Test
+    fun `quickAddCommitment with blank title sets quickAddError`() = runTest {
+        createViewModel()
+        advanceUntilIdle()
+
+        viewModel.openQuickAdd()
+        viewModel.updateQuickAddTitle("   ")
+
+        viewModel.saveQuickAddCommitment()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.showQuickAddDialog.value)
+        assertEquals("Title cannot be empty", viewModel.quickAddError.value)
+    }
+
+    @Test
+    fun `loadData populates dueToday and overdue tasks from getDueTasksUseCase`() = runTest {
+        val taskRepo = FakeTaskRepository()
+        val planRepo = FakePlanRepository()
+
+        val zoneId = java.time.ZoneId.systemDefault()
+        val now = clock.currentTimeMillis()
+        val today = java.time.Instant.ofEpochMilli(now).atZone(zoneId).toLocalDate()
+        val startOfToday = today.atStartOfDay(zoneId).toInstant().toEpochMilli()
+
+        val overdueTask = Task(
+            id = "t-overdue",
+            userId = "user-1",
+            goalId = "g1",
+            planId = null,
+            title = "Overdue task",
+            description = "Desc",
+            status = TaskStatus.PENDING,
+            priority = 1,
+            dueAt = startOfToday - 10000L,
+            createdAt = now,
+            updatedAt = now,
+            source = EntitySource.USER
+        )
+
+        val dueTodayTask = Task(
+            id = "t-due-today",
+            userId = "user-1",
+            goalId = "g1",
+            planId = null,
+            title = "Due today task",
+            description = "Desc",
+            status = TaskStatus.PENDING,
+            priority = 1,
+            dueAt = startOfToday + 5000L,
+            createdAt = now,
+            updatedAt = now,
+            source = EntitySource.USER
+        )
+
+        taskRepo.saveTask(overdueTask)
+        taskRepo.saveTask(dueTodayTask)
+
+        createViewModel(taskRepo = taskRepo, planRepo = planRepo)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as TodayUiState.Success
+        assertEquals(1, state.overdueTasks.size)
+        assertEquals("t-overdue", state.overdueTasks[0].task.id)
+        assertEquals(1, state.dueTodayTasks.size)
+        assertEquals("t-due-today", state.dueTodayTasks[0].task.id)
+    }
+
+    // =========================================================================
+    // Phase 3.6.7.4 Tests: Today Insight Actionability
+    // =========================================================================
+
+    @Test
+    fun `daily briefing loads successfully and updates ui state`() = runTest {
+        val action = testProposedAction("act-1")
+        val briefing = testDailyBriefing(actions = listOf(action))
+        val mockBriefingUseCase = mockk<AssembleDailyBriefingUseCase>()
+        coEvery { mockBriefingUseCase.invoke(any(), any(), any(), any(), any()) } returns Result.Success(briefing)
+
+        createViewModel(assembleDailyBriefingUseCase = mockBriefingUseCase)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is TodayUiState.Success)
+        val success = state as TodayUiState.Success
+        assertNotNull(success.dailyBriefing)
+        assertEquals("Focus on your tasks today", success.dailyBriefing?.attentionSummary)
+        assertEquals(1, success.proposedActions.size)
+        assertEquals("act-1", success.proposedActions[0].id)
+    }
+
+    @Test
+    fun `briefing failure does not crash TodayViewModel`() = runTest {
+        val mockBriefingUseCase = mockk<AssembleDailyBriefingUseCase>()
+        coEvery { mockBriefingUseCase.invoke(any(), any(), any(), any(), any()) } returns Result.Failure(RuntimeException("Briefing assembly failed"))
+
+        createViewModel(assembleDailyBriefingUseCase = mockBriefingUseCase)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is TodayUiState.Success)
+        val success = state as TodayUiState.Success
+        assertNull(success.dailyBriefing)
+        assertFalse(success.isBriefingLoading)
+    }
+
+    @Test
+    fun `reactive action repository emissions update Today UI state`() = runTest {
+        val fakeActionRepo = FakeActionRepository()
+        createViewModel(actionRepository = fakeActionRepo)
+        advanceUntilIdle()
+
+        val action1 = testProposedAction("act-1", "user-1")
+        val action2 = testProposedAction("act-2", "user-1")
+        fakeActionRepo.actionsFlow.value = listOf(action1, action2)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as TodayUiState.Success
+        assertEquals(2, state.proposedActions.size)
+        assertEquals("act-1", state.proposedActions[0].id)
+        assertEquals("act-2", state.proposedActions[1].id)
+    }
+
+    @Test
+    fun `empty action state is handled`() = runTest {
+        val fakeActionRepo = FakeActionRepository()
+        createViewModel(actionRepository = fakeActionRepo)
+        advanceUntilIdle()
+
+        fakeActionRepo.actionsFlow.value = listOf(testProposedAction("act-1", "user-1"))
+        advanceUntilIdle()
+        assertEquals(1, (viewModel.uiState.value as TodayUiState.Success).proposedActions.size)
+
+        fakeActionRepo.actionsFlow.value = emptyList()
+        advanceUntilIdle()
+        assertTrue((viewModel.uiState.value as TodayUiState.Success).proposedActions.isEmpty())
+    }
+
+    @Test
+    fun `action observation is cancelled on session reset`() = runTest {
+        val sessionProvider = FakeUserSessionProvider(SessionState.Authenticated("user-1", false))
+        val fakeActionRepo = FakeActionRepository()
+        createViewModel(userSessionProvider = sessionProvider, actionRepository = fakeActionRepo)
+        advanceUntilIdle()
+
+        assertTrue(fakeActionRepo.startedUsers.contains("user-1"))
+
+        sessionProvider.setState(SessionState.Initializing)
+        advanceUntilIdle()
+
+        assertTrue(fakeActionRepo.cancelledUsers.contains("user-1"))
+        assertTrue(viewModel.uiState.value is TodayUiState.Loading)
+    }
+
+    @Test
+    fun `switching users clears previous user data and observes new user`() = runTest {
+        val sessionProvider = FakeUserSessionProvider(SessionState.Authenticated("user-1", false))
+        val fakeActionRepo = FakeActionRepository()
+        createViewModel(userSessionProvider = sessionProvider, actionRepository = fakeActionRepo)
+        advanceUntilIdle()
+
+        fakeActionRepo.actionsFlow.value = listOf(testProposedAction("act-u1", "user-1"))
+        advanceUntilIdle()
+        assertEquals(1, (viewModel.uiState.value as TodayUiState.Success).proposedActions.size)
+
+        sessionProvider.setState(SessionState.Authenticated("user-2", false))
+        advanceUntilIdle()
+
+        assertTrue(fakeActionRepo.startedUsers.contains("user-2"))
+        fakeActionRepo.actionsFlow.value = listOf(testProposedAction("act-u2", "user-2"))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as TodayUiState.Success
+        assertEquals(1, state.proposedActions.size)
+        assertEquals("act-u2", state.proposedActions[0].id)
+    }
+
+    @Test
+    fun `delayed old-user emissions cannot overwrite new-user state`() = runTest {
+        val sessionProvider = FakeUserSessionProvider(SessionState.Authenticated("user-1", false))
+        val fakeActionRepo = FakeActionRepository()
+        createViewModel(userSessionProvider = sessionProvider, actionRepository = fakeActionRepo)
+        advanceUntilIdle()
+
+        sessionProvider.setState(SessionState.Authenticated("user-2", false))
+        advanceUntilIdle()
+
+        // Old user emission arriving late
+        fakeActionRepo.actionsFlow.value = listOf(testProposedAction("act-old", "user-1"))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as TodayUiState.Success
+        assertTrue(state.proposedActions.none { it.userId == "user-1" })
+    }
+
+    @Test
+    fun `accept action uses existing lifecycle use case`() = runTest {
+        val action = testProposedAction("act-1", "user-1")
+        val mockActionLifecycle = mockk<ActionLifecycleUseCase>()
+        coEvery { mockActionLifecycle.acceptAction(action, "user-1") } returns Result.Success(
+            action.copy(reviewStatus = ActionReviewStatus.ACCEPTED)
+        )
+
+        createViewModel(actionLifecycleUseCase = mockActionLifecycle)
+        advanceUntilIdle()
+
+        viewModel.acceptAction(action)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { mockActionLifecycle.acceptAction(action, "user-1") }
+        val state = viewModel.uiState.value as TodayUiState.Success
+        assertEquals("Action approved: ready for execution", state.userMessage)
+    }
+
+    @Test
+    fun `reject and dismiss preserve epistemic independence`() = runTest {
+        val action = testProposedAction("act-1", "user-1")
+        val mockActionLifecycle = mockk<ActionLifecycleUseCase>()
+        coEvery { mockActionLifecycle.rejectAction(action, "user-1", "Not applicable") } returns Result.Success(
+            action.copy(reviewStatus = ActionReviewStatus.REJECTED)
+        )
+        coEvery { mockActionLifecycle.dismissAction(action, "user-1") } returns Result.Success(
+            action.copy(reviewStatus = ActionReviewStatus.DISMISSED)
+        )
+
+        createViewModel(actionLifecycleUseCase = mockActionLifecycle)
+        advanceUntilIdle()
+
+        viewModel.rejectAction(action, "Not applicable")
+        advanceUntilIdle()
+        coVerify(exactly = 1) { mockActionLifecycle.rejectAction(action, "user-1", "Not applicable") }
+        assertEquals("Action rejected", (viewModel.uiState.value as TodayUiState.Success).userMessage)
+
+        viewModel.dismissAction(action)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { mockActionLifecycle.dismissAction(action, "user-1") }
+        assertEquals("Action dismissed", (viewModel.uiState.value as TodayUiState.Success).userMessage)
+    }
+
+    @Test
+    fun `defer action preserves existing semantics`() = runTest {
+        val action = testProposedAction("act-1", "user-1")
+        val deferMs = 2_000_000L
+        val mockActionLifecycle = mockk<ActionLifecycleUseCase>()
+        coEvery { mockActionLifecycle.deferAction(action, "user-1", deferMs) } returns Result.Success(
+            action.copy(reviewStatus = ActionReviewStatus.DEFERRED, deferredUntilMs = deferMs)
+        )
+
+        createViewModel(actionLifecycleUseCase = mockActionLifecycle)
+        advanceUntilIdle()
+
+        viewModel.deferAction(action, deferMs)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { mockActionLifecycle.deferAction(action, "user-1", deferMs) }
+        assertEquals("Action deferred", (viewModel.uiState.value as TodayUiState.Success).userMessage)
+    }
+
+    @Test
+    fun `execute is only possible for ACCEPTED actions`() = runTest {
+        val proposedAction = testProposedAction("act-1", "user-1", status = ActionReviewStatus.PROPOSED)
+        val acceptedAction = testProposedAction("act-2", "user-1", status = ActionReviewStatus.ACCEPTED)
+        val mockActionLifecycle = mockk<ActionLifecycleUseCase>()
+        coEvery { mockActionLifecycle.executeAction(acceptedAction, "user-1", any()) } returns Result.Success(
+            acceptedAction.copy(
+                reviewStatus = ActionReviewStatus.EXECUTED,
+                executionResult = ActionExecutionResult(
+                    executedAt = 1_000L,
+                    success = true,
+                    affectedEntityId = "task-1",
+                    affectedEntityType = "Task",
+                    message = "Executed successfully"
+                )
+            )
+        )
+
+        createViewModel(actionLifecycleUseCase = mockActionLifecycle)
+        advanceUntilIdle()
+
+        // Executing PROPOSED action must fail validation
+        viewModel.executeAction(proposedAction)
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { mockActionLifecycle.executeAction(proposedAction, any(), any()) }
+        assertEquals("Action must be in ACCEPTED state before execution", (viewModel.uiState.value as TodayUiState.Success).userMessage)
+
+        // Executing ACCEPTED action succeeds
+        viewModel.executeAction(acceptedAction)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { mockActionLifecycle.executeAction(acceptedAction, "user-1", any()) }
+        assertEquals("Executed successfully", (viewModel.uiState.value as TodayUiState.Success).userMessage)
+    }
+
+    @Test
+    fun `duplicate execution is prevented by existing lifecycle protection`() = runTest {
+        val acceptedAction = testProposedAction("act-1", "user-1", status = ActionReviewStatus.ACCEPTED)
+        val mockActionLifecycle = mockk<ActionLifecycleUseCase>()
+        coEvery { mockActionLifecycle.executeAction(acceptedAction, "user-1", any()) } returns Result.Failure(
+            IllegalStateException("Execution already in progress for action act-1")
+        )
+
+        createViewModel(actionLifecycleUseCase = mockActionLifecycle)
+        advanceUntilIdle()
+
+        viewModel.executeAction(acceptedAction)
+        advanceUntilIdle()
+
+        assertEquals("Execution already in progress for action act-1", (viewModel.uiState.value as TodayUiState.Success).userMessage)
+    }
+
+    @Test
+    fun `interrupted execution recovery remains compatible with existing reconciliation`() = runTest {
+        val fakeActionRepo = FakeActionRepository()
+        createViewModel(actionRepository = fakeActionRepo)
+        advanceUntilIdle()
+
+        val executingAction = testProposedAction("act-rec", "user-1", status = ActionReviewStatus.EXECUTING)
+        fakeActionRepo.actionsFlow.value = listOf(executingAction)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as TodayUiState.Success
+        assertEquals(1, state.proposedActions.size)
+        assertEquals(ActionReviewStatus.EXECUTING, state.proposedActions[0].reviewStatus)
+    }
+
+    @Test
+    fun `outcome recording does not execute an action again`() = runTest {
+        val executedAction = testProposedAction("act-1", "user-1", status = ActionReviewStatus.EXECUTED)
+        val mockActionLifecycle = mockk<ActionLifecycleUseCase>()
+        val sampleOutcome = Outcome(
+            id = "outcome-456",
+            userId = "user-1",
+            sourceEntityId = executedAction.id,
+            sourceEntityType = "PROPOSED_ACTION",
+            resultStatus = ResultStatus.POSITIVE,
+            actualDurationMinutes = 15,
+            completedAt = 1_000L,
+            createdAt = 1_000L
+        )
+        coEvery { mockActionLifecycle.recordActionOutcome(executedAction, "user-1", ResultStatus.POSITIVE, any(), any()) } returns Result.Success(
+            sampleOutcome
+        )
+
+        createViewModel(actionLifecycleUseCase = mockActionLifecycle)
+        advanceUntilIdle()
+
+        viewModel.recordActionOutcome(executedAction, ResultStatus.POSITIVE)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { mockActionLifecycle.recordActionOutcome(executedAction, "user-1", ResultStatus.POSITIVE, any(), any()) }
+        coVerify(exactly = 0) { mockActionLifecycle.executeAction(any(), any(), any()) }
+        assertEquals("Outcome recorded", (viewModel.uiState.value as TodayUiState.Success).userMessage)
+    }
+
+    @Test
+    fun `useful insight review dispatches correctly`() = runTest {
+        val mockReviewUseCase = mockk<ReviewPersonalInsightUseCase>()
+        coEvery { mockReviewUseCase.markUseful("ins-1", "user-1") } returns Result.Success(Unit)
+
+        createViewModel(reviewPersonalInsightUseCase = mockReviewUseCase)
+        advanceUntilIdle()
+
+        viewModel.markInsightUseful("ins-1")
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { mockReviewUseCase.markUseful("ins-1", "user-1") }
+        assertEquals("Insight marked as useful", (viewModel.uiState.value as TodayUiState.Success).userMessage)
+    }
+
+    @Test
+    fun `dismiss insight review dispatches correctly`() = runTest {
+        val mockReviewUseCase = mockk<ReviewPersonalInsightUseCase>()
+        coEvery { mockReviewUseCase.dismiss("ins-1", "user-1") } returns Result.Success(Unit)
+
+        createViewModel(reviewPersonalInsightUseCase = mockReviewUseCase)
+        advanceUntilIdle()
+
+        viewModel.dismissInsight("ins-1")
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { mockReviewUseCase.dismiss("ins-1", "user-1") }
+        assertEquals("Insight dismissed", (viewModel.uiState.value as TodayUiState.Success).userMessage)
+    }
+
+    @Test
+    fun `review later insight review dispatches correctly`() = runTest {
+        val mockReviewUseCase = mockk<ReviewPersonalInsightUseCase>()
+        coEvery { mockReviewUseCase.reviewLater("ins-1", "user-1") } returns Result.Success(Unit)
+
+        createViewModel(reviewPersonalInsightUseCase = mockReviewUseCase)
+        advanceUntilIdle()
+
+        viewModel.reviewInsightLater("ins-1")
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { mockReviewUseCase.reviewLater("ins-1", "user-1") }
+        assertEquals("Insight postponed for later review", (viewModel.uiState.value as TodayUiState.Success).userMessage)
+    }
+
+    @Test
+    fun `insight review failures are handled`() = runTest {
+        val mockReviewUseCase = mockk<ReviewPersonalInsightUseCase>()
+        coEvery { mockReviewUseCase.markUseful("ins-1", "user-1") } returns Result.Failure(RuntimeException("Database error"))
+
+        createViewModel(reviewPersonalInsightUseCase = mockReviewUseCase)
+        advanceUntilIdle()
+
+        viewModel.markInsightUseful("ins-1")
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { mockReviewUseCase.markUseful("ins-1", "user-1") }
+        assertEquals("Database error", (viewModel.uiState.value as TodayUiState.Success).userMessage)
+    }
+
+    @Test
+    fun `briefing patterns and barriers retain correct epistemic labels`() = runTest {
+        val pattern = DiscoveredPatternItem(
+            patternId = "pat-1",
+            patternType = "FOCUS_DRIFT",
+            description = "High evening app usage",
+            confidence = 0.85f,
+            occurrences = 4,
+            epistemicAuthority = EpistemicAuthority.AI_HYPOTHESIS,
+            freshness = SourceFreshness.CURRENT,
+            isUserConfirmed = false
+        )
+        val barrier = EvidenceBackedBarrierItem(
+            barrierId = "bar-1",
+            category = BarrierCategory.DISTRACTION,
+            description = "Social media before sleep",
+            confidence = 0.90f,
+            supportingEvidenceCount = 5,
+            isUserConfirmed = false,
+            epistemicAuthority = EpistemicAuthority.AI_HYPOTHESIS
+        )
+        val briefing = testDailyBriefing(
+            patterns = listOf(pattern),
+            barriers = listOf(barrier)
+        )
+        val mockBriefingUseCase = mockk<AssembleDailyBriefingUseCase>()
+        coEvery { mockBriefingUseCase.invoke(any(), any(), any(), any(), any()) } returns Result.Success(briefing)
+
+        createViewModel(assembleDailyBriefingUseCase = mockBriefingUseCase)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as TodayUiState.Success
+        val db = state.dailyBriefing
+        assertNotNull(db)
+        assertEquals(EpistemicAuthority.AI_HYPOTHESIS, db!!.discoveredPatterns[0].epistemicAuthority)
+        assertFalse(db.discoveredPatterns[0].isUserConfirmed)
+        assertEquals(EpistemicAuthority.AI_HYPOTHESIS, db.evidenceBackedBarriers[0].epistemicAuthority)
+        assertFalse(db.evidenceBackedBarriers[0].isUserConfirmed)
+    }
 }
 
 class FakeInterventionRecommendationRepository : InterventionRecommendationRepository {
     val recommendations = mutableMapOf<String, InterventionRecommendation>()
+    val startedUsers = mutableSetOf<String>()
+    val cancelledUsers = mutableSetOf<String>()
     var shouldFailUpdateStatus = false
     
     override suspend fun saveRecommendation(recommendation: InterventionRecommendation): Result<Unit, Exception> {
@@ -562,6 +1165,8 @@ class FakeInterventionRecommendationRepository : InterventionRecommendationRepos
 
     override fun getPendingRecommendations(userId: String, currentTime: Long): Flow<List<InterventionRecommendation>> {
         return MutableStateFlow(recommendations.values.filter { it.userId == userId && it.status == InterventionRecommendationStatus.PENDING })
+            .onStart { startedUsers += userId }
+            .onCompletion { cause -> if (cause is CancellationException) cancelledUsers += userId }
     }
 
     override suspend fun updateRecommendationStatus(id: String, status: InterventionRecommendationStatus): Result<Unit, Exception> {
@@ -595,6 +1200,47 @@ class FakeInterventionRecommendationRepository : InterventionRecommendationRepos
         limit: Int
     ): Result<List<InterventionRecommendation>, Exception> {
         return Result.Success(emptyList())
+    }
+}
+
+class FakeActionRepository : ActionRepository {
+    val actionsFlow = MutableStateFlow<List<ProposedAction>>(emptyList())
+    val savedActions = mutableMapOf<String, ProposedAction>()
+    val startedUsers = mutableSetOf<String>()
+    val cancelledUsers = mutableSetOf<String>()
+
+    override suspend fun saveAction(action: ProposedAction): Result<ProposedAction, Exception> {
+        savedActions[action.id] = action
+        actionsFlow.value = savedActions.values.toList()
+        return Result.Success(action)
+    }
+
+    override suspend fun getActionById(id: String): Result<ProposedAction?, Exception> {
+        return Result.Success(savedActions[id])
+    }
+
+    override suspend fun getActionsForUser(userId: String): Result<List<ProposedAction>, Exception> {
+        return Result.Success(savedActions.values.filter { it.userId == userId })
+    }
+
+    override fun observeActionsForUser(userId: String): Flow<List<ProposedAction>> {
+        return actionsFlow
+            .onStart { startedUsers += userId }
+            .onCompletion { cause -> if (cause is CancellationException) cancelledUsers += userId }
+    }
+
+    override suspend fun updateActionStatus(id: String, userId: String, status: ActionReviewStatus, timestamp: Long): Result<Unit, Exception> {
+        val existing = savedActions[id] ?: return Result.Failure(IllegalArgumentException("Action not found"))
+        val updated = existing.copy(reviewStatus = status)
+        savedActions[id] = updated
+        actionsFlow.value = savedActions.values.toList()
+        return Result.Success(Unit)
+    }
+
+    override suspend fun deleteAction(id: String, userId: String): Result<Unit, Exception> {
+        savedActions.remove(id)
+        actionsFlow.value = savedActions.values.toList()
+        return Result.Success(Unit)
     }
 }
 
