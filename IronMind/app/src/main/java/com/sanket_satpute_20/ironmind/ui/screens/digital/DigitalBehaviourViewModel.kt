@@ -18,6 +18,7 @@ import com.sanket_satpute_20.ironmind.domain.session.runWithSession
 import com.sanket_satpute_20.ironmind.domain.usecase.digital.GetDailyAppUsageIntelligenceUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.observation.ExecuteObservationCollectionUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.observation.ObservationExecutionError
+import com.sanket_satpute_20.ironmind.infrastructure.worker.IntelligenceOrchestrationScheduler
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -42,7 +43,8 @@ class DigitalBehaviourViewModel(
     },
     private val zoneId: ZoneId = ZoneId.systemDefault(),
     private val executeObservationCollectionUseCase: ExecuteObservationCollectionUseCase? = null,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val intelligenceOrchestrationScheduler: IntelligenceOrchestrationScheduler? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -145,6 +147,9 @@ class DigitalBehaviourViewModel(
                     when (result) {
                         is Result.Success -> {
                             println("IronMindLifecycle [DigitalBehaviourViewModel] [CATCHUP_COMPLETED] userId=$activeUid collected=${result.data.totalCollected}")
+                            if (result.data.totalCollected > 0) {
+                                intelligenceOrchestrationScheduler?.scheduleOrchestration(userId = activeUid)
+                            }
                             loadData(targetDate = _uiState.value.selectedDate, userId = activeUid)
                         }
                         is Result.Failure -> {
@@ -300,7 +305,8 @@ class DigitalBehaviourViewModel(
                     userSessionProvider = container.userSessionProvider,
                     appNameResolver = appNameResolver,
                     clock = container.clock,
-                    executeObservationCollectionUseCase = container.executeObservationCollectionUseCase
+                    executeObservationCollectionUseCase = container.executeObservationCollectionUseCase,
+                    intelligenceOrchestrationScheduler = container.intelligenceOrchestrationScheduler
                 )
             }
         }

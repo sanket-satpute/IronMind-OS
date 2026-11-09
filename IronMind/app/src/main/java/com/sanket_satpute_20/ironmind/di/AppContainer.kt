@@ -389,6 +389,7 @@ interface AppContainer {
     val collectObservationsUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectObservationsUseCase
     val executeObservationCollectionUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.ExecuteObservationCollectionUseCase
     val observationScheduler: com.sanket_satpute_20.ironmind.infrastructure.worker.ObservationScheduler
+    val intelligenceOrchestrationScheduler: com.sanket_satpute_20.ironmind.infrastructure.worker.IntelligenceOrchestrationScheduler
     val observationSchedulingPolicyUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.ObservationSchedulingPolicyUseCase
     val activateObservationSchedulingUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.ActivateObservationSchedulingUseCase
     val reconcileObservationSchedulingUseCase: com.sanket_satpute_20.ironmind.domain.usecase.observation.ReconcileObservationSchedulingUseCase
@@ -1785,6 +1786,15 @@ class DefaultAppContainer(
         com.sanket_satpute_20.ironmind.infrastructure.worker.ObservationScheduler(
             workManager = androidx.work.WorkManager.getInstance(context),
             sessionProvider = { userSessionProvider }
+        )
+    }
+
+    override val intelligenceOrchestrationScheduler: com.sanket_satpute_20.ironmind.infrastructure.worker.IntelligenceOrchestrationScheduler by lazy {
+        com.sanket_satpute_20.ironmind.infrastructure.worker.IntelligenceOrchestrationScheduler(
+            workManager = androidx.work.WorkManager.getInstance(context),
+            sessionProvider = { userSessionProvider },
+            clock = clock,
+            context = context
         )
     }
 

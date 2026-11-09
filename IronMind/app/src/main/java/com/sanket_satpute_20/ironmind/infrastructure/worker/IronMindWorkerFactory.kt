@@ -23,9 +23,10 @@ class IronMindWorkerFactory(
                 appContainer.userProfileRepository,
                 appContainer.autonomousReflectionEngine,
                 appContainer.evaluatePatternCandidatesUseCase,
-                appContainer.barrierUnderstandingOrchestrator
+                appContainer.barrierUnderstandingOrchestrator,
+                appContainer.userSessionProvider
             )
-            SyncWorker::class.java.name -> SyncWorker(appContext, workerParameters, appContainer.syncUseCase)
+            SyncWorker::class.java.name -> SyncWorker(appContext, workerParameters, appContainer.syncUseCase, appContainer.userSessionProvider)
             EventProcessingWorker::class.java.name -> EventProcessingWorker(
                 appContext = appContext,
                 workerParams = workerParameters,
@@ -35,11 +36,49 @@ class IronMindWorkerFactory(
                 clock = appContainer.clock,
                 logger = appContainer.logger,
                 database = appContainer.database,
-                ironMindDao = appContainer.database.ironMindDao()
+                ironMindDao = appContainer.database.ironMindDao(),
+                userSessionProvider = appContainer.userSessionProvider
             )
-            PatternUpdateWorker::class.java.name -> PatternUpdateWorker(appContext, workerParameters, appContainer.patternEngine)
-            InterventionEvaluationWorker::class.java.name -> InterventionEvaluationWorker(appContext, workerParameters, appContainer.interventionExecutionPipeline)
-            ObservationWorker::class.java.name -> ObservationWorker(appContext, workerParameters, appContainer.executeObservationCollectionUseCase, appContainer.authRepository)
+            PatternUpdateWorker::class.java.name -> PatternUpdateWorker(
+                appContext = appContext,
+                workerParams = workerParameters,
+                patternEngine = appContainer.patternEngine,
+                userSessionProvider = appContainer.userSessionProvider,
+                evolvePersonalModelUseCase = appContainer.evolvePersonalModelUseCase,
+                autonomySettingsRepository = appContainer.autonomySettingsRepository,
+                learnInterventionResponsePatternUseCase = appContainer.learnInterventionResponsePatternUseCase,
+                learnInterventionTimingPatternUseCase = appContainer.learnInterventionTimingPatternUseCase,
+                evaluatePatternCandidatesUseCase = appContainer.evaluatePatternCandidatesUseCase,
+                userProfileRepository = appContainer.userProfileRepository,
+                clock = appContainer.clock,
+                logger = appContainer.logger
+            )
+            InterventionEvaluationWorker::class.java.name -> InterventionEvaluationWorker(
+                appContext = appContext,
+                workerParams = workerParameters,
+                interventionExecutionPipeline = appContainer.interventionExecutionPipeline,
+                userSessionProvider = appContainer.userSessionProvider,
+                autonomySettingsRepository = appContainer.autonomySettingsRepository,
+                goalResurfacingEngine = appContainer.goalResurfacingEngine,
+                logger = appContainer.logger
+            )
+            ObservationWorker::class.java.name -> ObservationWorker(
+                appContext = appContext,
+                workerParams = workerParameters,
+                executeObservationCollectionUseCase = appContainer.executeObservationCollectionUseCase,
+                userSessionProvider = appContainer.userSessionProvider,
+                intelligenceOrchestrationScheduler = appContainer.intelligenceOrchestrationScheduler
+            )
+            IntelligenceOrchestrationWorker::class.java.name -> IntelligenceOrchestrationWorker(
+                appContext = appContext,
+                workerParams = workerParameters,
+                personalIntelligenceOrchestrator = appContainer.personalIntelligenceOrchestrator,
+                userSessionProvider = appContainer.userSessionProvider,
+                userProfileRepository = appContainer.userProfileRepository,
+                clock = appContainer.clock,
+                logger = appContainer.logger,
+                scheduler = appContainer.intelligenceOrchestrationScheduler
+            )
             else -> null // Let DefaultWorkerFactory handle other workers
         }
     }
