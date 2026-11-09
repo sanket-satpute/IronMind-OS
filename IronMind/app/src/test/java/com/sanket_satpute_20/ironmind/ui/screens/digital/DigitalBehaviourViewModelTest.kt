@@ -1,28 +1,62 @@
 package com.sanket_satpute_20.ironmind.ui.screens.digital
 
+import com.sanket_satpute_20.ironmind.domain.ai.BarrierCategory
 import com.sanket_satpute_20.ironmind.domain.common.Clock
+import com.sanket_satpute_20.ironmind.domain.common.IntelligenceMetadataCodec
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.AppUsageObservationSettings
 import com.sanket_satpute_20.ironmind.domain.model.EntitySource
+import com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState
 import com.sanket_satpute_20.ironmind.domain.model.ProtectionRule
 import com.sanket_satpute_20.ironmind.domain.model.ProtectionSession
 import com.sanket_satpute_20.ironmind.domain.model.ProtectionSessionStatus
+import com.sanket_satpute_20.ironmind.domain.model.barrier.BarrierConfirmationState
+import com.sanket_satpute_20.ironmind.domain.model.barrier.BarrierHypothesis
+import com.sanket_satpute_20.ironmind.domain.model.barrier.BarrierStatus
+import com.sanket_satpute_20.ironmind.domain.model.context.EpistemicAuthority
 import com.sanket_satpute_20.ironmind.domain.model.context.SourceAvailability
+import com.sanket_satpute_20.ironmind.domain.model.context.SourceFreshness
+import com.sanket_satpute_20.ironmind.domain.model.insight.ExplainabilityBlock
+import com.sanket_satpute_20.ironmind.domain.model.insight.InsightCategory
+import com.sanket_satpute_20.ironmind.domain.model.insight.InsightReviewStatus
+import com.sanket_satpute_20.ironmind.domain.model.insight.PersonalInsight
 import com.sanket_satpute_20.ironmind.domain.model.observation.Observation
 import com.sanket_satpute_20.ironmind.domain.model.observation.ObservationType
+import com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern
+import com.sanket_satpute_20.ironmind.domain.model.pattern.PatternCategory
+import com.sanket_satpute_20.ironmind.domain.model.pattern.PatternLifecycleState
+import com.sanket_satpute_20.ironmind.domain.model.pattern.PatternStatus
+import com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType
 import com.sanket_satpute_20.ironmind.domain.provider.AppUsageEvent
 import com.sanket_satpute_20.ironmind.domain.provider.AppUsageObservationProvider
 import com.sanket_satpute_20.ironmind.domain.repository.AppUsageObservationSettingsRepository
 import com.sanket_satpute_20.ironmind.domain.repository.ObservationRepository
 import com.sanket_satpute_20.ironmind.domain.repository.ProtectionRepository
 import com.sanket_satpute_20.ironmind.domain.session.SessionState
+import com.sanket_satpute_20.ironmind.domain.usecase.barrier.ConfirmBarrierUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.barrier.DismissBarrierUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.barrier.GetBarriersUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.barrier.RefuteBarrierUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.digital.GetDailyAppUsageIntelligenceUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.insight.ObservePersonalInsightsUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.insight.ReviewPersonalInsightUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectObservationsUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.observation.ExecuteObservationCollectionUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.observation.ObservationCollector
+import com.sanket_satpute_20.ironmind.domain.usecase.pattern.ConfirmPatternUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.pattern.DismissPatternUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.pattern.GetPatternsUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.pattern.RefutePatternUseCase
 import com.sanket_satpute_20.ironmind.testutil.FakeUserSessionProvider
 import com.sanket_satpute_20.ironmind.testutil.TestDispatcherRule
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -55,6 +89,22 @@ class DigitalBehaviourViewModelTest {
     private lateinit var userSessionProvider: FakeUserSessionProvider
     private lateinit var useCase: GetDailyAppUsageIntelligenceUseCase
 
+    // Phase 3.6.7.3: Mocked Use Cases & Flows
+    private lateinit var getPatternsUseCase: GetPatternsUseCase
+    private lateinit var confirmPatternUseCase: ConfirmPatternUseCase
+    private lateinit var dismissPatternUseCase: DismissPatternUseCase
+    private lateinit var refutePatternUseCase: RefutePatternUseCase
+    private lateinit var observePersonalInsightsUseCase: ObservePersonalInsightsUseCase
+    private lateinit var reviewPersonalInsightUseCase: ReviewPersonalInsightUseCase
+    private lateinit var getBarriersUseCase: GetBarriersUseCase
+    private lateinit var confirmBarrierUseCase: ConfirmBarrierUseCase
+    private lateinit var dismissBarrierUseCase: DismissBarrierUseCase
+    private lateinit var refuteBarrierUseCase: RefuteBarrierUseCase
+
+    private val patternsFlow = MutableStateFlow<List<Pattern>>(emptyList())
+    private val insightsFlow = MutableStateFlow<List<PersonalInsight>>(emptyList())
+    private val barriersFlow = MutableStateFlow<List<BarrierHypothesis>>(emptyList())
+
     private val appNameResolver: (String) -> String? = { pkg ->
         when (pkg) {
             "com.youtube" -> "YouTube"
@@ -77,6 +127,181 @@ class DigitalBehaviourViewModelTest {
             appUsageSettingsRepository = settingsRepository,
             observationRepository = observationRepository,
             clock = testClock
+        )
+
+        getPatternsUseCase = mockk(relaxed = true)
+        confirmPatternUseCase = mockk(relaxed = true)
+        dismissPatternUseCase = mockk(relaxed = true)
+        refutePatternUseCase = mockk(relaxed = true)
+        observePersonalInsightsUseCase = mockk(relaxed = true)
+        reviewPersonalInsightUseCase = mockk(relaxed = true)
+        getBarriersUseCase = mockk(relaxed = true)
+        confirmBarrierUseCase = mockk(relaxed = true)
+        dismissBarrierUseCase = mockk(relaxed = true)
+        refuteBarrierUseCase = mockk(relaxed = true)
+
+        patternsFlow.value = emptyList()
+        insightsFlow.value = emptyList()
+        barriersFlow.value = emptyList()
+
+        every { getPatternsUseCase.observe(any()) } answers { patternsFlow }
+        every { observePersonalInsightsUseCase(any()) } answers { insightsFlow }
+        every { getBarriersUseCase.observe(any()) } answers { barriersFlow }
+    }
+
+    private fun createViewModelWithIntelligence(
+        patternsUc: GetPatternsUseCase? = getPatternsUseCase,
+        confirmPatUc: ConfirmPatternUseCase? = confirmPatternUseCase,
+        dismissPatUc: DismissPatternUseCase? = dismissPatternUseCase,
+        refutePatUc: RefutePatternUseCase? = refutePatternUseCase,
+        observeInsUc: ObservePersonalInsightsUseCase? = observePersonalInsightsUseCase,
+        reviewInsUc: ReviewPersonalInsightUseCase? = reviewPersonalInsightUseCase,
+        getBarUc: GetBarriersUseCase? = getBarriersUseCase,
+        confirmBarUc: ConfirmBarrierUseCase? = confirmBarrierUseCase,
+        dismissBarUc: DismissBarrierUseCase? = dismissBarrierUseCase,
+        refuteBarUc: RefuteBarrierUseCase? = refuteBarrierUseCase,
+        sessionProvider: FakeUserSessionProvider = userSessionProvider,
+        executeUseCase: ExecuteObservationCollectionUseCase? = null
+    ): DigitalBehaviourViewModel {
+        return DigitalBehaviourViewModel(
+            getDailyAppUsageIntelligenceUseCase = useCase,
+            appUsageObservationProvider = appUsageProvider,
+            appUsageSettingsRepository = settingsRepository,
+            protectionRepository = protectionRepository,
+            userSessionProvider = sessionProvider,
+            appNameResolver = appNameResolver,
+            clock = testClock,
+            zoneId = zoneId,
+            executeObservationCollectionUseCase = executeUseCase,
+            ioDispatcher = dispatcherRule.testDispatcher,
+            getPatternsUseCase = patternsUc,
+            confirmPatternUseCase = confirmPatUc,
+            dismissPatternUseCase = dismissPatUc,
+            refutePatternUseCase = refutePatUc,
+            observePersonalInsightsUseCase = observeInsUc,
+            reviewPersonalInsightUseCase = reviewInsUc,
+            getBarriersUseCase = getBarUc,
+            confirmBarrierUseCase = confirmBarUc,
+            dismissBarrierUseCase = dismissBarUc,
+            refuteBarrierUseCase = refuteBarUc
+        )
+    }
+
+    private fun createPattern(
+        id: String,
+        userId: String = "user_test",
+        category: PatternCategory = PatternCategory.DIGITAL_BEHAVIOUR,
+        lifecycleState: PatternLifecycleState = PatternLifecycleState.ESTABLISHED,
+        status: PatternStatus = PatternStatus.ACTIVE,
+        confirmationState: MemoryConfirmationState = MemoryConfirmationState.UNCONFIRMED,
+        confidence: Float = 0.85f,
+        evidenceCount: Int = 5,
+        description: String = "High evening app usage"
+    ): Pattern {
+        val conditions = IntelligenceMetadataCodec.encodePatternConditions(
+            category = category,
+            lifecycleState = lifecycleState,
+            sourceProvenance = listOf("AppUsageObserver")
+        )
+        return Pattern(
+            id = id,
+            userId = userId,
+            fingerprint = "fp_$id",
+            type = PatternType.TIME_PATTERN,
+            description = description,
+            conditions = conditions,
+            predictedBehavior = "Extended screen session",
+            confidence = confidence,
+            evidenceCount = evidenceCount,
+            evidenceReferences = emptyList(),
+            firstObservedAt = todayStartMs - 86400000L,
+            lastObservedAt = todayStartMs,
+            status = status,
+            confirmationState = confirmationState,
+            createdAt = todayStartMs - 86400000L,
+            updatedAt = todayStartMs
+        )
+    }
+
+    private fun createInsight(
+        id: String,
+        userId: String = "user_test",
+        category: InsightCategory = InsightCategory.DIGITAL_BEHAVIOUR,
+        title: String = "Late Night Screen Time",
+        explanation: String = "App usage spikes after 11 PM.",
+        authority: EpistemicAuthority = EpistemicAuthority.AI_HYPOTHESIS,
+        freshness: SourceFreshness = SourceFreshness.CURRENT,
+        reviewStatus: InsightReviewStatus = InsightReviewStatus.UNREVIEWED,
+        supportingPatternIds: List<String> = emptyList(),
+        confidence: Float = 0.78f
+    ): PersonalInsight {
+        return PersonalInsight(
+            id = id,
+            userId = userId,
+            category = category,
+            title = title,
+            explanation = explanation,
+            explainabilityBlock = ExplainabilityBlock(
+                whatWasObserved = "Observed 90m usage between 11 PM and 1 AM",
+                observationPeriod = "Last 7 days",
+                supportingEvidenceDescription = "7 daily app usage checkpoints",
+                whyItMatters = "Associated with delayed sleep and reduced morning focus",
+                uncertaintyOrLimitations = "Passive background collection with +/- 15m granularity",
+                suggestedNextSteps = "Enable scheduled wind-down protection at 10:30 PM"
+            ),
+            supportingPatternIds = supportingPatternIds,
+            supportingBarrierIds = emptyList(),
+            supportingEvidenceIds = listOf("obs_1", "obs_2"),
+            linkedRecommendationId = null,
+            observationWindowStartMs = todayStartMs - 7 * 86400000L,
+            observationWindowEndMs = todayStartMs,
+            firstObservedAt = todayStartMs - 7 * 86400000L,
+            lastObservedAt = todayStartMs,
+            confidence = confidence,
+            epistemicAuthority = authority,
+            sourceProvenance = listOf("RoomAppUsageCheckpointStore"),
+            sourceFreshness = freshness,
+            reviewStatus = reviewStatus,
+            confirmationState = MemoryConfirmationState.UNCONFIRMED,
+            userFeedback = null,
+            reviewedAt = null,
+            createdAt = todayStartMs - 86400000L,
+            updatedAt = todayStartMs
+        )
+    }
+
+    private fun createBarrier(
+        id: String,
+        userId: String = "user_test",
+        category: BarrierCategory = BarrierCategory.DISTRACTION,
+        title: String = "Social media loop",
+        description: String = "Unplanned app switching during work blocks",
+        status: BarrierStatus = BarrierStatus.ACTIVE,
+        confirmationState: BarrierConfirmationState = BarrierConfirmationState.UNCONFIRMED,
+        supportingPatternIds: List<String> = emptyList(),
+        confidence: Float = 0.75f,
+        authority: EpistemicAuthority = EpistemicAuthority.AI_HYPOTHESIS,
+        freshness: SourceFreshness = SourceFreshness.CURRENT
+    ): BarrierHypothesis {
+        return BarrierHypothesis(
+            id = id,
+            userId = userId,
+            category = category,
+            description = description,
+            confirmationState = confirmationState,
+            status = status,
+            sourceReflectionId = "refl_$id",
+            firstObservedAt = todayStartMs - 3 * 86400000L,
+            lastObservedAt = todayStartMs,
+            title = title,
+            supportingPatternIds = supportingPatternIds,
+            evidenceReferences = emptyList(),
+            evidenceCount = 3,
+            distinctDays = 3,
+            confidence = confidence,
+            epistemicAuthority = authority,
+            sourceProvenance = listOf("AppUsageObservation"),
+            sourceFreshness = freshness
         )
     }
 
@@ -549,6 +774,427 @@ class DigitalBehaviourViewModelTest {
         val state = viewModel.uiState.value
         assertFalse(state.isLoading)
         assertEquals(30_000L, state.dailyUsage?.totalObservedDurationMs)
+    }
+
+    // =========================================================================
+    // Phase 3.6.7.3: Digital Behaviour Intelligence UI Integration Tests
+    // =========================================================================
+
+    @Test
+    fun `reactive pattern loading updates uiState with observed patterns`() = runTest {
+        patternsFlow.value = listOf(
+            createPattern("p1", category = PatternCategory.DIGITAL_BEHAVIOUR)
+        )
+
+        val viewModel = createViewModelWithIntelligence()
+        advanceUntilIdle()
+
+        assertEquals(1, viewModel.uiState.value.patterns.size)
+        assertEquals(1, viewModel.uiState.value.digitalPatterns.size)
+        assertEquals("p1", viewModel.uiState.value.digitalPatterns[0].id)
+
+        // Reactively emit an additional pattern
+        patternsFlow.value = listOf(
+            createPattern("p1", category = PatternCategory.DIGITAL_BEHAVIOUR),
+            createPattern("p2", category = PatternCategory.FOCUS)
+        )
+        advanceUntilIdle()
+
+        assertEquals(2, viewModel.uiState.value.patterns.size)
+        assertEquals(2, viewModel.uiState.value.digitalPatterns.size)
+    }
+
+    @Test
+    fun `reactive insight loading updates uiState with observed insights`() = runTest {
+        insightsFlow.value = listOf(
+            createInsight("ins_1", category = InsightCategory.DIGITAL_BEHAVIOUR)
+        )
+
+        val viewModel = createViewModelWithIntelligence()
+        advanceUntilIdle()
+
+        assertEquals(1, viewModel.uiState.value.insights.size)
+        assertEquals(1, viewModel.uiState.value.digitalInsights.size)
+        assertEquals("ins_1", viewModel.uiState.value.digitalInsights[0].id)
+
+        // Reactively emit an updated list
+        insightsFlow.value = listOf(
+            createInsight("ins_1", category = InsightCategory.DIGITAL_BEHAVIOUR),
+            createInsight("ins_2", category = InsightCategory.CROSS_DOMAIN)
+        )
+        advanceUntilIdle()
+
+        assertEquals(2, viewModel.uiState.value.insights.size)
+        assertEquals(2, viewModel.uiState.value.digitalInsights.size)
+    }
+
+    @Test
+    fun `reactive barrier loading updates uiState with observed barriers`() = runTest {
+        barriersFlow.value = listOf(
+            createBarrier("bar_1", category = BarrierCategory.DISTRACTION)
+        )
+
+        val viewModel = createViewModelWithIntelligence()
+        advanceUntilIdle()
+
+        assertEquals(1, viewModel.uiState.value.barriers.size)
+        assertEquals(1, viewModel.uiState.value.digitalBarriers.size)
+        assertEquals("bar_1", viewModel.uiState.value.digitalBarriers[0].id)
+
+        // Reactively emit an updated list
+        barriersFlow.value = listOf(
+            createBarrier("bar_1", category = BarrierCategory.DISTRACTION),
+            createBarrier("bar_2", category = BarrierCategory.ENVIRONMENTAL_FRICTION)
+        )
+        advanceUntilIdle()
+
+        assertEquals(2, viewModel.uiState.value.barriers.size)
+        assertEquals(2, viewModel.uiState.value.digitalBarriers.size)
+    }
+
+    @Test
+    fun `correct digital category filtering includes digital categories and excludes non-digital`() = runTest {
+        patternsFlow.value = listOf(
+            createPattern("p_dig", category = PatternCategory.DIGITAL_BEHAVIOUR),
+            createPattern("p_focus", category = PatternCategory.FOCUS),
+            createPattern("p_cross", category = PatternCategory.CROSS_DOMAIN),
+            createPattern("p_prod", category = PatternCategory.PRODUCTIVITY),
+            createPattern("p_del", category = PatternCategory.DIGITAL_BEHAVIOUR, status = PatternStatus.DELETED)
+        )
+        insightsFlow.value = listOf(
+            createInsight("i_dig", category = InsightCategory.DIGITAL_BEHAVIOUR),
+            createInsight("i_focus", category = InsightCategory.FOCUS),
+            createInsight("i_cross", category = InsightCategory.CROSS_DOMAIN),
+            createInsight("i_prod", category = InsightCategory.PRODUCTIVITY),
+            createInsight("i_task", category = InsightCategory.TASK_SCHEDULING)
+        )
+        barriersFlow.value = listOf(
+            createBarrier("b_dist", category = BarrierCategory.DISTRACTION),
+            createBarrier("b_friction", category = BarrierCategory.ENVIRONMENTAL_FRICTION),
+            createBarrier("b_linked", category = BarrierCategory.UNCERTAINTY, supportingPatternIds = listOf("p_dig")),
+            createBarrier("b_unlinked", category = BarrierCategory.UNCERTAINTY, supportingPatternIds = emptyList()),
+            createBarrier("b_exp", category = BarrierCategory.DISTRACTION, status = BarrierStatus.EXPIRED)
+        )
+
+        val viewModel = createViewModelWithIntelligence()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+
+        // Total unfiltered
+        assertEquals(5, state.patterns.size)
+        assertEquals(5, state.insights.size)
+        assertEquals(5, state.barriers.size)
+
+        // Filtered digital patterns: DIGITAL_BEHAVIOUR, CROSS_DOMAIN, FOCUS (non-deleted)
+        val digPatIds = state.digitalPatterns.map { it.id }
+        assertEquals(3, digPatIds.size)
+        assertTrue(digPatIds.containsAll(listOf("p_dig", "p_focus", "p_cross")))
+
+        // Filtered digital insights: DIGITAL_BEHAVIOUR, FOCUS, CROSS_DOMAIN
+        val digInsIds = state.digitalInsights.map { it.id }
+        assertEquals(3, digInsIds.size)
+        assertTrue(digInsIds.containsAll(listOf("i_dig", "i_focus", "i_cross")))
+
+        // Filtered digital barriers: DISTRACTION, ENVIRONMENTAL_FRICTION, or supporting digital patterns (non-expired)
+        val digBarIds = state.digitalBarriers.map { it.id }
+        assertEquals(3, digBarIds.size)
+        assertTrue(digBarIds.containsAll(listOf("b_dist", "b_friction", "b_linked")))
+    }
+
+    @Test
+    fun `empty states are handled gracefully with empty lists and no errors`() = runTest {
+        patternsFlow.value = emptyList()
+        insightsFlow.value = emptyList()
+        barriersFlow.value = emptyList()
+
+        val viewModel = createViewModelWithIntelligence()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state.patterns.isEmpty())
+        assertTrue(state.digitalPatterns.isEmpty())
+        assertTrue(state.insights.isEmpty())
+        assertTrue(state.digitalInsights.isEmpty())
+        assertTrue(state.barriers.isEmpty())
+        assertTrue(state.digitalBarriers.isEmpty())
+        assertNull(state.errorMessage)
+        assertNull(state.actionError)
+        assertFalse(state.isSubmittingAction)
+    }
+
+    @Test
+    fun `loading and repository failure does not crash ViewModel and keeps UI stable`() = runTest {
+        every { getPatternsUseCase.observe(any()) } returns flow {
+            throw RuntimeException("Database error in patterns")
+        }
+
+        val viewModel = createViewModelWithIntelligence()
+        advanceUntilIdle()
+
+        // Does not crash, patterns remains empty, UI is usable
+        val state = viewModel.uiState.value
+        assertTrue(state.patterns.isEmpty())
+        assertFalse(state.isLoading)
+    }
+
+    @Test
+    fun `permission denied gating yields PERMISSION_DENIED without false zero claims`() = runTest {
+        appUsageProvider.permissionGranted = false
+        insightsFlow.value = listOf(createInsight("ins_1"))
+
+        val viewModel = createViewModelWithIntelligence()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertFalse(state.isUsageAccessPermissionGranted)
+        assertEquals(SourceAvailability.PERMISSION_DENIED, state.effectiveAvailability)
+        assertNull(state.dailyUsage?.totalObservedDurationMs)
+        // Intelligence lists can still be observed independently
+        assertEquals(1, state.digitalInsights.size)
+    }
+
+    @Test
+    fun `partial and stale data representation correctly reflects source freshness`() = runTest {
+        insightsFlow.value = listOf(
+            createInsight("ins_stale", freshness = SourceFreshness.STALE),
+            createInsight("ins_current", freshness = SourceFreshness.CURRENT)
+        )
+
+        val viewModel = createViewModelWithIntelligence()
+        advanceUntilIdle()
+
+        val insights = viewModel.uiState.value.digitalInsights
+        assertEquals(2, insights.size)
+        assertEquals(SourceFreshness.STALE, insights.find { it.id == "ins_stale" }?.sourceFreshness)
+        assertEquals(SourceFreshness.CURRENT, insights.find { it.id == "ins_current" }?.sourceFreshness)
+    }
+
+    @Test
+    fun `session switching to Initializing or new user clears previous-user intelligence`() = runTest {
+        patternsFlow.value = listOf(createPattern("p_user1"))
+        insightsFlow.value = listOf(createInsight("i_user1"))
+        barriersFlow.value = listOf(createBarrier("b_user1"))
+
+        val viewModel = createViewModelWithIntelligence()
+        advanceUntilIdle()
+
+        assertEquals(1, viewModel.uiState.value.patterns.size)
+        assertEquals(1, viewModel.uiState.value.insights.size)
+        assertEquals(1, viewModel.uiState.value.barriers.size)
+
+        // Session transitions to Initializing
+        userSessionProvider.setState(SessionState.Initializing)
+        advanceUntilIdle()
+
+        // Intelligence must be cleared immediately
+        assertTrue(viewModel.uiState.value.patterns.isEmpty())
+        assertTrue(viewModel.uiState.value.insights.isEmpty())
+        assertTrue(viewModel.uiState.value.barriers.isEmpty())
+    }
+
+    @Test
+    fun `previous user Flow emissions cannot overwrite new user state`() = runTest {
+        val user1Patterns = MutableStateFlow<List<Pattern>>(listOf(createPattern("p_u1", userId = "user_test")))
+        val user2Patterns = MutableStateFlow<List<Pattern>>(listOf(createPattern("p_u2", userId = "user_2")))
+
+        every { getPatternsUseCase.observe("user_test") } returns user1Patterns
+        every { getPatternsUseCase.observe("user_2") } returns user2Patterns
+
+        val viewModel = createViewModelWithIntelligence()
+        advanceUntilIdle()
+
+        assertEquals(1, viewModel.uiState.value.patterns.size)
+        assertEquals("p_u1", viewModel.uiState.value.patterns[0].id)
+
+        // Switch to user 2
+        userSessionProvider.setState(SessionState.Authenticated("user_2", isAnonymous = false))
+        advanceUntilIdle()
+
+        assertEquals(1, viewModel.uiState.value.patterns.size)
+        assertEquals("p_u2", viewModel.uiState.value.patterns[0].id)
+
+        // Delayed emission from user 1's old flow
+        user1Patterns.value = listOf(createPattern("p_u1_delayed", userId = "user_test"))
+        advanceUntilIdle()
+
+        // User 2's state is preserved; old user's emission was discarded
+        assertEquals(1, viewModel.uiState.value.patterns.size)
+        assertEquals("p_u2", viewModel.uiState.value.patterns[0].id)
+    }
+
+    @Test
+    fun `pattern confirmation calls confirmPatternUseCase with active userId`() = runTest {
+        coEvery { confirmPatternUseCase("user_test", "pat_100") } returns Result.Success(Unit)
+
+        val viewModel = createViewModelWithIntelligence()
+        advanceUntilIdle()
+
+        viewModel.confirmPattern("pat_100")
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { confirmPatternUseCase("user_test", "pat_100") }
+        assertFalse(viewModel.uiState.value.isSubmittingAction)
+        assertNull(viewModel.uiState.value.actionError)
+    }
+
+    @Test
+    fun `pattern dismissal and refutation dispatch with active userId`() = runTest {
+        coEvery { dismissPatternUseCase("user_test", "pat_200") } returns Result.Success(Unit)
+        coEvery { refutePatternUseCase("user_test", "pat_300") } returns Result.Success(Unit)
+
+        val viewModel = createViewModelWithIntelligence()
+        advanceUntilIdle()
+
+        viewModel.dismissPattern("pat_200")
+        advanceUntilIdle()
+        coVerify(exactly = 1) { dismissPatternUseCase("user_test", "pat_200") }
+
+        viewModel.refutePattern("pat_300")
+        advanceUntilIdle()
+        coVerify(exactly = 1) { refutePatternUseCase("user_test", "pat_300") }
+    }
+
+    @Test
+    fun `insight mark useful calls reviewPersonalInsightUseCase`() = runTest {
+        coEvery { reviewPersonalInsightUseCase.markUseful("ins_100", "user_test") } returns Result.Success(Unit)
+
+        val viewModel = createViewModelWithIntelligence()
+        advanceUntilIdle()
+
+        viewModel.markInsightUseful("ins_100")
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { reviewPersonalInsightUseCase.markUseful("ins_100", "user_test") }
+        assertFalse(viewModel.uiState.value.isSubmittingAction)
+        assertNull(viewModel.uiState.value.actionError)
+    }
+
+    @Test
+    fun `insight dismiss and review later dispatch to reviewPersonalInsightUseCase`() = runTest {
+        coEvery { reviewPersonalInsightUseCase.dismiss("ins_200", "user_test") } returns Result.Success(Unit)
+        coEvery { reviewPersonalInsightUseCase.reviewLater("ins_300", "user_test") } returns Result.Success(Unit)
+
+        val viewModel = createViewModelWithIntelligence()
+        advanceUntilIdle()
+
+        viewModel.dismissInsight("ins_200")
+        advanceUntilIdle()
+        coVerify(exactly = 1) { reviewPersonalInsightUseCase.dismiss("ins_200", "user_test") }
+
+        viewModel.reviewInsightLater("ins_300")
+        advanceUntilIdle()
+        coVerify(exactly = 1) { reviewPersonalInsightUseCase.reviewLater("ins_300", "user_test") }
+    }
+
+    @Test
+    fun `barrier confirmation calls confirmBarrierUseCase with active userId`() = runTest {
+        coEvery { confirmBarrierUseCase("user_test", "bar_100") } returns Result.Success(Unit)
+
+        val viewModel = createViewModelWithIntelligence()
+        advanceUntilIdle()
+
+        viewModel.confirmBarrier("bar_100")
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { confirmBarrierUseCase("user_test", "bar_100") }
+        assertFalse(viewModel.uiState.value.isSubmittingAction)
+        assertNull(viewModel.uiState.value.actionError)
+    }
+
+    @Test
+    fun `barrier dismissal and refutation dispatch with active userId`() = runTest {
+        coEvery { dismissBarrierUseCase("user_test", "bar_200") } returns Result.Success(Unit)
+        coEvery { refuteBarrierUseCase("user_test", "bar_300") } returns Result.Success(Unit)
+
+        val viewModel = createViewModelWithIntelligence()
+        advanceUntilIdle()
+
+        viewModel.dismissBarrier("bar_200")
+        advanceUntilIdle()
+        coVerify(exactly = 1) { dismissBarrierUseCase("user_test", "bar_200") }
+
+        viewModel.refuteBarrier("bar_300")
+        advanceUntilIdle()
+        coVerify(exactly = 1) { refuteBarrierUseCase("user_test", "bar_300") }
+    }
+
+    @Test
+    fun `action failure sets actionError and resets isSubmittingAction, clearActionError clears it`() = runTest {
+        coEvery { confirmPatternUseCase("user_test", "fail_pat") } returns Result.Failure(IllegalStateException("Network offline"))
+
+        val viewModel = createViewModelWithIntelligence()
+        advanceUntilIdle()
+
+        viewModel.confirmPattern("fail_pat")
+        advanceUntilIdle()
+
+        val stateWithError = viewModel.uiState.value
+        assertFalse(stateWithError.isSubmittingAction)
+        assertEquals("Network offline", stateWithError.actionError)
+
+        // Clear error
+        viewModel.clearActionError()
+        assertNull(viewModel.uiState.value.actionError)
+    }
+
+    @Test
+    fun `duplicate concurrent action submissions are rejected while action is in progress`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        coEvery { confirmPatternUseCase("user_test", "slow_pat") } coAnswers {
+            gate.await()
+            Result.Success(Unit)
+        }
+
+        val viewModel = createViewModelWithIntelligence()
+        advanceUntilIdle()
+
+        // First action starts and suspends at gate
+        viewModel.confirmPattern("slow_pat")
+        // Check submitting action is true
+        assertTrue(viewModel.uiState.value.isSubmittingAction)
+
+        // Second action call while first is in flight
+        viewModel.confirmPattern("another_pat")
+
+        // Release first action
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        // First action completed
+        coVerify(exactly = 1) { confirmPatternUseCase("user_test", "slow_pat") }
+        // Second action was skipped
+        coVerify(exactly = 0) { confirmPatternUseCase("user_test", "another_pat") }
+        assertFalse(viewModel.uiState.value.isSubmittingAction)
+    }
+
+    @Test
+    fun `marking insight useful does not alter underlying epistemic authority`() = runTest {
+        val initialInsight = createInsight(
+            id = "ins_hypo",
+            authority = EpistemicAuthority.AI_HYPOTHESIS,
+            reviewStatus = InsightReviewStatus.UNREVIEWED
+        )
+        insightsFlow.value = listOf(initialInsight)
+
+        val viewModel = createViewModelWithIntelligence()
+        advanceUntilIdle()
+
+        assertEquals(EpistemicAuthority.AI_HYPOTHESIS, viewModel.uiState.value.digitalInsights[0].epistemicAuthority)
+        assertEquals(InsightReviewStatus.UNREVIEWED, viewModel.uiState.value.digitalInsights[0].reviewStatus)
+
+        // Simulate markUseful repository update: reviewStatus becomes USEFUL, authority remains AI_HYPOTHESIS
+        val updatedInsight = initialInsight.copy(
+            reviewStatus = InsightReviewStatus.USEFUL,
+            userFeedback = null
+        )
+        insightsFlow.value = listOf(updatedInsight)
+        advanceUntilIdle()
+
+        val displayed = viewModel.uiState.value.digitalInsights[0]
+        assertEquals(InsightReviewStatus.USEFUL, displayed.reviewStatus)
+        // Invariant: User feedback does NOT upgrade AI_HYPOTHESIS to USER_CONFIRMED_FACT or SYSTEM_RECORDED_OBSERVATION
+        assertEquals(EpistemicAuthority.AI_HYPOTHESIS, displayed.epistemicAuthority)
     }
 
     // --- Fakes ---

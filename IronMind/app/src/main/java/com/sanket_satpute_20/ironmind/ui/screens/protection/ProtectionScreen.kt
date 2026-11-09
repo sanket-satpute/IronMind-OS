@@ -120,7 +120,17 @@ fun ProtectionScreen(
                             uiState = digitalUiState,
                             onSelectDate = { digitalViewModel.selectDate(it) },
                             onRefresh = { digitalViewModel.refresh() },
-                            onAcknowledgeError = { digitalViewModel.acknowledgeError() }
+                            onAcknowledgeError = { digitalViewModel.acknowledgeError() },
+                            onConfirmPattern = { digitalViewModel.confirmPattern(it) },
+                            onDismissPattern = { digitalViewModel.dismissPattern(it) },
+                            onRefutePattern = { digitalViewModel.refutePattern(it) },
+                            onMarkInsightUseful = { digitalViewModel.markInsightUseful(it) },
+                            onDismissInsight = { digitalViewModel.dismissInsight(it) },
+                            onReviewInsightLater = { digitalViewModel.reviewInsightLater(it) },
+                            onConfirmBarrier = { digitalViewModel.confirmBarrier(it) },
+                            onDismissBarrier = { digitalViewModel.dismissBarrier(it) },
+                            onRefuteBarrier = { digitalViewModel.refuteBarrier(it) },
+                            onClearActionError = { digitalViewModel.clearActionError() }
                         )
                     }
                     1 -> {
