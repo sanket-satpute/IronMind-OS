@@ -1,13 +1,22 @@
 package com.sanket_satpute_20.ironmind.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.sanket_satpute_20.ironmind.domain.model.observation.Observation
 import com.sanket_satpute_20.ironmind.domain.model.observation.ObservationProvenance
 import com.sanket_satpute_20.ironmind.domain.model.observation.ObservationSource
 import com.sanket_satpute_20.ironmind.domain.model.observation.ObservationType
 
-@Entity(tableName = "observations")
+@Entity(
+    tableName = "observations",
+    indices = [
+        Index(
+            value = ["userId", "type", "occurredAt"],
+            name = "index_observations_userId_type_occurredAt"
+        )
+    ]
+)
 data class ObservationEntity(
     @PrimaryKey val id: String,
     val userId: String,

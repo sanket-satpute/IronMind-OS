@@ -458,7 +458,8 @@ class DefaultAppContainer(
             IronMindDatabase.MIGRATION_25_26,
             IronMindDatabase.MIGRATION_26_27,
             IronMindDatabase.MIGRATION_27_28,
-            IronMindDatabase.MIGRATION_28_29
+            IronMindDatabase.MIGRATION_28_29,
+            IronMindDatabase.MIGRATION_29_30
         ).build()
     }
 

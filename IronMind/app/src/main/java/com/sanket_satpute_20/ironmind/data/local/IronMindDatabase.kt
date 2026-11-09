@@ -57,7 +57,7 @@ import com.sanket_satpute_20.ironmind.data.local.entity.*
         LocalTombstoneEntity::class,
         AppUsageObservationCheckpointEntity::class
     ],
-    version = 29,
+    version = 30,
     exportSchema = false
 )
 abstract class IronMindDatabase : RoomDatabase() {
@@ -771,6 +771,15 @@ abstract class IronMindDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
                 println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=29")
+            }
+        }
+
+        val MIGRATION_29_30 = object : Migration(29, 30) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_observations_userId_type_occurredAt` ON `observations` (`userId`, `type`, `occurredAt`)"
+                )
+                println("IronMindLifecycle [Database] [MIGRATION_COMPLETED] version=30")
             }
         }
     }

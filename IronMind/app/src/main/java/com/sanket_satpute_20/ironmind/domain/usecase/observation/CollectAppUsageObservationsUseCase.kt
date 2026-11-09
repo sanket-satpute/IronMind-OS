@@ -46,8 +46,8 @@ class CollectAppUsageObservationsUseCase(
     private val clock: Clock,
     private val checkpointStore: AppUsageCheckpointStore? = null,
     private val zoneId: ZoneId = ZoneId.systemDefault(),
-    private val defaultInitialLookbackMillis: Long = 60 * 60 * 1000L, // 1 hour
-    private val maxRetentionMillis: Long = 7L * 24 * 60 * 60 * 1000L, // 7 days (Android UsageStats retention)
+    private val defaultInitialLookbackMillis: Long = 60 * 60 * 1000L, // 1 hour initial lookback
+    private val maxRetentionMillis: Long = 7L * 24 * 60 * 60 * 1000L, // Bounded query lookback ceiling (Android UsageEvents retention is OS-managed and variable across OEMs/devices)
     private val maxChunkDurationMillis: Long = 6L * 60 * 60 * 1000L // 6 hours per chunk
 ) : ObservationCollector {
 
