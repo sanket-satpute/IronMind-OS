@@ -107,11 +107,46 @@ class TodayViewModel(
     private val handledRecommendationIds = mutableSetOf<String>()
     private var dataLoadJob: Job? = null
     private var actionObserveJob: Job? = null
+    private var briefingJob: Job? = null
     private var loadGeneration = 0L
+    private var briefingGeneration = 0L
     private var observedSessionUserId: String? = null
     private var loadedUserId: String? = null
     private var latestObservedActions: List<ProposedAction>? = null
     private val pendingInsightReviews = ConcurrentHashMap.newKeySet<String>()
+
+    internal val actionComparator: Comparator<ProposedAction> = Comparator { a, b ->
+        val statusRankA = when (a.reviewStatus) {
+            ActionReviewStatus.EXECUTING -> 0
+            ActionReviewStatus.ACCEPTED -> 1
+            ActionReviewStatus.EXECUTION_FAILED -> 2
+            ActionReviewStatus.PROPOSED -> 3
+            ActionReviewStatus.EXECUTED -> 4
+            else -> 5
+        }
+        val statusRankB = when (b.reviewStatus) {
+            ActionReviewStatus.EXECUTING -> 0
+            ActionReviewStatus.ACCEPTED -> 1
+            ActionReviewStatus.EXECUTION_FAILED -> 2
+            ActionReviewStatus.PROPOSED -> 3
+            ActionReviewStatus.EXECUTED -> 4
+            else -> 5
+        }
+        if (statusRankA != statusRankB) return@Comparator statusRankA.compareTo(statusRankB)
+
+        val priorityCompare = a.priority.ordinal.compareTo(b.priority.ordinal)
+        if (priorityCompare != 0) return@Comparator priorityCompare
+
+        val expiryA = a.expiresAt ?: Long.MAX_VALUE
+        val expiryB = b.expiresAt ?: Long.MAX_VALUE
+        val expiryCompare = expiryA.compareTo(expiryB)
+        if (expiryCompare != 0) return@Comparator expiryCompare
+
+        val createdCompare = b.createdAt.compareTo(a.createdAt)
+        if (createdCompare != 0) return@Comparator createdCompare
+
+        a.id.compareTo(b.id)
+    }
 
     init {
         observeSession()
@@ -128,18 +163,24 @@ class TodayViewModel(
                 when (state) {
                     is SessionState.Initializing -> {
                         loadGeneration++
+                        briefingGeneration++
                         loadedUserId = null
                         latestObservedActions = null
                         dataLoadJob?.cancel()
                         actionObserveJob?.cancel()
+                        briefingJob?.cancel()
+                        pendingInsightReviews.clear()
                         _uiState.value = TodayUiState.Loading
                     }
                     is SessionState.ReconciliationFailed -> {
                         loadGeneration++
+                        briefingGeneration++
                         loadedUserId = null
                         latestObservedActions = null
                         dataLoadJob?.cancel()
                         actionObserveJob?.cancel()
+                        briefingJob?.cancel()
+                        pendingInsightReviews.clear()
                         _uiState.value = TodayUiState.Error(
                             "Session reconciliation failed: ${state.error.message ?: "Unknown error"}"
                         )
@@ -150,9 +191,11 @@ class TodayViewModel(
                         if (observedSessionUserId != state.currentUserId) {
                             observedSessionUserId = state.currentUserId
                             handledRecommendationIds.clear()
+                            pendingInsightReviews.clear()
                             loadedUserId = null
                             latestObservedActions = null
                             actionObserveJob?.cancel()
+                            briefingJob?.cancel()
                             _uiState.value = TodayUiState.Loading
                         }
                         loadData(state.currentUserId)
@@ -165,6 +208,7 @@ class TodayViewModel(
     private fun loadData(userId: String, message: String? = null) {
         dataLoadJob?.cancel()
         actionObserveJob?.cancel()
+        briefingJob?.cancel()
         val generation = ++loadGeneration
         loadedUserId = null
         dataLoadJob = viewModelScope.launch {
@@ -206,7 +250,7 @@ class TodayViewModel(
                                             action.reviewStatus == ActionReviewStatus.EXECUTING ||
                                             (action.reviewStatus == ActionReviewStatus.EXECUTED && action.outcomeId == null) ||
                                             action.reviewStatus == ActionReviewStatus.EXECUTION_FAILED
-                                        }
+                                        }.sortedWith(actionComparator)
 
                                         latestObservedActions = visibleActions
                                         val currentState = _uiState.value
@@ -221,46 +265,49 @@ class TodayViewModel(
                         val dueToday = if (dueTasksResult is Result.Success) dueTasksResult.data.dueToday else emptyList()
                         val overdue = if (dueTasksResult is Result.Success) dueTasksResult.data.overdue else emptyList()
 
-                        // Collect outside the barrier. The session observer cancels this job on UID
-                        // changes, and the generation check rejects any late emission.
+                        // Core data is loaded; transition immediately to Success so commitments and tasks are visible
+                        val initialState = TodayUiState.Success(
+                            activeCommitments = commitments,
+                            pendingRecommendations = emptyList(),
+                            dueTodayTasks = dueToday,
+                            overdueTasks = overdue,
+                            proposedActions = latestObservedActions ?: emptyList(),
+                            userMessage = message
+                        )
+                        _uiState.value = initialState
+
+                        // Auto-assemble briefing once core data is ready
+                        refreshDailyBriefing()
+
+                        // Collect recommendations reactively without gating or wiping out core Today data on failure
                         getPendingInterventionRecommendationsUseCase(activeUid, System.currentTimeMillis())
                             .catch { e ->
                                 if (e is CancellationException) throw e
                                 if (isCurrentLoad(userId, generation)) {
-                                    _uiState.value = TodayUiState.Error(e.message ?: "Failed to load recommendations")
+                                    val currentState = _uiState.value as? TodayUiState.Success
+                                    if (currentState != null) {
+                                        _uiState.value = currentState.copy(
+                                            userMessage = currentState.userMessage ?: "Recommendations temporarily unavailable"
+                                        )
+                                    } else {
+                                        _uiState.value = TodayUiState.Error(e.message ?: "Failed to load recommendations")
+                                    }
                                 }
                             }
                             .collect { recommendations ->
                                 if (!isCurrentLoad(userId, generation)) return@collect
                                 if (recommendations.any { it.userId != activeUid }) {
-                                    _uiState.value = TodayUiState.Error("Recommendations do not belong to this session")
                                     return@collect
                                 }
                                 val visibleRecommendations = recommendations.filter { it.id !in handledRecommendationIds }
-                                val currentState = _uiState.value
-                                if (currentState is TodayUiState.Success) {
+                                val currentState = _uiState.value as? TodayUiState.Success ?: return@collect
+                                if (currentState.pendingRecommendations != visibleRecommendations) {
                                     _uiState.value = currentState.copy(
-                                        activeCommitments = commitments,
-                                        pendingRecommendations = visibleRecommendations,
-                                        dueTodayTasks = dueToday,
-                                        overdueTasks = overdue,
-                                        proposedActions = latestObservedActions ?: currentState.proposedActions,
-                                        userMessage = message ?: currentState.userMessage
-                                    )
-                                } else {
-                                    _uiState.value = TodayUiState.Success(
-                                        activeCommitments = commitments,
-                                        pendingRecommendations = visibleRecommendations,
-                                        dueTodayTasks = dueToday,
-                                        overdueTasks = overdue,
-                                        proposedActions = latestObservedActions ?: emptyList(),
-                                        userMessage = message
+                                        pendingRecommendations = visibleRecommendations
                                     )
                                 }
-                                // Auto-assemble briefing when data loads
-                                refreshDailyBriefing()
                             }
-                }
+                    }
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -452,37 +499,47 @@ class TodayViewModel(
     }
 
     fun refreshDailyBriefing() {
-        viewModelScope.launch {
-            userSessionProvider.runWithSession { activeUid ->
-                if (!hasLoadedUser(activeUid)) return@runWithSession
-                val currentState = _uiState.value as? TodayUiState.Success ?: return@runWithSession
-                _uiState.value = currentState.copy(isBriefingLoading = true)
+        briefingJob?.cancel()
+        val currentBriefingGen = ++briefingGeneration
+        briefingJob = viewModelScope.launch {
+            try {
+                userSessionProvider.runWithSession { activeUid ->
+                    if (!hasLoadedUser(activeUid) || currentBriefingGen != briefingGeneration) return@runWithSession
+                    val currentState = _uiState.value as? TodayUiState.Success ?: return@runWithSession
+                    _uiState.value = currentState.copy(isBriefingLoading = true)
 
-                val safeExisting = currentState.proposedActions.filter { it.userId == activeUid }
-                val briefingResult = assembleDailyBriefingUseCase?.invoke(
-                    userId = activeUid,
-                    existingActions = safeExisting
-                )
+                    val safeExisting = currentState.proposedActions.filter { it.userId == activeUid }
+                    val briefingResult = assembleDailyBriefingUseCase?.invoke(
+                        userId = activeUid,
+                        existingActions = safeExisting
+                    )
 
-                val updatedState = _uiState.value as? TodayUiState.Success ?: return@runWithSession
-                if (briefingResult is Result.Success) {
-                    val actions = if (actionRepository == null) {
-                        briefingResult.data.proposedNextActions
-                    } else {
-                        // Room-backed repository emissions are the authoritative source for persisted actions
-                        if (updatedState.proposedActions.isEmpty()) {
-                            briefingResult.data.proposedNextActions
+                    // Re-validate session identity and briefing generation after suspend operation
+                    if (!hasLoadedUser(activeUid) || currentBriefingGen != briefingGeneration) return@runWithSession
+
+                    val updatedState = _uiState.value as? TodayUiState.Success ?: return@runWithSession
+                    if (briefingResult is Result.Success) {
+                        val actions = if (actionRepository == null) {
+                            briefingResult.data.proposedNextActions.sortedWith(actionComparator)
                         } else {
+                            // Room-backed repository emissions are the SOLE authoritative source for persisted actions
                             updatedState.proposedActions
                         }
+                        _uiState.value = updatedState.copy(
+                            dailyBriefing = briefingResult.data,
+                            proposedActions = actions,
+                            isBriefingLoading = false
+                        )
+                    } else {
+                        _uiState.value = updatedState.copy(isBriefingLoading = false)
                     }
-                    _uiState.value = updatedState.copy(
-                        dailyBriefing = briefingResult.data,
-                        proposedActions = actions,
-                        isBriefingLoading = false
-                    )
-                } else {
-                    _uiState.value = updatedState.copy(isBriefingLoading = false)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val state = _uiState.value as? TodayUiState.Success
+                if (state != null && currentBriefingGen == briefingGeneration) {
+                    _uiState.value = state.copy(isBriefingLoading = false)
                 }
             }
         }
@@ -493,12 +550,13 @@ class TodayViewModel(
             userSessionProvider.runWithSession { activeUid ->
                 if (!hasLoadedUser(activeUid) || action.userId != activeUid) return@runWithSession
                 val result = actionLifecycleUseCase?.acceptAction(action, activeUid)
+                if (!hasLoadedUser(activeUid)) return@runWithSession
                 val currentState = _uiState.value as? TodayUiState.Success ?: return@runWithSession
                 if (result is Result.Success) {
                     if (actionRepository == null) {
                         val updatedActions = currentState.proposedActions.map {
                             if (it.id == action.id) result.data else it
-                        }
+                        }.sortedWith(actionComparator)
                         _uiState.value = currentState.copy(
                             proposedActions = updatedActions,
                             userMessage = "Action approved: ready for execution"
@@ -522,6 +580,7 @@ class TodayViewModel(
             userSessionProvider.runWithSession { activeUid ->
                 if (!hasLoadedUser(activeUid) || action.userId != activeUid) return@runWithSession
                 val result = actionLifecycleUseCase?.rejectAction(action, activeUid, reason)
+                if (!hasLoadedUser(activeUid)) return@runWithSession
                 val currentState = _uiState.value as? TodayUiState.Success ?: return@runWithSession
                 if (result is Result.Success) {
                     if (actionRepository == null) {
@@ -549,6 +608,7 @@ class TodayViewModel(
             userSessionProvider.runWithSession { activeUid ->
                 if (!hasLoadedUser(activeUid) || action.userId != activeUid) return@runWithSession
                 val result = actionLifecycleUseCase?.dismissAction(action, activeUid)
+                if (!hasLoadedUser(activeUid)) return@runWithSession
                 val currentState = _uiState.value as? TodayUiState.Success ?: return@runWithSession
                 if (result is Result.Success) {
                     if (actionRepository == null) {
@@ -576,12 +636,13 @@ class TodayViewModel(
             userSessionProvider.runWithSession { activeUid ->
                 if (!hasLoadedUser(activeUid) || action.userId != activeUid) return@runWithSession
                 val result = actionLifecycleUseCase?.deferAction(action, activeUid, deferUntilMs)
+                if (!hasLoadedUser(activeUid)) return@runWithSession
                 val currentState = _uiState.value as? TodayUiState.Success ?: return@runWithSession
                 if (result is Result.Success) {
                     if (actionRepository == null) {
                         val updatedActions = currentState.proposedActions.map {
                             if (it.id == action.id) result.data else it
-                        }
+                        }.sortedWith(actionComparator)
                         _uiState.value = currentState.copy(
                             proposedActions = updatedActions,
                             userMessage = "Action deferred"
@@ -612,6 +673,7 @@ class TodayViewModel(
                     return@runWithSession
                 }
                 val result = actionLifecycleUseCase?.executeAction(action, activeUid, params)
+                if (!hasLoadedUser(activeUid)) return@runWithSession
                 val currentState = _uiState.value as? TodayUiState.Success ?: return@runWithSession
                 if (result is Result.Success) {
                     val executedAction = result.data
@@ -619,7 +681,7 @@ class TodayViewModel(
                     if (actionRepository == null) {
                         val updatedActions = currentState.proposedActions.map {
                             if (it.id == action.id) executedAction else it
-                        }
+                        }.sortedWith(actionComparator)
                         _uiState.value = currentState.copy(
                             proposedActions = updatedActions,
                             userMessage = execMessage
@@ -649,6 +711,7 @@ class TodayViewModel(
             userSessionProvider.runWithSession { activeUid ->
                 if (!hasLoadedUser(activeUid) || action.userId != activeUid) return@runWithSession
                 val result = actionLifecycleUseCase?.recordActionOutcome(action, activeUid, resultStatus, actualDurationMinutes, feedback)
+                if (!hasLoadedUser(activeUid)) return@runWithSession
                 val currentState = _uiState.value as? TodayUiState.Success ?: return@runWithSession
                 if (result is Result.Success) {
                     if (actionRepository == null) {
@@ -671,14 +734,19 @@ class TodayViewModel(
         }
     }
 
+    private fun insightReviewKey(userId: String, insightId: String): String = "$userId:$insightId"
+
     fun markInsightUseful(insightId: String) {
         if (reviewPersonalInsightUseCase == null) return
-        if (!pendingInsightReviews.add(insightId)) return
+        val targetUid = userSessionProvider?.getActiveUserId() ?: currentUserId
+        val reviewKey = insightReviewKey(targetUid, insightId)
+        if (!pendingInsightReviews.add(reviewKey)) return
         viewModelScope.launch {
             try {
                 userSessionProvider.runWithSession { activeUid ->
                     if (!hasLoadedUser(activeUid)) return@runWithSession
                     val result = reviewPersonalInsightUseCase.markUseful(insightId, activeUid)
+                    if (!hasLoadedUser(activeUid)) return@runWithSession
                     val currentState = _uiState.value as? TodayUiState.Success ?: return@runWithSession
                     when (result) {
                         is Result.Success -> {
@@ -700,19 +768,22 @@ class TodayViewModel(
                     _uiState.value = currentState.copy(userMessage = e.message ?: "Error updating insight")
                 }
             } finally {
-                pendingInsightReviews.remove(insightId)
+                pendingInsightReviews.remove(reviewKey)
             }
         }
     }
 
     fun dismissInsight(insightId: String) {
         if (reviewPersonalInsightUseCase == null) return
-        if (!pendingInsightReviews.add(insightId)) return
+        val targetUid = userSessionProvider?.getActiveUserId() ?: currentUserId
+        val reviewKey = insightReviewKey(targetUid, insightId)
+        if (!pendingInsightReviews.add(reviewKey)) return
         viewModelScope.launch {
             try {
                 userSessionProvider.runWithSession { activeUid ->
                     if (!hasLoadedUser(activeUid)) return@runWithSession
                     val result = reviewPersonalInsightUseCase.dismiss(insightId, activeUid)
+                    if (!hasLoadedUser(activeUid)) return@runWithSession
                     val currentState = _uiState.value as? TodayUiState.Success ?: return@runWithSession
                     when (result) {
                         is Result.Success -> {
@@ -734,19 +805,22 @@ class TodayViewModel(
                     _uiState.value = currentState.copy(userMessage = e.message ?: "Error updating insight")
                 }
             } finally {
-                pendingInsightReviews.remove(insightId)
+                pendingInsightReviews.remove(reviewKey)
             }
         }
     }
 
     fun reviewInsightLater(insightId: String) {
         if (reviewPersonalInsightUseCase == null) return
-        if (!pendingInsightReviews.add(insightId)) return
+        val targetUid = userSessionProvider?.getActiveUserId() ?: currentUserId
+        val reviewKey = insightReviewKey(targetUid, insightId)
+        if (!pendingInsightReviews.add(reviewKey)) return
         viewModelScope.launch {
             try {
                 userSessionProvider.runWithSession { activeUid ->
                     if (!hasLoadedUser(activeUid)) return@runWithSession
                     val result = reviewPersonalInsightUseCase.reviewLater(insightId, activeUid)
+                    if (!hasLoadedUser(activeUid)) return@runWithSession
                     val currentState = _uiState.value as? TodayUiState.Success ?: return@runWithSession
                     when (result) {
                         is Result.Success -> {
@@ -768,7 +842,7 @@ class TodayViewModel(
                     _uiState.value = currentState.copy(userMessage = e.message ?: "Error updating insight")
                 }
             } finally {
-                pendingInsightReviews.remove(insightId)
+                pendingInsightReviews.remove(reviewKey)
             }
         }
     }

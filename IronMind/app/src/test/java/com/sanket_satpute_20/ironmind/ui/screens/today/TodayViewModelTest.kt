@@ -39,6 +39,7 @@ import com.sanket_satpute_20.ironmind.domain.model.action.ActionCategory
 import com.sanket_satpute_20.ironmind.domain.model.action.ActionExecutionResult
 import com.sanket_satpute_20.ironmind.domain.model.action.ActionReviewStatus
 import com.sanket_satpute_20.ironmind.domain.model.action.ProposedAction
+import com.sanket_satpute_20.ironmind.domain.model.action.ActionPriority
 import com.sanket_satpute_20.ironmind.domain.model.briefing.DailyBriefing
 import com.sanket_satpute_20.ironmind.domain.model.briefing.DiscoveredPatternItem
 import com.sanket_satpute_20.ironmind.domain.model.briefing.EvidenceBackedBarrierItem
@@ -58,8 +59,10 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.every
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.CancellationException
@@ -127,7 +130,8 @@ class TodayViewModelTest {
         assembleDailyBriefingUseCase: AssembleDailyBriefingUseCase? = null,
         actionLifecycleUseCase: ActionLifecycleUseCase? = null,
         actionRepository: ActionRepository? = null,
-        reviewPersonalInsightUseCase: ReviewPersonalInsightUseCase? = null
+        reviewPersonalInsightUseCase: ReviewPersonalInsightUseCase? = null,
+        pendingRecommendationsUseCase: GetPendingInterventionRecommendationsUseCase? = null
     ) {
         val dueTasksUseCase = if (taskRepo != null) {
             GetDueTasksUseCase(taskRepo, planRepo, clock)
@@ -138,7 +142,7 @@ class TodayViewModelTest {
             updateCommitmentStatusUseCase = updateCommitmentStatusUseCase,
             scheduleCommitmentUseCase = scheduleCommitmentUseCase,
             cancelCommitmentScheduleUseCase = cancelCommitmentScheduleUseCase,
-            getPendingInterventionRecommendationsUseCase = getPendingRecommendationsUseCase,
+            getPendingInterventionRecommendationsUseCase = pendingRecommendationsUseCase ?: getPendingRecommendationsUseCase,
             handleInterventionResultUseCase = handleInterventionResultUseCase,
             orchestrateInterventionGenerationUseCase = orchestrateInterventionGenerationUseCase,
             userSessionProvider = userSessionProvider,
@@ -157,7 +161,10 @@ class TodayViewModelTest {
         status: ActionReviewStatus = ActionReviewStatus.PROPOSED,
         category: ActionCategory = ActionCategory.TASK_RESCHEDULE,
         epistemicAuthority: EpistemicAuthority = EpistemicAuthority.AI_HYPOTHESIS,
-        outcomeId: String? = null
+        outcomeId: String? = null,
+        priority: ActionPriority = ActionPriority.MEDIUM,
+        createdAt: Long = 1_000L,
+        expiresAt: Long? = null
     ) = ProposedAction(
         id = id,
         userId = userId,
@@ -168,7 +175,9 @@ class TodayViewModelTest {
         reviewStatus = status,
         epistemicAuthority = epistemicAuthority,
         outcomeId = outcomeId,
-        createdAt = 1_000L
+        priority = priority,
+        createdAt = createdAt,
+        expiresAt = expiresAt
     )
 
     private fun testDailyBriefing(
@@ -1145,6 +1154,159 @@ class TodayViewModelTest {
         assertFalse(db.discoveredPatterns[0].isUserConfirmed)
         assertEquals(EpistemicAuthority.AI_HYPOTHESIS, db.evidenceBackedBarriers[0].epistemicAuthority)
         assertFalse(db.evidenceBackedBarriers[0].isUserConfirmed)
+    }
+
+    // =========================================================================
+    // Phase 3.6.7.4R Remediation Tests
+    // =========================================================================
+
+    @Test
+    fun `session switch during in-flight briefing does not leak previous user briefing to new user`() = runTest {
+        val sessionProvider = FakeUserSessionProvider(SessionState.Authenticated("user-1", false))
+        val u1Deferred = CompletableDeferred<Result<DailyBriefing, Exception>>()
+        val mockBriefingUseCase = mockk<AssembleDailyBriefingUseCase>()
+        coEvery { mockBriefingUseCase.invoke(eq("user-1"), any(), any(), any(), any()) } coAnswers { u1Deferred.await() }
+        coEvery { mockBriefingUseCase.invoke(eq("user-2"), any(), any(), any(), any()) } returns Result.Success(
+            testDailyBriefing(userId = "user-2", attentionSummary = "User 2 Briefing")
+        )
+
+        createViewModel(userSessionProvider = sessionProvider, assembleDailyBriefingUseCase = mockBriefingUseCase)
+        advanceUntilIdle()
+
+        // Switch user to user-2 while user-1 briefing is still suspended
+        sessionProvider.setState(SessionState.Authenticated("user-2", false))
+        advanceUntilIdle()
+
+        // Complete user-1 briefing late
+        u1Deferred.complete(Result.Success(testDailyBriefing(userId = "user-1", attentionSummary = "User 1 Leaked Briefing")))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as TodayUiState.Success
+        assertNotNull(state.dailyBriefing)
+        assertEquals("User 2 Briefing", state.dailyBriefing?.attentionSummary)
+    }
+
+    @Test
+    fun `stale briefing completion after a newer refresh cannot overwrite newer state`() = runTest {
+        val deferred1 = CompletableDeferred<Result<DailyBriefing, Exception>>()
+        val deferred2 = CompletableDeferred<Result<DailyBriefing, Exception>>()
+        val mockBriefingUseCase = mockk<AssembleDailyBriefingUseCase>()
+        var callCount = 0
+        coEvery { mockBriefingUseCase.invoke(any(), any(), any(), any(), any()) } coAnswers {
+            callCount++
+            if (callCount == 1) deferred1.await() else deferred2.await()
+        }
+
+        createViewModel(assembleDailyBriefingUseCase = mockBriefingUseCase)
+        advanceUntilIdle()
+
+        // Refresh triggered again (call 2)
+        viewModel.refreshDailyBriefing()
+        advanceUntilIdle()
+
+        // Complete newer refresh (call 2) first
+        deferred2.complete(Result.Success(testDailyBriefing(attentionSummary = "Newer Briefing")))
+        advanceUntilIdle()
+
+        // Complete stale refresh (call 1) late
+        deferred1.complete(Result.Success(testDailyBriefing(attentionSummary = "Stale Briefing")))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as TodayUiState.Success
+        assertEquals("Newer Briefing", state.dailyBriefing?.attentionSummary)
+    }
+
+    @Test
+    fun `room empty emission remains authoritative when briefing generates actions`() = runTest {
+        val fakeActionRepo = FakeActionRepository()
+        fakeActionRepo.actionsFlow.value = emptyList()
+        val briefingWithActions = testDailyBriefing(
+            actions = listOf(testProposedAction("act-briefing-1", "user-1"))
+        )
+        val mockBriefingUseCase = mockk<AssembleDailyBriefingUseCase>()
+        coEvery { mockBriefingUseCase.invoke(any(), any(), any(), any(), any()) } returns Result.Success(briefingWithActions)
+
+        createViewModel(actionRepository = fakeActionRepo, assembleDailyBriefingUseCase = mockBriefingUseCase)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as TodayUiState.Success
+        assertTrue(state.proposedActions.isEmpty())
+        assertNotNull(state.dailyBriefing)
+    }
+
+    @Test
+    fun `accepted and executing actions remain visible ahead of newer proposed actions`() = runTest {
+        val fakeActionRepo = FakeActionRepository()
+        val execAction = testProposedAction("act-exec", "user-1", status = ActionReviewStatus.EXECUTING, createdAt = 100L)
+        val acceptedAction = testProposedAction("act-acc", "user-1", status = ActionReviewStatus.ACCEPTED, createdAt = 200L)
+        val propAction1 = testProposedAction("act-prop1", "user-1", status = ActionReviewStatus.PROPOSED, createdAt = 1000L)
+        val propAction2 = testProposedAction("act-prop2", "user-1", status = ActionReviewStatus.PROPOSED, createdAt = 1001L)
+        val propAction3 = testProposedAction("act-prop3", "user-1", status = ActionReviewStatus.PROPOSED, createdAt = 1002L)
+
+        createViewModel(actionRepository = fakeActionRepo)
+        advanceUntilIdle()
+
+        fakeActionRepo.actionsFlow.value = listOf(propAction1, propAction2, propAction3, acceptedAction, execAction)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as TodayUiState.Success
+        assertEquals(5, state.proposedActions.size)
+        assertEquals("act-exec", state.proposedActions[0].id)
+        assertEquals(ActionReviewStatus.EXECUTING, state.proposedActions[0].reviewStatus)
+        assertEquals("act-acc", state.proposedActions[1].id)
+        assertEquals(ActionReviewStatus.ACCEPTED, state.proposedActions[1].reviewStatus)
+        val top3Ids = state.proposedActions.take(3).map { it.id }
+        assertTrue(top3Ids.contains("act-exec"))
+        assertTrue(top3Ids.contains("act-acc"))
+    }
+
+    @Test
+    fun `insight review guard is cleaned up on failure and session reset`() = runTest {
+        val sessionProvider = FakeUserSessionProvider(SessionState.Authenticated("user-1", false))
+        val mockReviewUseCase = mockk<ReviewPersonalInsightUseCase>()
+        coEvery { mockReviewUseCase.markUseful("ins-fail", "user-1") } returns Result.Failure(RuntimeException("Review failed"))
+        coEvery { mockReviewUseCase.markUseful("ins-retry", "user-1") } returns Result.Success(mockk(relaxed = true))
+
+        createViewModel(userSessionProvider = sessionProvider, reviewPersonalInsightUseCase = mockReviewUseCase)
+        advanceUntilIdle()
+
+        // 1. Failure cleanup
+        viewModel.markInsightUseful("ins-fail")
+        advanceUntilIdle()
+
+        val failedState = viewModel.uiState.value as TodayUiState.Success
+        assertEquals("Review failed", failedState.userMessage)
+
+        // Retry same insight after failure succeeds
+        coEvery { mockReviewUseCase.markUseful("ins-fail", "user-1") } returns Result.Success(mockk(relaxed = true))
+        viewModel.markInsightUseful("ins-fail")
+        advanceUntilIdle()
+
+        val retryState = viewModel.uiState.value as TodayUiState.Success
+        assertEquals("Insight marked as useful", retryState.userMessage)
+
+        // 2. Session reset cleans up guards
+        sessionProvider.setState(SessionState.Initializing)
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value is TodayUiState.Loading)
+    }
+
+    @Test
+    fun `recommendation flow failure preserves core Today content`() = runTest {
+        createCommitmentUseCase("user-1", null, null, null, null, "C1", "D1", 1, initialStatus = CommitmentStatus.COMMITTED)
+        val failingRecUseCase = mockk<GetPendingInterventionRecommendationsUseCase>()
+        every { failingRecUseCase.invoke(any(), any()) } returns flow {
+            throw RuntimeException("Recommendation service unavailable")
+        }
+
+        createViewModel(pendingRecommendationsUseCase = failingRecUseCase)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue("Expected Success state despite recommendation failure, but got $state", state is TodayUiState.Success)
+        val success = state as TodayUiState.Success
+        assertEquals(1, success.activeCommitments.size)
+        assertEquals("Recommendations temporarily unavailable", success.userMessage)
     }
 }
 

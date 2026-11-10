@@ -321,7 +321,22 @@ fun TodayContent(
                     it.reviewStatus == ActionReviewStatus.EXECUTING ||
                     it.reviewStatus == ActionReviewStatus.EXECUTED ||
                     it.reviewStatus == ActionReviewStatus.EXECUTION_FAILED
-        }.take(3)
+        }.sortedWith(
+            compareBy<ProposedAction> { action ->
+                when (action.reviewStatus) {
+                    ActionReviewStatus.EXECUTING -> 0
+                    ActionReviewStatus.ACCEPTED -> 1
+                    ActionReviewStatus.EXECUTION_FAILED -> 2
+                    ActionReviewStatus.PROPOSED -> 3
+                    ActionReviewStatus.EXECUTED -> 4
+                    else -> 5
+                }
+            }
+            .thenBy { it.priority.ordinal }
+            .thenBy { it.expiresAt ?: Long.MAX_VALUE }
+            .thenByDescending { it.createdAt }
+            .thenBy { it.id }
+        ).take(3)
         if (activeActions.isNotEmpty()) {
             item {
                 Text(
