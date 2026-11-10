@@ -1,11 +1,11 @@
 # IronMind-OS — Phase 3.6.7.4R: Today Insight Actionability Remediation Report
 
-**Phase:** Phase 3.6.7.4R — Post-Commit Integrity Remediation  
-**Repository:** `C:/Users/lenovo/OneDrive/Desktop/IronMind-OS`  
-**Android Module:** `IronMind` (`C:/Users/lenovo/OneDrive/Desktop/IronMind-OS/IronMind`)  
-**Branch:** `main`  
-**Baseline Commit:** `281b9a87d2a07a6c816db4f5962d0ec9b0677b59` (`feat(today): Phase 3.6.7.4 insight actionability`)  
-**Commit Message (Intended):** `fix(today): Phase 3.6.7.4R session-safe insight actionability`  
+**Phase:** Phase 3.6.7.4R — Post-Commit Integrity Remediation
+**Repository:** `C:/Users/lenovo/OneDrive/Desktop/IronMind-OS`
+**Android Module:** `IronMind` (`C:/Users/lenovo/OneDrive/Desktop/IronMind-OS/IronMind`)
+**Branch:** `main`
+**Baseline Commit:** `281b9a87d2a07a6c816db4f5962d0ec9b0677b59` (`feat(today): Phase 3.6.7.4 insight actionability`)
+**Commit Message (Intended):** `fix(today): Phase 3.6.7.4R session-safe insight actionability`
 
 ---
 
