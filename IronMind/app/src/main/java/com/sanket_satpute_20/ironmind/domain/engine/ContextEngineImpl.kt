@@ -38,8 +38,8 @@ import com.sanket_satpute_20.ironmind.domain.usecase.plan.GetPlanProgressUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.task.GetDueTasksUseCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.time.Instant
 import java.time.ZoneId
-import java.util.Calendar
 
 class ContextEngineImpl(
     private val clock: Clock,
@@ -103,9 +103,9 @@ class ContextEngineImpl(
     override suspend fun getCurrentContext(userId: String): Result<ContextSnapshot, Exception> = withContext(Dispatchers.IO) {
         try {
             val now = clock.currentTimeMillis()
-            val calendar = Calendar.getInstance().apply { timeInMillis = now }
-            val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
-            
+            val localZdt = Instant.ofEpochMilli(now).atZone(zoneId)
+            val dayOfWeek = (localZdt.dayOfWeek.value % 7) + 1 // Preserve Calendar 1 (Sun) .. 7 (Sat) in injected zoneId
+
             // 1. Fetch active commitments for today
             val commitmentsResult = commitmentRepository.getCommitmentsForUser(userId)
             val activeCommitments = if (commitmentsResult is Result.Success) {
@@ -114,16 +114,47 @@ class ContextEngineImpl(
                 emptyList()
             }
 
-            // 2. Fetch recent events
-            val eventsResult = eventRepository.getEventsForUser(userId)
+            // 2. Fetch factual context window & bounded window-scoped events (avoid unbounded getEventsForUser)
+            val observationStartTimeMs = now - 86_400_000L
+            val exclusiveEventEnd = if (now == Long.MAX_VALUE) Long.MAX_VALUE else now + 1L
+            val eventsResult = eventRepository.getEventsForTimeWindow(
+                userId = userId,
+                startTime = observationStartTimeMs,
+                endTime = exclusiveEventEnd,
+                types = null,
+                limit = MAX_WINDOW_EVENTS + 1,
+                orderAsc = false
+            )
             val recentEvents = if (eventsResult is Result.Success) {
-                eventsResult.data.sortedByDescending { it.occurredAt }.take(10)
+                val rawEvents = eventsResult.data.filter { it.occurredAt in observationStartTimeMs..now }
+                val generalRetained = rawEvents.take(MAX_WINDOW_EVENTS)
+                if (rawEvents.size > MAX_WINDOW_EVENTS) {
+                    val priorityResult = eventRepository.getEventsForTimeWindow(
+                        userId = userId,
+                        startTime = observationStartTimeMs,
+                        endTime = exclusiveEventEnd,
+                        types = EXECUTION_AND_PROTECTION_EVENT_TYPES,
+                        limit = MAX_PRIORITY_WINDOW_EVENTS + 1,
+                        orderAsc = false
+                    )
+                    val priorityRetained = if (priorityResult is Result.Success) {
+                        priorityResult.data
+                            .filter { it.occurredAt in observationStartTimeMs..now }
+                            .take(MAX_PRIORITY_WINDOW_EVENTS)
+                    } else {
+                        emptyList()
+                    }
+                    (generalRetained + priorityRetained)
+                        .distinctBy { it.id }
+                        .sortedByDescending { it.occurredAt }
+                } else {
+                    generalRetained.sortedByDescending { it.occurredAt }
+                }
             } else {
                 emptyList()
             }
 
             // 3. Fetch factual context snapshot (24-hour window)
-            val observationStartTimeMs = now - 86_400_000L
             val factualContextResult = buildFactualContextSnapshotUseCase(userId, observationStartTimeMs, now)
             if (factualContextResult is Result.Failure) {
                 println("IronMindLifecycle [ContextEngine] [FACTUAL_CONTEXT_FAILED] userId=$userId error=${factualContextResult.error.message}")
@@ -264,11 +295,16 @@ class ContextEngineImpl(
             val goalLastRecorded = allGoals.maxOfOrNull { it.updatedAt }
             provenanceMap["Goals"] = SourceProvenanceAndFreshness(
                 sourceName = "Room_Goal",
-                availability = if (allGoals.isEmpty()) SourceAvailability.EMPTY_NO_DATA else SourceAvailability.AVAILABLE,
+                availability = when {
+                    goalsResult is Result.Failure -> SourceAvailability.UNAVAILABLE_HARDWARE
+                    allGoals.isEmpty() -> SourceAvailability.EMPTY_NO_DATA
+                    else -> SourceAvailability.AVAILABLE
+                },
                 isPermissionGranted = true,
                 lastRecordedAt = goalLastRecorded,
                 dataAgeMs = goalLastRecorded?.let { now - it },
-                isStale = goalLastRecorded?.let { (now - it) > 7 * 86_400_000L } ?: false
+                isStale = if (goalsResult is Result.Failure) false else goalLastRecorded?.let { (now - it) > 7 * 86_400_000L } ?: false,
+                notes = if (goalsResult is Result.Failure) "Goal history unavailable: ${goalsResult.error.message}" else null
             )
 
             // Plans
@@ -298,11 +334,20 @@ class ContextEngineImpl(
             val planLastRecorded = allPlans.maxOfOrNull { it.updatedAt }
             provenanceMap["Plans"] = SourceProvenanceAndFreshness(
                 sourceName = "Room_Plan",
-                availability = if (allPlans.isEmpty()) SourceAvailability.EMPTY_NO_DATA else SourceAvailability.AVAILABLE,
+                availability = when {
+                    planRepository == null || plansResult is Result.Failure -> SourceAvailability.UNAVAILABLE_HARDWARE
+                    allPlans.isEmpty() -> SourceAvailability.EMPTY_NO_DATA
+                    else -> SourceAvailability.AVAILABLE
+                },
                 isPermissionGranted = true,
                 lastRecordedAt = planLastRecorded,
                 dataAgeMs = planLastRecorded?.let { now - it },
-                isStale = planLastRecorded?.let { (now - it) > 7 * 86_400_000L } ?: false
+                isStale = if (planRepository == null || plansResult is Result.Failure) false else planLastRecorded?.let { (now - it) > 7 * 86_400_000L } ?: false,
+                notes = when {
+                    planRepository == null -> "PlanRepository not configured"
+                    plansResult is Result.Failure -> "Plan history unavailable: ${plansResult.error.message}"
+                    else -> null
+                }
             )
 
             // Tasks
@@ -311,7 +356,11 @@ class ContextEngineImpl(
                 tasksResult.data.filter { it.userId == userId }
             } else emptyList()
 
-            val dueTasksResult = getDueTasksUseCase?.invoke(userId, referenceTimeMillis = now)
+            val dueTasksResult = getDueTasksUseCase?.invoke(
+                userId = userId,
+                referenceTimeMillis = now,
+                zoneId = zoneId
+            )
             val (dueToday, overdue) = if (dueTasksResult is Result.Success) {
                 Pair(dueTasksResult.data.dueToday, dueTasksResult.data.overdue)
             } else {
@@ -333,11 +382,23 @@ class ContextEngineImpl(
             val taskLastRecorded = allTasks.maxOfOrNull { it.updatedAt }
             provenanceMap["Tasks"] = SourceProvenanceAndFreshness(
                 sourceName = "Room_Task",
-                availability = if (allTasks.isEmpty()) SourceAvailability.EMPTY_NO_DATA else SourceAvailability.AVAILABLE,
+                availability = when {
+                    taskRepository == null || tasksResult is Result.Failure -> SourceAvailability.UNAVAILABLE_HARDWARE
+                    allTasks.isEmpty() -> SourceAvailability.EMPTY_NO_DATA
+                    else -> SourceAvailability.AVAILABLE
+                },
                 isPermissionGranted = true,
                 lastRecordedAt = taskLastRecorded,
                 dataAgeMs = taskLastRecorded?.let { now - it },
-                isStale = taskLastRecorded?.let { (now - it) > 7 * 86_400_000L } ?: false
+                isStale = if (taskRepository == null || tasksResult is Result.Failure) false else taskLastRecorded?.let { (now - it) > 7 * 86_400_000L } ?: false,
+                notes = listOfNotNull(
+                    when {
+                        taskRepository == null -> "TaskRepository not configured"
+                        tasksResult is Result.Failure -> "Task history unavailable: ${tasksResult.error.message}"
+                        else -> null
+                    },
+                    if (dueTasksResult is Result.Failure) "Due task classification unavailable: ${dueTasksResult.error.message}" else null
+                ).takeIf { it.isNotEmpty() }?.joinToString("; ")
             )
 
             // Commitments
@@ -384,11 +445,16 @@ class ContextEngineImpl(
             val commLastRecorded = allCommitments.maxOfOrNull { it.updatedAt }
             provenanceMap["Commitments"] = SourceProvenanceAndFreshness(
                 sourceName = "Room_Commitment",
-                availability = if (allCommitments.isEmpty()) SourceAvailability.EMPTY_NO_DATA else SourceAvailability.AVAILABLE,
+                availability = when {
+                    commitmentsResult is Result.Failure -> SourceAvailability.UNAVAILABLE_HARDWARE
+                    allCommitments.isEmpty() -> SourceAvailability.EMPTY_NO_DATA
+                    else -> SourceAvailability.AVAILABLE
+                },
                 isPermissionGranted = true,
                 lastRecordedAt = commLastRecorded,
                 dataAgeMs = commLastRecorded?.let { now - it },
-                isStale = commLastRecorded?.let { (now - it) > 7 * 86_400_000L } ?: false
+                isStale = if (commitmentsResult is Result.Failure) false else commLastRecorded?.let { (now - it) > 7 * 86_400_000L } ?: false,
+                notes = if (commitmentsResult is Result.Failure) "Commitment history unavailable: ${commitmentsResult.error.message}" else null
             )
 
             // Reflections
@@ -400,11 +466,16 @@ class ContextEngineImpl(
             val refLastRecorded = recentReflections.firstOrNull()?.createdAt
             provenanceMap["Reflections"] = SourceProvenanceAndFreshness(
                 sourceName = "Room_Reflection",
-                availability = if (recentReflections.isEmpty()) SourceAvailability.EMPTY_NO_DATA else SourceAvailability.AVAILABLE,
+                availability = when {
+                    reflectionsResult is Result.Failure -> SourceAvailability.UNAVAILABLE_HARDWARE
+                    recentReflections.isEmpty() -> SourceAvailability.EMPTY_NO_DATA
+                    else -> SourceAvailability.AVAILABLE
+                },
                 isPermissionGranted = true,
                 lastRecordedAt = refLastRecorded,
                 dataAgeMs = refLastRecorded?.let { now - it },
-                isStale = refLastRecorded?.let { (now - it) > 7 * 86_400_000L } ?: false
+                isStale = if (reflectionsResult is Result.Failure) false else refLastRecorded?.let { (now - it) > 7 * 86_400_000L } ?: false,
+                notes = if (reflectionsResult is Result.Failure) "Reflection history unavailable: ${reflectionsResult.error.message}" else null
             )
 
             // Outcomes (window-scoped with explicit cap & failure reporting)
@@ -627,10 +698,13 @@ class ContextEngineImpl(
             }
             val recentSessions = allUserSessions.filter { session ->
                 if (session.status !in trackableStatuses) return@filter false
-                val sessionEnd = session.endedAt?.coerceAtLeast(session.startedAt) ?: Long.MAX_VALUE
+                val sessionEnd = AppUsageIntervalAnalyzer.effectiveProtectionEndMs(session, now) ?: return@filter false
                 session.startedAt <= endTime && sessionEnd >= startTime
             }
-            val activeSessions = recentSessions.filter { it.status == ProtectionSessionStatus.ACTIVE }
+            val activeSessions = recentSessions.filter { session ->
+                session.status == ProtectionSessionStatus.ACTIVE &&
+                    (session.scheduledEndAt == null || now < session.scheduledEndAt)
+            }
             val rules = if (rulesResult is Result.Success) {
                 rulesResult.data.filter { it.userId == userId }
             } else {
@@ -638,9 +712,8 @@ class ContextEngineImpl(
             }
 
             val totalFocusDuration = recentSessions.sumOf { session ->
+                val rawEnd = AppUsageIntervalAnalyzer.effectiveProtectionEndMs(session, now) ?: return@sumOf 0L
                 val effectiveStart = maxOf(session.startedAt, startTime)
-                val rawEnd = session.endedAt?.coerceAtLeast(session.startedAt)
-                    ?: minOf(now, session.scheduledEndAt ?: now)
                 val effectiveEnd = minOf(rawEnd, endTime)
                 (effectiveEnd - effectiveStart).coerceAtLeast(0L)
             }
@@ -799,29 +872,52 @@ class ContextEngineImpl(
                 )
             }
 
-            // Heuristic 2: Focus protection active during completed tasks
-            val completedTasks = taskSummary.completedTasks
-            if (activeSessions.isNotEmpty() && completedTasks.isNotEmpty()) {
-                val completedTask = completedTasks.first()
-                val session = activeSessions.first()
-                correlations.add(
-                    CrossDomainCorrelation(
-                        id = "corr_focus_complete_${now}_${completedTask.id}",
-                        title = "Active focus session during task completion",
-                        description = "Task '${completedTask.title}' was completed while a focus protection session was active.",
-                        productivityEntityId = completedTask.id,
-                        productivityEntityType = "TASK",
-                        productivityEntityTitle = completedTask.title,
-                        digitalAppPackage = null,
-                        digitalUsageDurationMs = (now - session.startedAt).coerceAtLeast(0L),
-                        observedWindowStartMs = startTime,
-                        observedWindowEndMs = endTime,
-                        correlationType = CrossDomainCorrelationType.FOCUS_PROTECTION_DURING_COMPLETED_TASK,
-                        confidence = 0.85f,
-                        authority = EpistemicAuthority.AI_HYPOTHESIS,
-                        disclaimer = "Tentative correlation hypothesis only. Does not imply causation or exclusive attribution."
+            // Heuristic 2: Protection session temporally overlapping actual task completion timestamp
+            val completionEventsByTaskId = recentEvents
+                .filter { it.userId == userId && it.type == EventType.TASK_COMPLETED && it.entityId != null }
+                .groupBy { it.entityId!! }
+            val completedTaskCandidates = taskSummary.completedTasks
+                .filter { it.userId == userId }
+                .mapNotNull { task ->
+                    val actualCompletedAt = completionEventsByTaskId[task.id]?.maxOfOrNull { it.occurredAt }
+                        ?: task.completedAt
+                    actualCompletedAt?.let { task to it }
+                }
+                .filter { (_, completedAt) -> completedAt in startTime..endTime }
+
+            if (recentSessions.isNotEmpty() && completedTaskCandidates.isNotEmpty()) {
+                var matchedPair: Triple<com.sanket_satpute_20.ironmind.domain.model.Task, com.sanket_satpute_20.ironmind.domain.model.ProtectionSession, Long>? = null
+                outer@ for ((task, completedAt) in completedTaskCandidates) {
+                    for (session in recentSessions) {
+                        val effectiveEnd = AppUsageIntervalAnalyzer.effectiveProtectionEndMs(session, now) ?: continue
+                        val clippedStart = maxOf(session.startedAt, startTime)
+                        val clippedEnd = minOf(effectiveEnd, endTime)
+                        if (clippedEnd >= clippedStart && completedAt in clippedStart..clippedEnd) {
+                            matchedPair = Triple(task, session, (clippedEnd - clippedStart).coerceAtLeast(0L))
+                            break@outer
+                        }
+                    }
+                }
+                matchedPair?.let { (completedTask, _, clippedProtectionMs) ->
+                    correlations.add(
+                        CrossDomainCorrelation(
+                            id = "corr_focus_complete_${now}_${completedTask.id}",
+                            title = "Focus session active at task completion",
+                            description = "Task '${completedTask.title}' completion timestamp overlapped a focus protection session.",
+                            productivityEntityId = completedTask.id,
+                            productivityEntityType = "TASK",
+                            productivityEntityTitle = completedTask.title,
+                            digitalAppPackage = null,
+                            digitalUsageDurationMs = clippedProtectionMs,
+                            observedWindowStartMs = startTime,
+                            observedWindowEndMs = endTime,
+                            correlationType = CrossDomainCorrelationType.FOCUS_PROTECTION_DURING_COMPLETED_TASK,
+                            confidence = 0.85f,
+                            authority = EpistemicAuthority.AI_HYPOTHESIS,
+                            disclaimer = "Tentative correlation hypothesis only. Does not imply causation or exclusive attribution."
+                        )
                     )
-                )
+                }
             }
 
             // 4. UNIFIED CONTEXT

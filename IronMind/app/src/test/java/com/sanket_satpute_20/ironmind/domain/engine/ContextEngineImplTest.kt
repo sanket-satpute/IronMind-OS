@@ -240,6 +240,7 @@ class ContextEngineImplTest {
         val userId = "user-1"
 
         // Set up non-empty fixtures
+        val targetUid = userId
         val activeSession = mockk<ProtectionSession>()
         val commitment = mockk<Commitment> {
             io.mockk.every { status } returns CommitmentStatus.COMMITTED
@@ -248,6 +249,7 @@ class ContextEngineImplTest {
             io.mockk.every { status } returns com.sanket_satpute_20.ironmind.domain.model.GoalStatus.ACTIVE
         }
         val event = mockk<Event> {
+            io.mockk.every { this@mockk.userId } returns targetUid
             io.mockk.every { occurredAt } returns now
         }
         val reflection = mockk<Reflection> {

@@ -459,6 +459,22 @@ object AppUsageIntervalAnalyzer {
         )
     }
 
+    internal fun effectiveProtectionEndMs(session: ProtectionSession, nowMs: Long): Long? {
+        val rawEnd = when (session.status) {
+            ProtectionSessionStatus.ACTIVE -> minOf(nowMs, session.scheduledEndAt ?: nowMs)
+            ProtectionSessionStatus.COMPLETED,
+            ProtectionSessionStatus.CANCELLED,
+            ProtectionSessionStatus.OVERRIDDEN -> session.endedAt?.coerceAtLeast(session.startedAt) ?: return null
+            ProtectionSessionStatus.EXPIRED -> {
+                session.endedAt?.coerceAtLeast(session.startedAt)
+                    ?: session.scheduledEndAt?.let { minOf(nowMs, it) }
+                    ?: return null
+            }
+            ProtectionSessionStatus.SCHEDULED -> return null
+        }
+        return rawEnd.coerceAtLeast(session.startedAt)
+    }
+
     private fun extractClippedProtectionRanges(
         userId: String,
         sessions: List<ProtectionSession>,
@@ -470,20 +486,9 @@ object AppUsageIntervalAnalyzer {
         val result = mutableListOf<TimeRange>()
         for (session in sessions) {
             if (session.userId != userId || session.status !in TRACKABLE_PROTECTION_STATUSES) continue
-            val rawEnd = when (session.status) {
-                ProtectionSessionStatus.ACTIVE -> minOf(nowMs, session.scheduledEndAt ?: nowMs)
-                ProtectionSessionStatus.COMPLETED,
-                ProtectionSessionStatus.CANCELLED,
-                ProtectionSessionStatus.OVERRIDDEN -> session.endedAt?.coerceAtLeast(session.startedAt) ?: continue
-                ProtectionSessionStatus.EXPIRED -> {
-                    session.endedAt?.coerceAtLeast(session.startedAt)
-                        ?: session.scheduledEndAt?.let { minOf(nowMs, it) }
-                        ?: continue
-                }
-                ProtectionSessionStatus.SCHEDULED -> continue
-            }
+            val rawEnd = effectiveProtectionEndMs(session, nowMs) ?: continue
             val clippedStart = maxOf(session.startedAt, windowStartMs)
-            val clippedEnd = minOf(rawEnd.coerceAtLeast(session.startedAt), windowEndMs)
+            val clippedEnd = minOf(rawEnd, windowEndMs)
             if (clippedEnd > clippedStart) {
                 result.add(TimeRange(clippedStart, clippedEnd))
             }

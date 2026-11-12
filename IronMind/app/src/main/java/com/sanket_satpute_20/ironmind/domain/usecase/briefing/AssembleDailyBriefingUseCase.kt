@@ -1,4 +1,4 @@
-﻿package com.sanket_satpute_20.ironmind.domain.usecase.briefing
+package com.sanket_satpute_20.ironmind.domain.usecase.briefing
 
 import com.sanket_satpute_20.ironmind.domain.common.Clock
 import com.sanket_satpute_20.ironmind.domain.common.Result
@@ -81,8 +81,12 @@ class AssembleDailyBriefingUseCase(
         val barrierHypotheses = intelResult.pipelineResult.barrierHypotheses
         val allInsights = intelResult.allActiveInsights
 
-        // 2. Due and overdue tasks
-        val dueTasksResult = getDueTasksUseCase?.invoke(userId)
+        // 2. Due and overdue tasks (aligned to briefing reference time and profile timezone)
+        val dueTasksResult = getDueTasksUseCase?.invoke(
+            userId = userId,
+            referenceTimeMillis = endMs,
+            zoneId = zoneId
+        )
         val overdueTasks = if (dueTasksResult is Result.Success) dueTasksResult.data.overdue else emptyList()
         val dueTodayTasks = if (dueTasksResult is Result.Success) dueTasksResult.data.dueToday else emptyList()
 
