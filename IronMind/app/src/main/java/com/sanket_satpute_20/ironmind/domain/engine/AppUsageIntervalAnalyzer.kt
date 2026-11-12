@@ -459,6 +459,65 @@ object AppUsageIntervalAnalyzer {
         )
     }
 
+    internal data class ProtectionOverlapMatch(
+        val overlappingIntervals: List<AppUsageInterval>,
+        val overlappingDurationMs: Long
+    )
+
+    internal fun unionDurationMs(ranges: List<Pair<Long, Long>>): Long {
+        if (ranges.isEmpty()) return 0L
+        return mergeRanges(
+            ranges.mapNotNull { (start, end) ->
+                if (end > start) TimeRange(start, end) else null
+            }
+        ).sumOf { it.durationMs }
+    }
+
+    internal fun findProtectionOverlappingIntervals(
+        userId: String,
+        intervals: List<AppUsageInterval>,
+        protectionSessions: List<ProtectionSession>,
+        windowStartMs: Long,
+        windowEndMs: Long,
+        nowMs: Long
+    ): ProtectionOverlapMatch {
+        if (intervals.isEmpty() || protectionSessions.isEmpty() || windowEndMs <= windowStartMs) {
+            return ProtectionOverlapMatch(emptyList(), 0L)
+        }
+        val clippedProtection = extractClippedProtectionRanges(
+            userId = userId,
+            sessions = protectionSessions,
+            windowStartMs = windowStartMs,
+            windowEndMs = windowEndMs,
+            nowMs = nowMs
+        )
+        if (clippedProtection.isEmpty()) {
+            return ProtectionOverlapMatch(emptyList(), 0L)
+        }
+        val mergedProtection = mergeRanges(clippedProtection)
+        val matchingIntervals = mutableListOf<AppUsageInterval>()
+        val matchingRanges = mutableListOf<TimeRange>()
+        for (interval in intervals) {
+            if (interval.userId != userId) continue
+            val clippedStart = maxOf(interval.startTimeMs, windowStartMs)
+            val clippedEnd = minOf(interval.endTimeMs, windowEndMs)
+            if (clippedEnd <= clippedStart) continue
+            val range = TimeRange(clippedStart, clippedEnd)
+            if (intersectTotalDuration(listOf(range), mergedProtection) > 0L) {
+                matchingIntervals.add(interval)
+                matchingRanges.add(range)
+            }
+        }
+        if (matchingIntervals.isEmpty()) {
+            return ProtectionOverlapMatch(emptyList(), 0L)
+        }
+        val overlapDurationMs = intersectTotalDuration(mergeRanges(matchingRanges), mergedProtection)
+        return ProtectionOverlapMatch(
+            overlappingIntervals = matchingIntervals,
+            overlappingDurationMs = overlapDurationMs
+        )
+    }
+
     internal fun effectiveProtectionEndMs(session: ProtectionSession, nowMs: Long): Long? {
         val rawEnd = when (session.status) {
             ProtectionSessionStatus.ACTIVE -> minOf(nowMs, session.scheduledEndAt ?: nowMs)
