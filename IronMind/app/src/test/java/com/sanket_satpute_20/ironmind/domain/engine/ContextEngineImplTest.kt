@@ -81,7 +81,14 @@ class ContextEngineImplTest {
         override suspend fun saveEvent(event: Event): Result<Event, Exception> = Result.Success(event)
         override suspend fun searchEvents(userId: String, query: String): Result<List<Event>, Exception> = Result.Success(events)
     
-    override suspend fun getEventsForTimeWindow(userId: String, startTime: Long, endTime: Long, types: List<com.sanket_satpute_20.ironmind.domain.model.EventType>?, limit: Int, orderAsc: Boolean): com.sanket_satpute_20.ironmind.domain.common.Result<List<com.sanket_satpute_20.ironmind.domain.model.Event>, Exception> = com.sanket_satpute_20.ironmind.domain.common.Result.Success(emptyList())
+    override suspend fun getEventsForTimeWindow(userId: String, startTime: Long, endTime: Long, types: List<com.sanket_satpute_20.ironmind.domain.model.EventType>?, limit: Int, orderAsc: Boolean): com.sanket_satpute_20.ironmind.domain.common.Result<List<com.sanket_satpute_20.ironmind.domain.model.Event>, Exception> {
+        var filtered = events.filter { it.userId == userId && it.occurredAt >= startTime && it.occurredAt < endTime }
+        if (!types.isNullOrEmpty()) {
+            filtered = filtered.filter { it.type in types }
+        }
+        filtered = if (orderAsc) filtered.sortedBy { it.occurredAt } else filtered.sortedByDescending { it.occurredAt }
+        return com.sanket_satpute_20.ironmind.domain.common.Result.Success(filtered.take(limit))
+    }
     override suspend fun getEventsByCausationId(userId: String, causationId: String): Result<List<Event>, Exception> = Result.Success(emptyList())
 }
 

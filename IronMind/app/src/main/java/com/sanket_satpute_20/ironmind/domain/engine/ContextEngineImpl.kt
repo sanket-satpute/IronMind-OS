@@ -4,6 +4,8 @@ import com.sanket_satpute_20.ironmind.domain.common.Clock
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
 import com.sanket_satpute_20.ironmind.domain.model.DueTaskItem
+import com.sanket_satpute_20.ironmind.domain.model.Event
+import com.sanket_satpute_20.ironmind.domain.model.EventType
 import com.sanket_satpute_20.ironmind.domain.model.GoalStatus
 import com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState
 import com.sanket_satpute_20.ironmind.domain.model.MemoryStatus
@@ -36,6 +38,7 @@ import com.sanket_satpute_20.ironmind.domain.usecase.plan.GetPlanProgressUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.task.GetDueTasksUseCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.time.ZoneId
 import java.util.Calendar
 
 class ContextEngineImpl(
@@ -59,10 +62,34 @@ class ContextEngineImpl(
     private val maxStaleDelayMs: Long = 4 * 60 * 60 * 1000L, // 4 hours
     private val getDueTasksUseCase: GetDueTasksUseCase? = null,
     private val getGoalProgressUseCase: GetGoalProgressUseCase? = null,
-    private val getPlanProgressUseCase: GetPlanProgressUseCase? = null
+    private val getPlanProgressUseCase: GetPlanProgressUseCase? = null,
+    private val zoneId: ZoneId = ZoneId.systemDefault()
 ) : ContextEngine {
 
     companion object {
+        const val MAX_WINDOW_EVENTS = 250
+        const val MAX_PRIORITY_WINDOW_EVENTS = 250
+        const val MAX_WINDOW_OUTCOMES = 100
+
+        val EXECUTION_AND_PROTECTION_EVENT_TYPES = listOf(
+            EventType.TASK_STARTED,
+            EventType.TASK_COMPLETED,
+            EventType.TASK_POSTPONED,
+            EventType.TASK_CANCELLED,
+            EventType.TASK_ABANDONED,
+            EventType.COMMITMENT_STARTED,
+            EventType.COMMITMENT_COMPLETED,
+            EventType.COMMITMENT_POSTPONED,
+            EventType.COMMITMENT_RESCHEDULED,
+            EventType.COMMITMENT_MISSED,
+            EventType.PROTECTION_STARTED,
+            EventType.PROTECTION_ENDED,
+            EventType.PROTECTION_ENABLED,
+            EventType.PROTECTION_DISABLED,
+            EventType.PROTECTION_OVERRIDDEN,
+            EventType.PROTECTION_EXPIRED
+        )
+
         val ACTIVE_COMMITMENT_STATUSES = setOf(
             CommitmentStatus.PLANNED,
             CommitmentStatus.COMMITTED,
@@ -378,27 +405,118 @@ class ContextEngineImpl(
                 isStale = refLastRecorded?.let { (now - it) > 7 * 86_400_000L } ?: false
             )
 
-            // Outcomes
+            // Outcomes (window-scoped with explicit cap & failure reporting)
             val outcomesResult = outcomeRepository?.getOutcomesForUser(userId)
-            val recentOutcomes = if (outcomesResult is Result.Success) {
-                outcomesResult.data.filter { it.userId == userId }.sortedByDescending { it.completedAt }.take(10)
+            val windowOutcomes = if (outcomesResult is Result.Success) {
+                outcomesResult.data
+                    .filter { it.userId == userId && it.completedAt in startTime..endTime }
+                    .sortedWith(compareByDescending<com.sanket_satpute_20.ironmind.domain.model.Outcome> { it.completedAt }.thenBy { it.id })
             } else emptyList()
+            val outcomesTruncated = windowOutcomes.size > MAX_WINDOW_OUTCOMES
+            val recentOutcomes = windowOutcomes.take(MAX_WINDOW_OUTCOMES)
 
             val outcomeLastRecorded = recentOutcomes.firstOrNull()?.completedAt
             provenanceMap["Outcomes"] = SourceProvenanceAndFreshness(
                 sourceName = "Room_Outcome",
-                availability = if (recentOutcomes.isEmpty()) SourceAvailability.EMPTY_NO_DATA else SourceAvailability.AVAILABLE,
+                availability = when {
+                    outcomeRepository != null && outcomesResult is Result.Failure -> SourceAvailability.UNAVAILABLE_HARDWARE
+                    recentOutcomes.isEmpty() -> SourceAvailability.EMPTY_NO_DATA
+                    else -> SourceAvailability.AVAILABLE
+                },
                 isPermissionGranted = true,
                 lastRecordedAt = outcomeLastRecorded,
                 dataAgeMs = outcomeLastRecorded?.let { now - it },
-                isStale = outcomeLastRecorded?.let { (now - it) > 7 * 86_400_000L } ?: false
+                isStale = outcomeLastRecorded?.let { (now - it) > 7 * 86_400_000L } ?: false,
+                notes = when {
+                    outcomesResult is Result.Failure -> "Outcome history unavailable: ${outcomesResult.error.message}"
+                    outcomesTruncated -> "Window outcomes truncated at cap=$MAX_WINDOW_OUTCOMES (total=${windowOutcomes.size})"
+                    else -> null
+                }
             )
 
-            // Recent Events
-            val eventsResult = eventRepository.getEventsForUser(userId)
-            val recentEvents = if (eventsResult is Result.Success) {
-                eventsResult.data.filter { it.userId == userId }.sortedByDescending { it.occurredAt }.take(15)
-            } else emptyList()
+            // Recent Events (window-scoped via getEventsForTimeWindow; prioritizes execution/protection events when capped)
+            val exclusiveEventWindowEnd = if (endTime == Long.MAX_VALUE) Long.MAX_VALUE else endTime + 1L
+            val eventsResult = eventRepository.getEventsForTimeWindow(
+                userId = userId,
+                startTime = startTime,
+                endTime = exclusiveEventWindowEnd,
+                types = null,
+                limit = MAX_WINDOW_EVENTS + 1,
+                orderAsc = false
+            )
+            var eventRepoAvailable = true
+            var isEventHistoryTruncated = false
+            var recentEvents: List<Event> = emptyList()
+
+            when (eventsResult) {
+                is Result.Success -> {
+                    val rawWindowEvents = eventsResult.data
+                        .filter { it.userId == userId && it.occurredAt in startTime..endTime }
+                    val generalTruncated = rawWindowEvents.size > MAX_WINDOW_EVENTS
+                    val retainedGeneral = rawWindowEvents.take(MAX_WINDOW_EVENTS)
+
+                    if (!generalTruncated) {
+                        recentEvents = retainedGeneral
+                            .distinctBy { it.id }
+                            .sortedWith(compareByDescending<Event> { it.occurredAt }.thenBy { it.id })
+                    } else {
+                        isEventHistoryTruncated = true
+                        val priorityResult = eventRepository.getEventsForTimeWindow(
+                            userId = userId,
+                            startTime = startTime,
+                            endTime = exclusiveEventWindowEnd,
+                            types = EXECUTION_AND_PROTECTION_EVENT_TYPES,
+                            limit = MAX_PRIORITY_WINDOW_EVENTS + 1,
+                            orderAsc = false
+                        )
+                        val priorityRetained = if (priorityResult is Result.Success) {
+                            priorityResult.data
+                                .filter { it.userId == userId && it.occurredAt in startTime..endTime }
+                                .take(MAX_PRIORITY_WINDOW_EVENTS)
+                        } else {
+                            emptyList()
+                        }
+                        recentEvents = (retainedGeneral + priorityRetained)
+                            .distinctBy { it.id }
+                            .sortedWith(compareByDescending<Event> { it.occurredAt }.thenBy { it.id })
+                    }
+                }
+                is Result.Failure -> {
+                    eventRepoAvailable = false
+                    recentEvents = emptyList()
+                }
+            }
+
+            val eventLastRecorded = recentEvents.firstOrNull()?.occurredAt
+            provenanceMap["Events"] = SourceProvenanceAndFreshness(
+                sourceName = "Room_Event",
+                availability = when {
+                    !eventRepoAvailable -> SourceAvailability.UNAVAILABLE_HARDWARE
+                    recentEvents.isEmpty() -> SourceAvailability.EMPTY_NO_DATA
+                    else -> SourceAvailability.AVAILABLE
+                },
+                isPermissionGranted = true,
+                lastRecordedAt = eventLastRecorded,
+                dataAgeMs = eventLastRecorded?.let { now - it },
+                isStale = false,
+                notes = when {
+                    eventsResult is Result.Failure -> "Event history unavailable: ${eventsResult.error.message}"
+                    isEventHistoryTruncated -> "Window event history truncated at cap=$MAX_WINDOW_EVENTS; execution and protection lifecycle events prioritized"
+                    else -> null
+                }
+            )
+
+            val executionTiming = ExecutionTimingAnalyzer.analyze(
+                userId = userId,
+                tasks = allTasks,
+                events = recentEvents,
+                windowStartMs = startTime,
+                windowEndMs = endTime,
+                zoneId = zoneId,
+                eventRepositoryAvailable = eventRepoAvailable,
+                isEventHistoryTruncated = isEventHistoryTruncated,
+                retainedWindowEventCount = recentEvents.size
+            )
 
             // User-confirmed observations and barriers
             val userConfirmedBarriers = if (barrierRepository != null) {
@@ -433,7 +551,8 @@ class ContextEngineImpl(
                 recentEvents = recentEvents,
                 userConfirmedObservations = userConfirmedObservations,
                 recentOutcomes = recentOutcomes,
-                userConfirmedBarriers = userConfirmedBarriers
+                userConfirmedBarriers = userConfirmedBarriers,
+                executionTiming = executionTiming
             )
 
             // 2. DIGITAL BEHAVIOUR CONTEXT

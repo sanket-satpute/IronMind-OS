@@ -53,6 +53,7 @@ class ContextEngineMemoryIntegrationTest {
         coEvery { buildFactualContextSnapshotUseCase(any(), any(), any()) } returns Result.Success(mockFactualSnapshot)
         coEvery { commitmentRepository.getCommitmentsForUser(any()) } returns Result.Success(emptyList())
         coEvery { eventRepository.getEventsForUser(any()) } returns Result.Success(emptyList())
+        coEvery { eventRepository.getEventsForTimeWindow(any(), any(), any(), any(), any(), any()) } returns Result.Success(emptyList())
         coEvery { reflectionRepository.getReflectionsForDateRange(any(), any(), any()) } returns Result.Success(emptyList())
         coEvery { protectionRepository.getActiveProtectionSessionsForUser(any()) } returns Result.Success(emptyList())
         coEvery { protectionRepository.getProtectionSessionsForUser(any()) } returns Result.Success(emptyList())

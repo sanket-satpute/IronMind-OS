@@ -1105,7 +1105,8 @@ class DefaultAppContainer(
             checkpointStore = appUsageCheckpointStore,
             getDueTasksUseCase = getDueTasksUseCase,
             getGoalProgressUseCase = getGoalProgressUseCase,
-            getPlanProgressUseCase = getPlanProgressUseCase
+            getPlanProgressUseCase = getPlanProgressUseCase,
+            zoneId = java.time.ZoneId.systemDefault()
         )
     }
 
