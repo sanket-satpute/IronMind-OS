@@ -75,5 +75,26 @@ class FakeObservationRepository : ObservationRepository {
         return Result.Success(result)
     }
 
-    override suspend fun getObservationsForTimeWindow(userId: String, startTimeMs: Long, endTimeMs: Long, types: List<com.sanket_satpute_20.ironmind.domain.model.observation.ObservationType>?, limit: Int, orderAsc: Boolean): com.sanket_satpute_20.ironmind.domain.common.Result<List<com.sanket_satpute_20.ironmind.domain.model.observation.Observation>, Exception> = com.sanket_satpute_20.ironmind.domain.common.Result.Success(emptyList())
+    override suspend fun getObservationsForTimeWindow(
+        userId: String,
+        startTimeMs: Long,
+        endTimeMs: Long,
+        types: List<ObservationType>?,
+        limit: Int,
+        orderAsc: Boolean
+    ): Result<List<Observation>, Exception> {
+        if (types != null && types.isEmpty()) return Result.Success(emptyList())
+        var filtered = observations.values.filter {
+            it.userId == userId &&
+                (types == null || it.type in types) &&
+                it.occurredAt >= startTimeMs &&
+                it.occurredAt < endTimeMs
+        }
+        filtered = if (orderAsc) {
+            filtered.sortedWith(compareBy<Observation> { it.occurredAt }.thenBy { it.id })
+        } else {
+            filtered.sortedWith(compareByDescending<Observation> { it.occurredAt }.thenBy { it.id })
+        }
+        return Result.Success(filtered.take(limit))
+    }
 }

@@ -63,13 +63,15 @@ class ContextEngineImpl(
     private val getDueTasksUseCase: GetDueTasksUseCase? = null,
     private val getGoalProgressUseCase: GetGoalProgressUseCase? = null,
     private val getPlanProgressUseCase: GetPlanProgressUseCase? = null,
-    private val zoneId: ZoneId = ZoneId.systemDefault()
+    private val zoneId: ZoneId = ZoneId.systemDefault(),
+    private val shortBurstThresholdMs: Long = AppUsageIntervalAnalyzer.DEFAULT_SHORT_BURST_THRESHOLD_MS
 ) : ContextEngine {
 
     companion object {
         const val MAX_WINDOW_EVENTS = 250
         const val MAX_PRIORITY_WINDOW_EVENTS = 250
         const val MAX_WINDOW_OUTCOMES = 100
+        const val MAX_WINDOW_APP_USAGE_OBSERVATIONS = 500
 
         val EXECUTION_AND_PROTECTION_EVENT_TYPES = listOf(
             EventType.TASK_STARTED,
@@ -575,97 +577,40 @@ class ContextEngineImpl(
                     Triple(UsagePermissionStatus.GRANTED, SourceAvailability.AVAILABLE, null)
             }
 
-            val appSummaries = mutableListOf<AppUsageSummary>()
-            var lastObservedUsageTime: Long? = null
+            var retainedUsageObservations = emptyList<com.sanket_satpute_20.ironmind.domain.model.observation.Observation>()
+            var isUsageQueryTruncated = false
             var finalDigitalAvailability = baseAvailability
             var isDigitalStale = false
+            var isUsageRepoReadSuccess = false
 
             val checkpointResult = checkpointStore?.getCheckpoint(userId)
             val checkpoint = (checkpointResult as? Result.Success)?.data
 
             if (permStatus == UsagePermissionStatus.GRANTED && observationRepository != null) {
+                val usageQueryStartMs = (endTime - AppUsageIntervalAnalyzer.MAX_LOOKBACK_MS).coerceAtLeast(0L)
                 val obsResult = observationRepository.getObservationsForTimeWindow(
                     userId = userId,
-                    type = ObservationType.APP_USAGE_SESSION,
-                    startTimeMs = startTime,
-                    endTimeMs = endTime
+                    startTimeMs = usageQueryStartMs,
+                    endTimeMs = endTime,
+                    types = listOf(ObservationType.APP_USAGE_SESSION),
+                    limit = MAX_WINDOW_APP_USAGE_OBSERVATIONS + 1,
+                    orderAsc = false
                 )
                 if (obsResult is Result.Success) {
-                    val observations = obsResult.data.filter { it.userId == userId }
-                    val grouped = observations.groupBy { it.value }
-                    for ((pkg, obsList) in grouped) {
-                        val totalDuration = obsList.sumOf { obs ->
-                            obs.context.removePrefix("duration_ms=").toLongOrNull() ?: 0L
-                        }
-                        val firstObs = obsList.minOfOrNull { it.occurredAt }
-                        val lastObs = obsList.maxOfOrNull { obs ->
-                            val dur = obs.context.removePrefix("duration_ms=").toLongOrNull() ?: 0L
-                            obs.occurredAt + dur
-                        }
-                        if (lastObs != null && (lastObservedUsageTime == null || lastObs > lastObservedUsageTime)) {
-                            lastObservedUsageTime = lastObs
-                        }
-                        appSummaries.add(
-                            AppUsageSummary(
-                                packageName = pkg,
-                                totalDurationMs = totalDuration,
-                                sessionCount = obsList.size,
-                                firstObservedAt = firstObs,
-                                lastObservedAt = lastObs,
-                                authority = EpistemicAuthority.SYSTEM_RECORDED_OBSERVATION
-                            )
-                        )
-                    }
-                    appSummaries.sortWith(
-                        compareByDescending<AppUsageSummary> { it.totalDurationMs }
-                            .thenBy { it.packageName }
-                    )
+                    isUsageRepoReadSuccess = true
+                    val userObs = obsResult.data.filter { it.userId == userId }
+                    isUsageQueryTruncated = userObs.size > MAX_WINDOW_APP_USAGE_OBSERVATIONS
+                    retainedUsageObservations = userObs.take(MAX_WINDOW_APP_USAGE_OBSERVATIONS)
                 } else if (obsResult is Result.Failure) {
                     finalDigitalAvailability = SourceAvailability.UNAVAILABLE_HARDWARE
-                }
-
-                if (finalDigitalAvailability != SourceAvailability.UNAVAILABLE_HARDWARE) {
-                    val dataAge = checkpoint?.lastCollectedIntervalEndMs?.let { now - it }
-                    isDigitalStale = dataAge?.let { it > maxStaleDelayMs } ?: false
-
-                    if (checkpoint != null && isDigitalStale) {
-                        finalDigitalAvailability = SourceAvailability.STALE_DATA
-                    } else if (appSummaries.isNotEmpty()) {
-                        // Persisted observations exist. Verify that collection has reached requested window end.
-                        if (checkpoint == null || checkpoint.lastCollectedIntervalEndMs < endTime) {
-                            finalDigitalAvailability = SourceAvailability.PARTIAL_HISTORY
-                        } else {
-                            finalDigitalAvailability = SourceAvailability.AVAILABLE
-                        }
-                    } else {
-                        // 0 observations in requested window.
-                        if (checkpoint != null && checkpoint.lastCollectedIntervalEndMs >= endTime) {
-                            // Check whether collection history proves coverage at or before startTime
-                            val priorResult = observationRepository.getObservationsForTimeWindow(
-                                userId = userId,
-                                type = ObservationType.APP_USAGE_SESSION,
-                                startTimeMs = 0L,
-                                endTimeMs = startTime
-                            )
-                            val hasPriorCoverage = (priorResult is Result.Success && priorResult.data.any { it.userId == userId }) ||
-                                (checkpoint.activeSessionStartTimeMs != null && checkpoint.activeSessionStartTimeMs <= startTime)
-
-                            if (hasPriorCoverage) {
-                                finalDigitalAvailability = SourceAvailability.EMPTY_NO_DATA
-                            } else {
-                                finalDigitalAvailability = SourceAvailability.PARTIAL_HISTORY
-                            }
-                        } else {
-                            finalDigitalAvailability = SourceAvailability.PARTIAL_HISTORY
-                        }
-                    }
                 }
             }
 
             // Focus and Protection Activity
             val sessionsResult = protectionRepository.getProtectionSessionsForUser(userId)
             val rulesResult = protectionRepository.getProtectionRulesForUser(userId)
-            val isProtectionDataAvailable = sessionsResult is Result.Success && rulesResult is Result.Success
+            val isProtectionSessionsAvailable = sessionsResult is Result.Success
+            val isProtectionDataAvailable = isProtectionSessionsAvailable && rulesResult is Result.Success
 
             val trackableStatuses = setOf(
                 ProtectionSessionStatus.ACTIVE,
@@ -707,6 +652,74 @@ class ContextEngineImpl(
                 activeRules = rules
             )
 
+            // Authoritative single-path interval, switching, burst, and protection-overlap analysis
+            val isUsageSourceReadable = permStatus == UsagePermissionStatus.GRANTED &&
+                observationRepository != null &&
+                isUsageRepoReadSuccess
+
+            val preliminaryAnalysis = AppUsageIntervalAnalyzer.analyze(
+                userId = userId,
+                observations = retainedUsageObservations,
+                protectionSessions = allUserSessions,
+                windowStartMs = startTime,
+                windowEndMs = endTime,
+                nowMs = now,
+                usageAvailability = finalDigitalAvailability,
+                isUsageSourceReadable = isUsageSourceReadable,
+                isProtectionHistoryAvailable = isProtectionSessionsAvailable,
+                isTruncated = isUsageQueryTruncated,
+                shortBurstThresholdMs = shortBurstThresholdMs
+            )
+
+            if (isUsageRepoReadSuccess && observationRepository != null) {
+                val dataAge = checkpoint?.lastCollectedIntervalEndMs?.let { now - it }
+                isDigitalStale = dataAge?.let { it > maxStaleDelayMs } ?: false
+
+                if (checkpoint != null && isDigitalStale) {
+                    finalDigitalAvailability = SourceAvailability.STALE_DATA
+                } else if (preliminaryAnalysis.appSummaries.isNotEmpty()) {
+                    if (checkpoint == null || checkpoint.lastCollectedIntervalEndMs < endTime) {
+                        finalDigitalAvailability = SourceAvailability.PARTIAL_HISTORY
+                    } else {
+                        finalDigitalAvailability = SourceAvailability.AVAILABLE
+                    }
+                } else {
+                    if (checkpoint != null && checkpoint.lastCollectedIntervalEndMs >= endTime) {
+                        val priorResult = observationRepository.getObservationsForTimeWindow(
+                            userId = userId,
+                            type = ObservationType.APP_USAGE_SESSION,
+                            startTimeMs = 0L,
+                            endTimeMs = startTime
+                        )
+                        val hasPriorCoverage = (priorResult is Result.Success && priorResult.data.any { it.userId == userId }) ||
+                            (checkpoint.activeSessionStartTimeMs != null && checkpoint.activeSessionStartTimeMs <= startTime)
+
+                        if (hasPriorCoverage) {
+                            finalDigitalAvailability = SourceAvailability.EMPTY_NO_DATA
+                        } else {
+                            finalDigitalAvailability = SourceAvailability.PARTIAL_HISTORY
+                        }
+                    } else {
+                        finalDigitalAvailability = SourceAvailability.PARTIAL_HISTORY
+                    }
+                }
+            }
+
+            val intervalAnalysis = if (preliminaryAnalysis.temporalSummary.provenance.usageSourceAvailability != finalDigitalAvailability) {
+                preliminaryAnalysis.copy(
+                    temporalSummary = preliminaryAnalysis.temporalSummary.copy(
+                        provenance = preliminaryAnalysis.temporalSummary.provenance.copy(
+                            usageSourceAvailability = finalDigitalAvailability
+                        )
+                    )
+                )
+            } else {
+                preliminaryAnalysis
+            }
+
+            val appSummaries = intervalAnalysis.appSummaries
+            val lastObservedUsageTime = intervalAnalysis.lastObservedAt
+
             provenanceMap["AppUsage"] = SourceProvenanceAndFreshness(
                 sourceName = "Room_Observation",
                 availability = finalDigitalAvailability,
@@ -715,11 +728,17 @@ class ContextEngineImpl(
                 dataAgeMs = checkpoint?.lastCollectedIntervalEndMs?.let { now - it }
                     ?: (lastObservedUsageTime?.let { now - it }),
                 isStale = isDigitalStale,
-                notes = digitalNotes ?: when (finalDigitalAvailability) {
-                    SourceAvailability.PARTIAL_HISTORY -> "Collection history is incomplete for requested window [${startTime}, ${endTime}]"
-                    SourceAvailability.STALE_DATA -> "Collection checkpoint is older than freshness threshold (${maxStaleDelayMs / 3600_000}h)"
-                    else -> null
-                }
+                notes = listOfNotNull(
+                    digitalNotes ?: when (finalDigitalAvailability) {
+                        SourceAvailability.PARTIAL_HISTORY -> "Collection history is incomplete for requested window [${startTime}, ${endTime}]"
+                        SourceAvailability.STALE_DATA -> "Collection checkpoint is older than freshness threshold (${maxStaleDelayMs / 3600_000}h)"
+                        else -> null
+                    },
+                    if (isUsageQueryTruncated) "App usage query truncated at cap=$MAX_WINDOW_APP_USAGE_OBSERVATIONS" else null,
+                    if (intervalAnalysis.temporalSummary.provenance.isLookbackClamped) {
+                        "Lookback clamped to maximum ${AppUsageIntervalAnalyzer.MAX_LOOKBACK_MS}ms window"
+                    } else null
+                ).takeIf { it.isNotEmpty() }?.joinToString("; ")
             )
 
             val focusLastRecordedAt = recentSessions.maxOfOrNull { it.endedAt ?: it.startedAt }
@@ -747,7 +766,9 @@ class ContextEngineImpl(
                 focusActivity = focusSummary,
                 recentProtectionEvents = recentEvents.filter { it.type.name.startsWith("PROTECTION_") },
                 lastObservedAt = lastObservedUsageTime,
-                notes = digitalNotes
+                notes = digitalNotes,
+                usageIntervals = intervalAnalysis.intervals,
+                usageTemporalSummary = intervalAnalysis.temporalSummary
             )
 
             // 3. CROSS-DOMAIN CONTEXT (TENTATIVE CORRELATIONS, NON-CAUSAL)
