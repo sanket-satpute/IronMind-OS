@@ -124,7 +124,10 @@ class DailyBriefingEngine(
         // Evidence-Backed Barriers (Suppresses obstacles lacking evidence)
         // -------------------------------------------------------------
         val evidenceBackedBarriers = barrierHypotheses.filter { hypothesis ->
-            hypothesis.evidenceCount >= 2 || hypothesis.confirmationState == BarrierConfirmationState.CONFIRMED
+            hypothesis.status == com.sanket_satpute_20.ironmind.domain.model.barrier.BarrierStatus.ACTIVE &&
+                hypothesis.confirmationState != BarrierConfirmationState.REJECTED &&
+                hypothesis.confirmationState != BarrierConfirmationState.DISMISSED &&
+                (hypothesis.evidenceCount >= 2 || hypothesis.confirmationState == BarrierConfirmationState.CONFIRMED)
         }.map { hypothesis ->
             val isConfirmed = hypothesis.confirmationState == BarrierConfirmationState.CONFIRMED
             val authority = if (isConfirmed) EpistemicAuthority.USER_CONFIRMED_FACT else EpistemicAuthority.AI_HYPOTHESIS

@@ -748,6 +748,171 @@ class DailyBriefingEngineTest {
         assertTrue(briefingB.proposedNextActions.none { it.targetEntityId == "task-a" })
     }
 
+    @Test
+    fun `barriers exclude REJECTED, DISMISSED, and EXPIRED hypotheses even with high evidence count while keeping ACTIVE CONFIRMED and eligible UNCONFIRMED`() {
+        val rejectedExpiredHighEvidence = buildBarrier(
+            id = "bar-rej-exp",
+            evidenceCount = 10,
+            confirmationState = BarrierConfirmationState.REJECTED,
+            status = BarrierStatus.EXPIRED,
+            confidence = 0.96f
+        )
+        val rejectedActiveHighEvidence = buildBarrier(
+            id = "bar-rej-act",
+            evidenceCount = 8,
+            confirmationState = BarrierConfirmationState.REJECTED,
+            status = BarrierStatus.ACTIVE,
+            confidence = 0.94f
+        )
+        val dismissedExpiredHighEvidence = buildBarrier(
+            id = "bar-dis-exp",
+            evidenceCount = 12,
+            confirmationState = BarrierConfirmationState.DISMISSED,
+            status = BarrierStatus.EXPIRED,
+            confidence = 0.95f
+        )
+        val dismissedActiveHighEvidence = buildBarrier(
+            id = "bar-dis-act",
+            evidenceCount = 7,
+            confirmationState = BarrierConfirmationState.DISMISSED,
+            status = BarrierStatus.ACTIVE,
+            confidence = 0.91f
+        )
+        val expiredUnconfirmedHighEvidence = buildBarrier(
+            id = "bar-unconf-exp",
+            evidenceCount = 5,
+            confirmationState = BarrierConfirmationState.UNCONFIRMED,
+            status = BarrierStatus.EXPIRED
+        )
+        val expiredConfirmedHighEvidence = buildBarrier(
+            id = "bar-conf-exp",
+            evidenceCount = 5,
+            confirmationState = BarrierConfirmationState.CONFIRMED,
+            status = BarrierStatus.EXPIRED
+        )
+        val activeConfirmedZeroEvidence = buildBarrier(
+            id = "bar-conf-act",
+            evidenceCount = 0,
+            confirmationState = BarrierConfirmationState.CONFIRMED,
+            status = BarrierStatus.ACTIVE,
+            confidence = 0.90f
+        )
+        val activeUnconfirmedEnoughEvidence = buildBarrier(
+            id = "bar-unconf-act-2",
+            evidenceCount = 2,
+            confirmationState = BarrierConfirmationState.UNCONFIRMED,
+            status = BarrierStatus.ACTIVE,
+            confidence = 0.78f
+        )
+
+        val briefing = engine.assembleBriefing(
+            userId = userId,
+            unifiedContext = buildContext(),
+            overdueTasks = emptyList(),
+            dueTodayTasks = emptyList(),
+            activeCommitments = emptyList(),
+            goals = emptyList(),
+            plans = emptyList(),
+            patterns = emptyList(),
+            barrierHypotheses = listOf(
+                rejectedExpiredHighEvidence,
+                rejectedActiveHighEvidence,
+                dismissedExpiredHighEvidence,
+                dismissedActiveHighEvidence,
+                expiredUnconfirmedHighEvidence,
+                expiredConfirmedHighEvidence,
+                activeConfirmedZeroEvidence,
+                activeUnconfirmedEnoughEvidence
+            ),
+            recommendations = emptyList(),
+            insights = emptyList()
+        )
+
+        val surfacedIds = briefing.evidenceBackedBarriers.map { it.barrierId }.toSet()
+        assertEquals(setOf("bar-conf-act", "bar-unconf-act-2"), surfacedIds)
+
+        val confirmedItem = briefing.evidenceBackedBarriers.first { it.barrierId == "bar-conf-act" }
+        assertTrue(confirmedItem.isUserConfirmed)
+        assertEquals(EpistemicAuthority.USER_CONFIRMED_FACT, confirmedItem.epistemicAuthority)
+
+        val unconfirmedItem = briefing.evidenceBackedBarriers.first { it.barrierId == "bar-unconf-act-2" }
+        assertFalse(unconfirmedItem.isUserConfirmed)
+        assertEquals(EpistemicAuthority.AI_HYPOTHESIS, unconfirmedItem.epistemicAuthority)
+    }
+
+    @Test
+    fun `EXECUTING actions with custom non-deterministic ids suppress duplicate proposals in briefing`() {
+        val executingOverdueTask = buildTask("task-exec-dup", dueAt = now - 20_000L)
+        val openOverdueTask = buildTask("task-open-fresh", dueAt = now - 20_000L)
+        val focusInsight = buildInsight(
+            id = "ins-focus-exec",
+            category = InsightCategory.FOCUS,
+            authority = EpistemicAuthority.DERIVED_CALCULATION,
+            confidence = 0.85f
+        )
+        val pendingRec = buildRecommendation(
+            id = "rec-exec-dup",
+            type = InterventionType.REDIRECT
+        )
+
+        val executingTaskAction = buildAction(
+            id = "custom-exec-task-1",
+            category = ActionCategory.TASK_RESCHEDULE,
+            status = ActionReviewStatus.EXECUTING,
+            targetEntityId = executingOverdueTask.id
+        )
+        val executingInsightAction = buildAction(
+            id = "custom-exec-ins-1",
+            category = ActionCategory.FOCUS_PROTECTION,
+            status = ActionReviewStatus.EXECUTING,
+            sourceInsightId = focusInsight.id
+        )
+        val executingRecAction = buildAction(
+            id = "custom-exec-rec-1",
+            category = ActionCategory.COMMITMENT_REVIEW,
+            status = ActionReviewStatus.EXECUTING,
+            sourceRecommendationId = pendingRec.id
+        )
+
+        val briefing = engine.assembleBriefing(
+            userId = userId,
+            unifiedContext = buildContext(),
+            overdueTasks = listOf(
+                DueTaskItem(task = executingOverdueTask, isOverdue = true),
+                DueTaskItem(task = openOverdueTask, isOverdue = true)
+            ),
+            dueTodayTasks = emptyList(),
+            activeCommitments = emptyList(),
+            goals = emptyList(),
+            plans = emptyList(),
+            patterns = emptyList(),
+            barrierHypotheses = emptyList(),
+            recommendations = listOf(pendingRec),
+            insights = listOf(focusInsight),
+            existingActions = listOf(
+                executingTaskAction,
+                executingInsightAction,
+                executingRecAction
+            )
+        )
+
+        val ids = briefing.proposedNextActions.map { it.id }
+        assertTrue(ids.contains("custom-exec-task-1"))
+        assertTrue(ids.contains("custom-exec-ins-1"))
+        assertTrue(ids.contains("custom-exec-rec-1"))
+        assertTrue(
+            briefing.proposedNextActions
+                .filter { it.id in setOf("custom-exec-task-1", "custom-exec-ins-1", "custom-exec-rec-1") }
+                .all { it.reviewStatus == ActionReviewStatus.EXECUTING }
+        )
+
+        assertFalse(ids.contains("act_reschedule_${executingOverdueTask.id}"))
+        assertFalse(ids.contains("act_ins_${focusInsight.id}"))
+        assertFalse(ids.contains("act_rec_${pendingRec.id}"))
+
+        assertTrue(ids.contains("act_reschedule_${openOverdueTask.id}"))
+    }
+
     // -------------------------------------------------------------------------
     // Local Test Helpers
     // -------------------------------------------------------------------------
@@ -856,6 +1021,7 @@ class DailyBriefingEngineTest {
         id: String,
         evidenceCount: Int,
         confirmationState: BarrierConfirmationState,
+        status: BarrierStatus = BarrierStatus.ACTIVE,
         confidence: Float = 0.75f
     ) = BarrierHypothesis(
         id = id,
@@ -863,7 +1029,7 @@ class DailyBriefingEngineTest {
         category = BarrierCategory.DISTRACTION,
         description = "Barrier $id",
         confirmationState = confirmationState,
-        status = BarrierStatus.ACTIVE,
+        status = status,
         sourceReflectionId = "ref-1",
         firstObservedAt = now - sevenDaysMs,
         lastObservedAt = now,
