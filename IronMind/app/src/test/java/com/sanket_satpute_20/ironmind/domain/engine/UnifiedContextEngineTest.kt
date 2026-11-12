@@ -672,6 +672,140 @@ class UnifiedContextEngineTest {
         assertEquals(SourceAvailability.PARTIAL_HISTORY, context.provenanceMap["AppUsage"]!!.availability)
     }
 
+    @Test
+    fun testFocusProtectionHistory_includesAllWindowIntersectingStatusesAndIsolatesUsers() = runBlocking {
+        val userId = "user-focus"
+        val windowStart = baseTime - 3_600_000L
+        val windowEnd = baseTime
+
+        val completedInWindow = ProtectionSession(
+            id = "ps-completed",
+            userId = userId,
+            startedAt = windowStart + 100_000L,
+            scheduledEndAt = windowStart + 700_000L,
+            endedAt = windowStart + 700_000L,
+            status = ProtectionSessionStatus.COMPLETED,
+            source = EntitySource.USER,
+            overrideAllowed = true,
+            createdAt = windowStart,
+            updatedAt = windowStart + 700_000L
+        )
+        val cancelledOverlapStart = ProtectionSession(
+            id = "ps-cancelled",
+            userId = userId,
+            startedAt = windowStart - 500_000L,
+            scheduledEndAt = windowStart + 500_000L,
+            endedAt = windowStart + 200_000L,
+            status = ProtectionSessionStatus.CANCELLED,
+            source = EntitySource.USER,
+            overrideAllowed = true,
+            createdAt = windowStart - 500_000L,
+            updatedAt = windowStart + 200_000L
+        )
+        val overriddenInWindow = ProtectionSession(
+            id = "ps-overridden",
+            userId = userId,
+            startedAt = windowStart + 900_000L,
+            scheduledEndAt = windowStart + 1_900_000L,
+            endedAt = windowStart + 1_100_000L,
+            status = ProtectionSessionStatus.OVERRIDDEN,
+            source = EntitySource.USER,
+            overrideAllowed = true,
+            createdAt = windowStart + 900_000L,
+            updatedAt = windowStart + 1_100_000L
+        )
+        val expiredInWindow = ProtectionSession(
+            id = "ps-expired",
+            userId = userId,
+            startedAt = windowStart + 1_500_000L,
+            scheduledEndAt = windowStart + 1_800_000L,
+            endedAt = windowStart + 1_800_000L,
+            status = ProtectionSessionStatus.EXPIRED,
+            source = EntitySource.SYSTEM,
+            overrideAllowed = false,
+            createdAt = windowStart + 1_500_000L,
+            updatedAt = windowStart + 1_800_000L
+        )
+        val activeInWindow = ProtectionSession(
+            id = "ps-active",
+            userId = userId,
+            startedAt = windowEnd - 300_000L,
+            scheduledEndAt = windowEnd + 600_000L,
+            endedAt = null,
+            status = ProtectionSessionStatus.ACTIVE,
+            source = EntitySource.USER,
+            overrideAllowed = true,
+            createdAt = windowEnd - 300_000L,
+            updatedAt = windowEnd - 300_000L
+        )
+        val endedBeforeWindow = ProtectionSession(
+            id = "ps-old",
+            userId = userId,
+            startedAt = windowStart - 2_000_000L,
+            scheduledEndAt = windowStart - 1_000_000L,
+            endedAt = windowStart - 1L,
+            status = ProtectionSessionStatus.COMPLETED,
+            source = EntitySource.USER,
+            overrideAllowed = true,
+            createdAt = windowStart - 2_000_000L,
+            updatedAt = windowStart - 1L
+        )
+        val afterWindow = ProtectionSession(
+            id = "ps-future",
+            userId = userId,
+            startedAt = windowEnd + 1L,
+            scheduledEndAt = windowEnd + 600_000L,
+            endedAt = null,
+            status = ProtectionSessionStatus.ACTIVE,
+            source = EntitySource.USER,
+            overrideAllowed = true,
+            createdAt = windowEnd + 1L,
+            updatedAt = windowEnd + 1L
+        )
+        val otherUserSession = completedInWindow.copy(id = "ps-other", userId = "user-other")
+
+        listOf(
+            completedInWindow,
+            cancelledOverlapStart,
+            overriddenInWindow,
+            expiredInWindow,
+            activeInWindow,
+            endedBeforeWindow,
+            afterWindow,
+            otherUserSession
+        ).forEach { protectionRepository.saveProtectionSession(it) }
+
+        val result = contextEngine.getUnifiedContext(userId, windowStart, windowEnd)
+        assertTrue(result is Result.Success)
+        val focus = (result as Result.Success).data.digitalBehaviour.focusActivity
+
+        assertEquals(
+            setOf("ps-completed", "ps-cancelled", "ps-overridden", "ps-expired", "ps-active"),
+            focus.recentSessions.map { it.id }.toSet()
+        )
+        assertEquals(setOf("ps-active"), focus.activeSessions.map { it.id }.toSet())
+        // Duration sums clamped intervals: 600k + 200k + 200k + 300k + 300k = 1_600_000ms
+        assertEquals(1_600_000L, focus.totalFocusDurationMs)
+        assertEquals(SourceAvailability.AVAILABLE, (result as Result.Success).data.provenanceMap["FocusProtection"]!!.availability)
+    }
+
+    @Test
+    fun testFocusProtectionHistory_repositoryFailureIsDistinguishedFromEmptyHistory() = runBlocking {
+        val userId = "user-focus-err"
+        protectionRepository.shouldFailSessions = true
+
+        val failedRes = contextEngine.getUnifiedContext(userId, baseTime - 3_600_000L, baseTime)
+        assertTrue(failedRes is Result.Success)
+        val failedCtx = (failedRes as Result.Success).data
+        assertEquals(SourceAvailability.UNAVAILABLE_HARDWARE, failedCtx.provenanceMap["FocusProtection"]!!.availability)
+
+        protectionRepository.shouldFailSessions = false
+        val emptyRes = contextEngine.getUnifiedContext(userId, baseTime - 3_600_000L, baseTime)
+        assertTrue(emptyRes is Result.Success)
+        val emptyCtx = (emptyRes as Result.Success).data
+        assertEquals(SourceAvailability.EMPTY_NO_DATA, emptyCtx.provenanceMap["FocusProtection"]!!.availability)
+    }
+
     // --- Test Doubles ---
 
     class TestClock(var time: Long) : Clock {
@@ -759,13 +893,24 @@ class UnifiedContextEngineTest {
 
     class TestProtectionRepository : ProtectionRepository {
         var activeSession: ProtectionSession? = null
+        val sessions = mutableListOf<ProtectionSession>()
+        var shouldFailSessions: Boolean = false
         var rules = emptyList<ProtectionRule>()
-        override suspend fun getActiveProtectionSessionsForUser(userId: String): Result<List<ProtectionSession>, Exception> = Result.Success(listOfNotNull(activeSession).filter { it.userId == userId })
+        override suspend fun getActiveProtectionSessionsForUser(userId: String): Result<List<ProtectionSession>, Exception> =
+            Result.Success((sessions + listOfNotNull(activeSession)).distinctBy { it.id }.filter { it.userId == userId && it.status == ProtectionSessionStatus.ACTIVE })
+        override suspend fun getProtectionSessionsForUser(userId: String): Result<List<ProtectionSession>, Exception> =
+            if (shouldFailSessions) Result.Failure(RuntimeException("Protection sessions unavailable"))
+            else Result.Success((sessions + listOfNotNull(activeSession)).distinctBy { it.id }.filter { it.userId == userId })
         override suspend fun getProtectionRulesForUser(userId: String): Result<List<ProtectionRule>, Exception> = Result.Success(rules.filter { it.userId == userId })
-        override suspend fun getProtectionSession(id: String): Result<ProtectionSession, Exception> = Result.Success(activeSession!!)
+        override suspend fun getProtectionSession(id: String): Result<ProtectionSession, Exception> =
+            (sessions + listOfNotNull(activeSession)).firstOrNull { it.id == id }?.let { Result.Success(it) } ?: Result.Failure(Exception("Not found"))
         override suspend fun getProtectionRule(id: String): Result<ProtectionRule, Exception> = Result.Success(rules.first())
         override suspend fun saveProtectionRule(rule: ProtectionRule): Result<Unit, Exception> = Result.Success(Unit)
-        override suspend fun saveProtectionSession(session: ProtectionSession): Result<Unit, Exception> = Result.Success(Unit)
+        override suspend fun saveProtectionSession(session: ProtectionSession): Result<Unit, Exception> {
+            sessions.removeAll { it.id == session.id }
+            sessions.add(session)
+            return Result.Success(Unit)
+        }
     }
 
     class TestAppUsageProvider : AppUsageObservationProvider {

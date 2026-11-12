@@ -141,7 +141,7 @@ class AssembleDailyBriefingUseCaseTest {
         getDueTasksUseCase = GetDueTasksUseCase(taskRepository, planRepository, clock)
         getActiveCommitmentsUseCase = GetActiveCommitmentsUseCase(commitmentRepository)
 
-        val editTaskUseCase = EditTaskUseCase(taskRepository, clock)
+        val editTaskUseCase = EditTaskUseCase(taskRepository, clock, eventRepository, idGenerator)
         val createTaskUseCase = CreateTaskUseCase(taskRepository, idGenerator, clock, eventRepository)
         actionLifecycleUseCase = ActionLifecycleUseCase(
             actionRepository = actionRepository,

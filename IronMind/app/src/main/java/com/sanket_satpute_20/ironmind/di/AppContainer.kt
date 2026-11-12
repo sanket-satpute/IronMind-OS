@@ -845,11 +845,11 @@ class DefaultAppContainer(
     }
 
     override val editTaskUseCase: EditTaskUseCase by lazy {
-        EditTaskUseCase(taskRepository, clock)
+        EditTaskUseCase(taskRepository, clock, eventRepository, idGenerator)
     }
 
     override val updateTaskStatusUseCase: UpdateTaskStatusUseCase by lazy {
-        UpdateTaskStatusUseCase(taskRepository, clock)
+        UpdateTaskStatusUseCase(taskRepository, clock, eventRepository, idGenerator)
     }
 
     override val deleteTaskUseCase: DeleteTaskUseCase by lazy {
@@ -987,7 +987,8 @@ class DefaultAppContainer(
             protectionRepository,
             appProtectionProvider,
             clock,
-            eventRepository
+            eventRepository,
+            idGenerator
         )
     }
 

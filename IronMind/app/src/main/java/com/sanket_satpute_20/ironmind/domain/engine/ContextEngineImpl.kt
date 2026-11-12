@@ -9,6 +9,7 @@ import com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState
 import com.sanket_satpute_20.ironmind.domain.model.MemoryStatus
 import com.sanket_satpute_20.ironmind.domain.model.PlanStatus
 import com.sanket_satpute_20.ironmind.domain.model.ProgressInfo
+import com.sanket_satpute_20.ironmind.domain.model.ProtectionSessionStatus
 import com.sanket_satpute_20.ironmind.domain.model.TaskStatus
 import com.sanket_satpute_20.ironmind.domain.model.barrier.BarrierConfirmationState
 import com.sanket_satpute_20.ironmind.domain.model.context.*
@@ -543,20 +544,46 @@ class ContextEngineImpl(
             }
 
             // Focus and Protection Activity
-            val activeSessions = protectionRepository.getActiveProtectionSessionsForUser(userId).let {
-                if (it is Result.Success) it.data.filter { s -> s.userId == userId } else emptyList()
+            val sessionsResult = protectionRepository.getProtectionSessionsForUser(userId)
+            val rulesResult = protectionRepository.getProtectionRulesForUser(userId)
+            val isProtectionDataAvailable = sessionsResult is Result.Success && rulesResult is Result.Success
+
+            val trackableStatuses = setOf(
+                ProtectionSessionStatus.ACTIVE,
+                ProtectionSessionStatus.COMPLETED,
+                ProtectionSessionStatus.CANCELLED,
+                ProtectionSessionStatus.OVERRIDDEN,
+                ProtectionSessionStatus.EXPIRED
+            )
+
+            val allUserSessions = if (sessionsResult is Result.Success) {
+                sessionsResult.data.filter { it.userId == userId }
+            } else {
+                emptyList()
             }
-            val rules = protectionRepository.getProtectionRulesForUser(userId).let {
-                if (it is Result.Success) it.data.filter { r -> r.userId == userId } else emptyList()
+            val recentSessions = allUserSessions.filter { session ->
+                if (session.status !in trackableStatuses) return@filter false
+                val sessionEnd = session.endedAt?.coerceAtLeast(session.startedAt) ?: Long.MAX_VALUE
+                session.startedAt <= endTime && sessionEnd >= startTime
             }
-            val totalFocusDuration = activeSessions.sumOf {
-                val sessionEnd = it.endedAt ?: now
-                (sessionEnd - it.startedAt).coerceAtLeast(0L)
+            val activeSessions = recentSessions.filter { it.status == ProtectionSessionStatus.ACTIVE }
+            val rules = if (rulesResult is Result.Success) {
+                rulesResult.data.filter { it.userId == userId }
+            } else {
+                emptyList()
+            }
+
+            val totalFocusDuration = recentSessions.sumOf { session ->
+                val effectiveStart = maxOf(session.startedAt, startTime)
+                val rawEnd = session.endedAt?.coerceAtLeast(session.startedAt)
+                    ?: minOf(now, session.scheduledEndAt ?: now)
+                val effectiveEnd = minOf(rawEnd, endTime)
+                (effectiveEnd - effectiveStart).coerceAtLeast(0L)
             }
 
             val focusSummary = FocusActivitySummary(
                 activeSessions = activeSessions,
-                recentSessions = activeSessions,
+                recentSessions = recentSessions,
                 totalFocusDurationMs = totalFocusDuration,
                 activeRules = rules
             )
@@ -576,13 +603,20 @@ class ContextEngineImpl(
                 }
             )
 
+            val focusLastRecordedAt = recentSessions.maxOfOrNull { it.endedAt ?: it.startedAt }
+                ?: activeSessions.maxOfOrNull { it.startedAt }
             provenanceMap["FocusProtection"] = SourceProvenanceAndFreshness(
                 sourceName = "Room_Protection",
-                availability = if (activeSessions.isEmpty() && rules.isEmpty()) SourceAvailability.EMPTY_NO_DATA else SourceAvailability.AVAILABLE,
+                availability = when {
+                    !isProtectionDataAvailable -> SourceAvailability.UNAVAILABLE_HARDWARE
+                    recentSessions.isEmpty() && activeSessions.isEmpty() && rules.isEmpty() -> SourceAvailability.EMPTY_NO_DATA
+                    else -> SourceAvailability.AVAILABLE
+                },
                 isPermissionGranted = true,
-                lastRecordedAt = activeSessions.firstOrNull()?.startedAt,
-                dataAgeMs = activeSessions.firstOrNull()?.startedAt?.let { now - it },
-                isStale = false
+                lastRecordedAt = focusLastRecordedAt,
+                dataAgeMs = focusLastRecordedAt?.let { now - it },
+                isStale = false,
+                notes = if (!isProtectionDataAvailable) "Protection session history unavailable due to repository failure" else null
             )
 
             val digitalContext = DigitalBehaviourContext(

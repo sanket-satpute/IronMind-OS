@@ -15,7 +15,8 @@ class StopProtectionSessionUseCase(
     private val protectionRepository: ProtectionRepository,
     private val appProtectionProvider: AppProtectionProvider,
     private val clock: Clock,
-    private val eventRepository: EventRepository
+    private val eventRepository: EventRepository,
+    private val idGenerator: IdGenerator? = null
 ) {
     suspend operator fun invoke(
         sessionId: String,
@@ -66,17 +67,36 @@ class StopProtectionSessionUseCase(
 
         val saveResult = protectionRepository.saveProtectionSession(updatedSession)
         return if (saveResult is Result.Success) {
+            val eventType = when (reason) {
+                StopReason.OVERRIDDEN -> EventType.PROTECTION_OVERRIDDEN
+                StopReason.USER_INITIATED,
+                StopReason.CANCELLED,
+                StopReason.EXPIRED -> EventType.PROTECTION_ENDED
+            }
             val event = Event(
-                id = java.util.UUID.randomUUID().toString(), // Or inject idGenerator
+                id = idGenerator?.generateId() ?: java.util.UUID.randomUUID().toString(),
                 userId = session.userId,
-                type = EventType.PROTECTION_ENDED,
+                type = eventType,
                 entityType = "PROTECTION_SESSION",
                 entityId = session.id,
                 occurredAt = now,
                 recordedAt = now,
-                source = EntitySource.USER
+                source = EntitySource.USER,
+                previousState = session.status.name,
+                newState = finalStatus.name,
+                metadata = "reason=${reason.name};endedAt=$effectiveEndedAt"
             )
-            eventRepository.saveEvent(event)
+            val eventResult = try {
+                eventRepository.saveEvent(event)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.Failure(e)
+            }
+            if (eventResult is Result.Failure) {
+                protectionRepository.saveProtectionSession(session)
+                return Result.Failure(eventResult.error)
+            }
             println("IronMindLifecycle [Protection] [SESSION_STOPPED] sessionId=${session.id} reason=$reason")
             Result.Success(Unit)
         } else {

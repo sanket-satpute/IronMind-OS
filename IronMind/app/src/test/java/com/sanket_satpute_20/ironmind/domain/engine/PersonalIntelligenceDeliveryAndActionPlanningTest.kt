@@ -118,7 +118,7 @@ class PersonalIntelligenceDeliveryAndActionPlanningTest {
         fakeOutcomeRepo = InMemoryOutcomeRepository()
         fakeEventRepo = InMemoryEventRepository()
 
-        editTaskUseCase = EditTaskUseCase(fakeTaskRepo, fakeClock)
+        editTaskUseCase = EditTaskUseCase(fakeTaskRepo, fakeClock, fakeEventRepo, fakeIdGenerator)
         createTaskUseCase = CreateTaskUseCase(fakeTaskRepo, fakeIdGenerator, fakeClock, fakeEventRepo)
 
         actionLifecycleUseCase = ActionLifecycleUseCase(

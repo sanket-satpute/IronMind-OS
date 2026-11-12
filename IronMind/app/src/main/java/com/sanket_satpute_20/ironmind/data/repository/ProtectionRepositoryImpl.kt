@@ -20,7 +20,7 @@ class ProtectionRepositoryImpl(
         try {
             dao.insertProtectionRule(rule.toEntity())
             Result.Success(Unit)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -33,7 +33,7 @@ class ProtectionRepositoryImpl(
             } else {
                 Result.Failure(Exception("ProtectionRule not found"))
             }
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -42,7 +42,7 @@ class ProtectionRepositoryImpl(
         try {
             val entities = dao.getProtectionRulesForUser(userId)
             Result.Success(entities.map { it.toDomain() })
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -51,7 +51,7 @@ class ProtectionRepositoryImpl(
         try {
             dao.insertProtectionSession(session.toEntity())
             Result.Success(Unit)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -64,7 +64,7 @@ class ProtectionRepositoryImpl(
             } else {
                 Result.Failure(Exception("ProtectionSession not found"))
             }
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -73,7 +73,16 @@ class ProtectionRepositoryImpl(
         try {
             val entities = dao.getActiveProtectionSessionsForUser(userId)
             Result.Success(entities.map { it.toDomain() })
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
+
+    override suspend fun getProtectionSessionsForUser(userId: String): Result<List<ProtectionSession>, Exception> = withContext(dispatcher) {
+        try {
+            val entities = dao.getProtectionSessionsForUser(userId)
+            Result.Success(entities.map { it.toDomain() })
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }

@@ -107,6 +107,7 @@ class ContextEngineImplTest {
 
         override suspend fun getProtectionSession(id: String): Result<ProtectionSession, Exception> = Result.Failure(Exception())
         override suspend fun getActiveProtectionSessionsForUser(userId: String): Result<List<ProtectionSession>, Exception> = Result.Success(listOfNotNull(activeSession))
+        override suspend fun getProtectionSessionsForUser(userId: String): Result<List<ProtectionSession>, Exception> = Result.Success(listOfNotNull(activeSession))
         override suspend fun saveProtectionSession(session: ProtectionSession): Result<Unit, Exception> = Result.Success(Unit)
     }
     class FakeGoalRepository : GoalRepository {

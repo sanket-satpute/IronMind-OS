@@ -366,5 +366,9 @@ class AppRestrictionFoundationTest {
         override suspend fun getActiveProtectionSessionsForUser(userId: String): Result<List<ProtectionSession>, Exception> {
             return Result.Success(sessions.filter { it.userId == userId && it.status == ProtectionSessionStatus.ACTIVE })
         }
+
+        override suspend fun getProtectionSessionsForUser(userId: String): Result<List<ProtectionSession>, Exception> {
+            return Result.Success(sessions.filter { it.userId == userId })
+        }
     }
 }

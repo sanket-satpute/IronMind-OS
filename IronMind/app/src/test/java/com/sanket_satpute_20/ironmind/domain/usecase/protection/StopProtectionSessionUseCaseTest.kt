@@ -2,12 +2,14 @@ package com.sanket_satpute_20.ironmind.domain.usecase.protection
 
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.EntitySource
+import com.sanket_satpute_20.ironmind.domain.model.EventType
 import com.sanket_satpute_20.ironmind.domain.model.ProtectionSession
 import com.sanket_satpute_20.ironmind.domain.model.ProtectionSessionStatus
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeProtectionRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeAppProtectionProvider
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeEventRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -138,6 +140,82 @@ class StopProtectionSessionUseCaseTest {
         val updatedSession = (protectionRepository.getProtectionSession("s_overridden") as Result.Success).data
         assertEquals(ProtectionSessionStatus.OVERRIDDEN, updatedSession.status)
         assertEquals(1500L, updatedSession.endedAt)
+    }
+
+    @Test
+    fun `OVERRIDDEN stop reason emits PROTECTION_OVERRIDDEN with reason metadata and repeated stop does not duplicate`() = runTest {
+        val stopWithIdGen = StopProtectionSessionUseCase(
+            protectionRepository = protectionRepository,
+            appProtectionProvider = protectionProvider,
+            clock = clock,
+            eventRepository = eventRepository,
+            idGenerator = FakeIdGenerator()
+        )
+        val session = createActiveSession("s_override_evt").copy(userId = "user-alpha")
+        protectionRepository.saveProtectionSession(session)
+
+        clock.advanceTimeBy(1500L)
+        val result = stopWithIdGen("s_override_evt", StopProtectionSessionUseCase.StopReason.OVERRIDDEN)
+        assertTrue(result is Result.Success)
+
+        val events = (eventRepository.getEventsForUser("user-alpha") as Result.Success).data
+        assertEquals(1, events.size)
+        assertEquals(EventType.PROTECTION_OVERRIDDEN, events[0].type)
+        assertEquals("user-alpha", events[0].userId)
+        assertEquals("s_override_evt", events[0].entityId)
+        assertEquals("PROTECTION_SESSION", events[0].entityType)
+        assertEquals("ACTIVE", events[0].previousState)
+        assertEquals("OVERRIDDEN", events[0].newState)
+        assertTrue(events[0].metadata!!.contains("reason=OVERRIDDEN"))
+
+        // Repeated stop calls cannot create duplicate events
+        assertTrue(stopWithIdGen("s_override_evt", StopProtectionSessionUseCase.StopReason.OVERRIDDEN) is Result.Failure)
+        assertTrue(stopWithIdGen("s_override_evt", StopProtectionSessionUseCase.StopReason.USER_INITIATED) is Result.Failure)
+        assertEquals(1, (eventRepository.getEventsForUser("user-alpha") as Result.Success).data.size)
+    }
+
+    @Test
+    fun `USER_INITIATED, CANCELLED, and EXPIRED stops emit PROTECTION_ENDED with reason metadata without duplicates on repeat`() = runTest {
+        val stopWithIdGen = StopProtectionSessionUseCase(
+            protectionRepository = protectionRepository,
+            appProtectionProvider = protectionProvider,
+            clock = clock,
+            eventRepository = eventRepository,
+            idGenerator = FakeIdGenerator()
+        )
+
+        val sUser = createActiveSession("s-ui").copy(userId = "user-beta")
+        val sCancel = createActiveSession("s-can").copy(userId = "user-beta")
+        val sExpire = createActiveSession("s-exp").copy(userId = "user-beta", scheduledEndAt = 1500L)
+        protectionRepository.saveProtectionSession(sUser)
+        protectionRepository.saveProtectionSession(sCancel)
+        protectionRepository.saveProtectionSession(sExpire)
+
+        clock.setTime(2000L)
+        assertTrue(stopWithIdGen("s-ui", StopProtectionSessionUseCase.StopReason.USER_INITIATED) is Result.Success)
+        assertTrue(stopWithIdGen("s-can", StopProtectionSessionUseCase.StopReason.CANCELLED) is Result.Success)
+        assertTrue(stopWithIdGen("s-exp", StopProtectionSessionUseCase.StopReason.EXPIRED) is Result.Success)
+
+        // Repeated calls must not emit additional events
+        assertTrue(stopWithIdGen("s-ui", StopProtectionSessionUseCase.StopReason.USER_INITIATED) is Result.Failure)
+        assertTrue(stopWithIdGen("s-can", StopProtectionSessionUseCase.StopReason.CANCELLED) is Result.Failure)
+        assertTrue(stopWithIdGen("s-exp", StopProtectionSessionUseCase.StopReason.EXPIRED) is Result.Success)
+
+        val events = (eventRepository.getEventsForUser("user-beta") as Result.Success).data
+        assertEquals(3, events.size)
+        assertTrue(events.all { it.type == EventType.PROTECTION_ENDED && it.userId == "user-beta" })
+
+        val uiEvt = events.first { it.entityId == "s-ui" }
+        assertTrue(uiEvt.metadata!!.contains("reason=USER_INITIATED"))
+        assertEquals("COMPLETED", uiEvt.newState)
+
+        val canEvt = events.first { it.entityId == "s-can" }
+        assertTrue(canEvt.metadata!!.contains("reason=CANCELLED"))
+        assertEquals("CANCELLED", canEvt.newState)
+
+        val expEvt = events.first { it.entityId == "s-exp" }
+        assertTrue(expEvt.metadata!!.contains("reason=EXPIRED"))
+        assertEquals("EXPIRED", expEvt.newState)
     }
 
     private fun createActiveSession(id: String): ProtectionSession {

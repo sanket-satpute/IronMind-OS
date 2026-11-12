@@ -1182,6 +1182,70 @@ class AuthoritativeProtectionSessionRecoveryTest {
         assertEquals(originalScheduledEndAt, IronMindProtectionService.getActiveScheduledEndAt())
     }
 
+    @Test
+    fun getProtectionSessionsForUser_roomBacked_returnsAllStatusesScopedByUser() = runTest {
+        val otherUser = "user_other_room"
+        dao.insertUserProfile(
+            UserProfileEntity(
+                id = otherUser,
+                createdAt = 1_000_000L,
+                updatedAt = 1_000_000L,
+                displayName = "Other",
+                timezone = "UTC",
+                createdFrom = "TEST",
+                status = "ACTIVE",
+                schemaVersion = 1
+            )
+        )
+
+        val statuses = listOf(
+            ProtectionSessionStatus.ACTIVE,
+            ProtectionSessionStatus.COMPLETED,
+            ProtectionSessionStatus.CANCELLED,
+            ProtectionSessionStatus.OVERRIDDEN,
+            ProtectionSessionStatus.EXPIRED
+        )
+        statuses.forEachIndexed { idx, status ->
+            val ended = if (status == ProtectionSessionStatus.ACTIVE) null else 1_100_000L + idx * 1000L
+            protectionRepository.saveProtectionSession(
+                ProtectionSession(
+                    id = "room-ps-$idx",
+                    userId = testUserId,
+                    startedAt = 1_000_000L + idx * 1000L,
+                    scheduledEndAt = 1_200_000L + idx * 1000L,
+                    endedAt = ended,
+                    status = status,
+                    source = EntitySource.USER,
+                    overrideAllowed = true,
+                    createdAt = 1_000_000L,
+                    updatedAt = 1_100_000L
+                )
+            )
+        }
+        protectionRepository.saveProtectionSession(
+            ProtectionSession(
+                id = "room-ps-foreign",
+                userId = otherUser,
+                startedAt = 1_005_000L,
+                endedAt = 1_050_000L,
+                status = ProtectionSessionStatus.COMPLETED,
+                source = EntitySource.USER,
+                overrideAllowed = true,
+                createdAt = 1_005_000L,
+                updatedAt = 1_050_000L
+            )
+        )
+
+        val userSessions = (protectionRepository.getProtectionSessionsForUser(testUserId) as Result.Success).data
+        assertEquals(5, userSessions.size)
+        assertTrue(userSessions.all { it.userId == testUserId })
+        assertEquals(statuses.toSet(), userSessions.map { it.status }.toSet())
+
+        val otherSessions = (protectionRepository.getProtectionSessionsForUser(otherUser) as Result.Success).data
+        assertEquals(1, otherSessions.size)
+        assertEquals("room-ps-foreign", otherSessions[0].id)
+    }
+
     // --- Helpers & Doubles ---
 
     private class FakeInstalledAppDiscoveryProvider : InstalledAppDiscoveryProvider {

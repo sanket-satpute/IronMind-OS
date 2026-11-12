@@ -1,4 +1,4 @@
-﻿package com.sanket_satpute_20.ironmind.integration
+package com.sanket_satpute_20.ironmind.integration
 
 import android.content.Context
 import androidx.room.Room
@@ -101,7 +101,7 @@ class ActionExecutionCrashSafetyIntegrationTest {
         eventRepository = EventRepositoryImpl(dao = dao, database = db)
         commitmentRepository = CommitmentRepositoryImpl(dao = dao, outboxDao = db.outboxDao(), database = db)
 
-        editTaskUseCase = EditTaskUseCase(taskRepository, fakeClock)
+        editTaskUseCase = EditTaskUseCase(taskRepository, fakeClock, eventRepository, fakeIdGenerator)
         createTaskUseCase = CreateTaskUseCase(taskRepository, fakeIdGenerator, fakeClock, eventRepository)
 
         actionLifecycleUseCase = createUseCaseInstance(fakeClock, fakeIdGenerator)

@@ -49,4 +49,11 @@ class FakeProtectionRepository : ProtectionRepository {
             .sortedByDescending { it.startedAt }
         return Result.Success(activeSessions)
     }
+
+    override suspend fun getProtectionSessionsForUser(userId: String): Result<List<ProtectionSession>, Exception> {
+        val userSessions = sessions.values
+            .filter { it.userId == userId }
+            .sortedWith(compareByDescending<ProtectionSession> { it.startedAt }.thenBy { it.id })
+        return Result.Success(userSessions)
+    }
 }

@@ -668,6 +668,7 @@ class DigitalPipelineCrossLayerConsistencyTest {
         override suspend fun saveProtectionRule(rule: ProtectionRule) = Result.Success(Unit)
         override suspend fun getProtectionSession(id: String) = Result.Failure(Exception("Not found"))
         override suspend fun getActiveProtectionSessionsForUser(userId: String) = Result.Success(emptyList<ProtectionSession>())
+        override suspend fun getProtectionSessionsForUser(userId: String) = Result.Success(emptyList<ProtectionSession>())
         override suspend fun saveProtectionSession(session: ProtectionSession) = Result.Success(Unit)
     }
 

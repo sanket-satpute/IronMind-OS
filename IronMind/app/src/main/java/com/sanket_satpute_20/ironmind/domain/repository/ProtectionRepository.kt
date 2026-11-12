@@ -12,4 +12,5 @@ interface ProtectionRepository {
     suspend fun saveProtectionSession(session: ProtectionSession): Result<Unit, Exception>
     suspend fun getProtectionSession(id: String): Result<ProtectionSession, Exception>
     suspend fun getActiveProtectionSessionsForUser(userId: String): Result<List<ProtectionSession>, Exception>
+    suspend fun getProtectionSessionsForUser(userId: String): Result<List<ProtectionSession>, Exception>
 }

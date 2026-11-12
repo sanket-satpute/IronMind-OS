@@ -1302,5 +1302,10 @@ class DigitalBehaviourViewModelTest {
             if (shouldFail) return Result.Failure(RuntimeException("Load active sessions error"))
             return Result.Success(sessions.filter { it.userId == userId && it.status == ProtectionSessionStatus.ACTIVE })
         }
+
+        override suspend fun getProtectionSessionsForUser(userId: String): Result<List<ProtectionSession>, Exception> {
+            if (shouldFail) return Result.Failure(RuntimeException("Load sessions error"))
+            return Result.Success(sessions.filter { it.userId == userId })
+        }
     }
 }
