@@ -1,5 +1,6 @@
 package com.sanket_satpute_20.ironmind.domain.engine
 
+import com.sanket_satpute_20.ironmind.domain.common.IntervalMath
 import com.sanket_satpute_20.ironmind.domain.model.ProtectionSession
 import com.sanket_satpute_20.ironmind.domain.model.ProtectionSessionStatus
 import com.sanket_satpute_20.ironmind.domain.model.context.AppSwitchTransition
@@ -30,6 +31,8 @@ import com.sanket_satpute_20.ironmind.domain.model.observation.ObservationType
  *   session trimmed by the window boundary is not misclassified as a brief burst.
  * - Skips ambiguous simultaneous package transitions sharing the exact same `startTimeMs`.
  */
+private typealias TimeRange = IntervalMath.Interval
+
 object AppUsageIntervalAnalyzer {
 
     const val DEFAULT_SHORT_BURST_THRESHOLD_MS: Long = 60_000L
@@ -50,10 +53,6 @@ object AppUsageIntervalAnalyzer {
         val temporalSummary: AppUsageTemporalSummary,
         val lastObservedAt: Long?
     )
-
-    private data class TimeRange(val startMs: Long, val endMs: Long) {
-        val durationMs: Long get() = (endMs - startMs).coerceAtLeast(0L)
-    }
 
     fun analyze(
         userId: String,
@@ -167,10 +166,10 @@ object AppUsageIntervalAnalyzer {
             }
 
             // Guard Long addition overflow cleanly
-            val rawEndMs = if (obs.occurredAt > Long.MAX_VALUE - rawDurationMs) {
-                Long.MAX_VALUE
-            } else {
-                obs.occurredAt + rawDurationMs
+            val rawEndMs = IntervalMath.safeRawEndMs(obs.occurredAt, rawDurationMs)
+            if (rawEndMs == null) {
+                droppedInvalid++
+                continue
             }
 
             if (!semanticSeen.add(Triple(pkg, obs.occurredAt, rawEndMs))) {
@@ -179,13 +178,11 @@ object AppUsageIntervalAnalyzer {
             }
 
             // Clip to [effectiveStartMs, windowEndMs]
-            val clippedStart = maxOf(obs.occurredAt, effectiveStartMs)
-            val clippedEnd = minOf(rawEndMs, windowEndMs)
-            if (clippedEnd <= clippedStart) {
-                continue
-            }
-
-            val clippedDuration = clippedEnd - clippedStart
+            val clipped = IntervalMath.clipInterval(obs.occurredAt, rawEndMs, effectiveStartMs, windowEndMs)
+                ?: continue
+            val clippedStart = clipped.startMs
+            val clippedEnd = clipped.endMs
+            val clippedDuration = clipped.durationMs
             candidateIntervals.add(
                 AppUsageInterval(
                     observationId = obs.id,
@@ -464,14 +461,8 @@ object AppUsageIntervalAnalyzer {
         val overlappingDurationMs: Long
     )
 
-    internal fun unionDurationMs(ranges: List<Pair<Long, Long>>): Long {
-        if (ranges.isEmpty()) return 0L
-        return mergeRanges(
-            ranges.mapNotNull { (start, end) ->
-                if (end > start) TimeRange(start, end) else null
-            }
-        ).sumOf { it.durationMs }
-    }
+    internal fun unionDurationMs(ranges: List<Pair<Long, Long>>): Long =
+        IntervalMath.unionDurationFromPairs(ranges)
 
     internal fun findProtectionOverlappingIntervals(
         userId: String,
@@ -499,10 +490,8 @@ object AppUsageIntervalAnalyzer {
         val matchingRanges = mutableListOf<TimeRange>()
         for (interval in intervals) {
             if (interval.userId != userId) continue
-            val clippedStart = maxOf(interval.startTimeMs, windowStartMs)
-            val clippedEnd = minOf(interval.endTimeMs, windowEndMs)
-            if (clippedEnd <= clippedStart) continue
-            val range = TimeRange(clippedStart, clippedEnd)
+            val range = IntervalMath.clipInterval(interval.startTimeMs, interval.endTimeMs, windowStartMs, windowEndMs)
+                ?: continue
             if (intersectTotalDuration(listOf(range), mergedProtection) > 0L) {
                 matchingIntervals.add(interval)
                 matchingRanges.add(range)
@@ -546,65 +535,20 @@ object AppUsageIntervalAnalyzer {
         for (session in sessions) {
             if (session.userId != userId || session.status !in TRACKABLE_PROTECTION_STATUSES) continue
             val rawEnd = effectiveProtectionEndMs(session, nowMs) ?: continue
-            val clippedStart = maxOf(session.startedAt, windowStartMs)
-            val clippedEnd = minOf(rawEnd, windowEndMs)
-            if (clippedEnd > clippedStart) {
-                result.add(TimeRange(clippedStart, clippedEnd))
-            }
+            val range = IntervalMath.clipInterval(session.startedAt, rawEnd, windowStartMs, windowEndMs)
+                ?: continue
+            result.add(range)
         }
         return result
     }
 
-    private fun mergeRanges(ranges: List<TimeRange>): List<TimeRange> {
-        if (ranges.isEmpty()) return emptyList()
-        val sorted = ranges.sortedWith(compareBy<TimeRange> { it.startMs }.thenBy { it.endMs })
-        val merged = mutableListOf<TimeRange>()
-        var currentStart = sorted[0].startMs
-        var currentEnd = sorted[0].endMs
-
-        for (i in 1 until sorted.size) {
-            val next = sorted[i]
-            if (next.startMs <= currentEnd) {
-                currentEnd = maxOf(currentEnd, next.endMs)
-            } else {
-                if (currentEnd > currentStart) {
-                    merged.add(TimeRange(currentStart, currentEnd))
-                }
-                currentStart = next.startMs
-                currentEnd = next.endMs
-            }
-        }
-        if (currentEnd > currentStart) {
-            merged.add(TimeRange(currentStart, currentEnd))
-        }
-        return merged
-    }
+    private fun mergeRanges(ranges: List<TimeRange>): List<TimeRange> =
+        IntervalMath.mergeIntervals(ranges)
 
     private fun intersectTotalDuration(
         firstMerged: List<TimeRange>,
         secondMerged: List<TimeRange>
-    ): Long {
-        if (firstMerged.isEmpty() || secondMerged.isEmpty()) return 0L
-        var i = 0
-        var j = 0
-        var total = 0L
-
-        while (i < firstMerged.size && j < secondMerged.size) {
-            val a = firstMerged[i]
-            val b = secondMerged[j]
-            val overlapStart = maxOf(a.startMs, b.startMs)
-            val overlapEnd = minOf(a.endMs, b.endMs)
-            if (overlapEnd > overlapStart) {
-                total += (overlapEnd - overlapStart)
-            }
-            if (a.endMs < b.endMs) {
-                i++
-            } else {
-                j++
-            }
-        }
-        return total
-    }
+    ): Long = IntervalMath.intersectDurationMs(firstMerged, secondMerged)
 
     internal fun parseDurationMs(context: String): Long? {
         if (context.isBlank()) return null

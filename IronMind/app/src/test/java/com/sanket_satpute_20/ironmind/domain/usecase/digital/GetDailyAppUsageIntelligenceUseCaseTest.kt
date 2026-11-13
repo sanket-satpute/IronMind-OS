@@ -393,6 +393,220 @@ class GetDailyAppUsageIntelligenceUseCaseTest {
     }
 
     // =========================================================================
+    // 8. Phase 3.6.7.8B.3 — Interval Mathematics, Union Semantics & Day Boundaries
+    // =========================================================================
+
+    @Test
+    fun samePackageOverlappingIntervals_areUnionedNotSummed() = runBlocking {
+        fakeProvider.permissionGranted = true
+        fakeSettingsRepo.isEnabled = true
+
+        val dayStart = baseTime
+        val dayEnd = baseTime + dayDuration
+
+        // Chrome interval 1: [10:00..10:30] (1800_000ms)
+        // Chrome interval 2: [10:15..10:45] (1800_000ms)
+        // Union should be [10:00..10:45] (2700_000ms = 45m), NOT 3600_000ms!
+        val c1 = AppUsageEvent("com.android.chrome", dayStart + 36_000_000L, dayStart + 37_800_000L, 1800_000L)
+        val c2 = AppUsageEvent("com.android.chrome", dayStart + 36_900_000L, dayStart + 38_700_000L, 1800_000L)
+
+        fakeProvider.events = listOf(c1, c2)
+
+        val result = useCase(userId = testUserId, customWindowStartMs = dayStart, customWindowEndMs = dayEnd)
+        assertTrue(result is Result.Success)
+        val data = (result as Result.Success).data
+
+        assertEquals(2700_000L, data.totalObservedDurationMs)
+        assertEquals(1, data.appUsages.size)
+        assertEquals(2700_000L, data.appUsages[0].totalDurationMs)
+        assertEquals(2, data.appUsages[0].sessionCount)
+        assertEquals(2, data.totalSessionsCount)
+    }
+
+    @Test
+    fun duplicateIntervals_doNotInflatePackageDuration() = runBlocking {
+        fakeProvider.permissionGranted = true
+        fakeSettingsRepo.isEnabled = true
+
+        val dayStart = baseTime
+        val dayEnd = baseTime + dayDuration
+
+        // Exactly identical events emitted twice
+        val c1 = AppUsageEvent("com.android.chrome", dayStart + 10_000L, dayStart + 600_000L, 590_000L)
+        val c2 = AppUsageEvent("com.android.chrome", dayStart + 10_000L, dayStart + 600_000L, 590_000L)
+
+        fakeProvider.events = listOf(c1, c2)
+
+        val result = useCase(userId = testUserId, customWindowStartMs = dayStart, customWindowEndMs = dayEnd)
+        assertTrue(result is Result.Success)
+        val data = (result as Result.Success).data
+
+        assertEquals(590_000L, data.totalObservedDurationMs)
+        assertEquals(1, data.appUsages.size)
+        assertEquals(590_000L, data.appUsages[0].totalDurationMs)
+        assertEquals(1, data.appUsages[0].sessionCount) // Deduplicated
+        assertEquals(1, data.totalSessionsCount)
+    }
+
+    @Test
+    fun differentPackagesOverlappingIntervals_areNotMergedAcrossPackages() = runBlocking {
+        fakeProvider.permissionGranted = true
+        fakeSettingsRepo.isEnabled = true
+
+        val dayStart = baseTime
+        val dayEnd = baseTime + dayDuration
+
+        // App A: [10:00..10:30] (1800_000ms)
+        // App B: [10:15..10:45] (1800_000ms)
+        // Overlapping in time, but different packages MUST maintain separate package-level durations!
+        val a1 = AppUsageEvent("com.app.a", dayStart + 36_000_000L, dayStart + 37_800_000L, 1800_000L)
+        val b1 = AppUsageEvent("com.app.b", dayStart + 36_900_000L, dayStart + 38_700_000L, 1800_000L)
+
+        fakeProvider.events = listOf(a1, b1)
+
+        val result = useCase(userId = testUserId, customWindowStartMs = dayStart, customWindowEndMs = dayEnd)
+        assertTrue(result is Result.Success)
+        val data = (result as Result.Success).data
+
+        assertEquals(2, data.appUsages.size)
+        val appA = data.appUsages.first { it.packageName == "com.app.a" }
+        val appB = data.appUsages.first { it.packageName == "com.app.b" }
+
+        assertEquals(1800_000L, appA.totalDurationMs)
+        assertEquals(1800_000L, appB.totalDurationMs)
+        // Total observed equals sum of package durations
+        assertEquals(3600_000L, data.totalObservedDurationMs)
+        assertEquals(50.0f, appA.percentageOfTotal, 0.1f)
+        assertEquals(50.0f, appB.percentageOfTotal, 0.1f)
+    }
+
+    @Test
+    fun adjacentIntervals_followDocumentedMergeContract() = runBlocking {
+        fakeProvider.permissionGranted = true
+        fakeSettingsRepo.isEnabled = true
+
+        val dayStart = baseTime
+        val dayEnd = baseTime + dayDuration
+
+        // Interval 1: [10:00..10:30]
+        // Interval 2: [10:30..11:00] (adjacent at 10:30)
+        val c1 = AppUsageEvent("com.android.chrome", dayStart + 36_000_000L, dayStart + 37_800_000L, 1800_000L)
+        val c2 = AppUsageEvent("com.android.chrome", dayStart + 37_800_000L, dayStart + 39_600_000L, 1800_000L)
+
+        fakeProvider.events = listOf(c1, c2)
+
+        val result = useCase(userId = testUserId, customWindowStartMs = dayStart, customWindowEndMs = dayEnd)
+        assertTrue(result is Result.Success)
+        val data = (result as Result.Success).data
+
+        // 3600_000ms union duration, 2 sessions
+        assertEquals(3600_000L, data.totalObservedDurationMs)
+        assertEquals(3600_000L, data.appUsages[0].totalDurationMs)
+        assertEquals(2, data.appUsages[0].sessionCount)
+        assertEquals(2, data.totalSessionsCount)
+    }
+
+    @Test
+    fun intervalsOutsideWindow_doNotContribute() = runBlocking {
+        fakeProvider.permissionGranted = true
+        fakeSettingsRepo.isEnabled = true
+
+        val dayStart = baseTime
+        val dayEnd = baseTime + dayDuration
+
+        val before = AppUsageEvent("com.app.early", dayStart - 100_000L, dayStart - 50_000L, 50_000L)
+        val after = AppUsageEvent("com.app.late", dayEnd + 10_000L, dayEnd + 50_000L, 40_000L)
+        val valid = AppUsageEvent("com.app.valid", dayStart + 1000L, dayStart + 60_000L, 59_000L)
+
+        fakeProvider.events = listOf(before, after, valid)
+
+        val result = useCase(userId = testUserId, customWindowStartMs = dayStart, customWindowEndMs = dayEnd)
+        assertTrue(result is Result.Success)
+        val data = (result as Result.Success).data
+
+        assertEquals(1, data.appUsages.size)
+        assertEquals("com.app.valid", data.appUsages[0].packageName)
+        assertEquals(59_000L, data.totalObservedDurationMs)
+    }
+
+    @Test
+    fun midnightCrossingIntervals_clippedCorrectlyToWindow() = runBlocking {
+        fakeProvider.permissionGranted = true
+        fakeSettingsRepo.isEnabled = true
+
+        val dayStart = baseTime
+        val dayEnd = baseTime + dayDuration
+
+        // Crosses start of day: 23:30 previous day to 00:30 today (60m total, 30m inside window)
+        val midnightCross = AppUsageEvent("com.app.night", dayStart - 1800_000L, dayStart + 1800_000L, 3600_000L)
+
+        fakeProvider.events = listOf(midnightCross)
+
+        val result = useCase(userId = testUserId, customWindowStartMs = dayStart, customWindowEndMs = dayEnd)
+        assertTrue(result is Result.Success)
+        val data = (result as Result.Success).data
+
+        assertEquals(1800_000L, data.totalObservedDurationMs)
+        assertEquals(dayStart, data.appUsages[0].firstObservedAt)
+        assertEquals(dayStart + 1800_000L, data.appUsages[0].lastObservedAt)
+    }
+
+    @Test
+    fun invalidAndZeroLengthIntervals_handledSafelyWithoutCrash() = runBlocking {
+        fakeProvider.permissionGranted = true
+        fakeSettingsRepo.isEnabled = true
+
+        val dayStart = baseTime
+        val dayEnd = baseTime + dayDuration
+
+        val zeroDuration = AppUsageEvent("com.app.zero", dayStart + 10_000L, dayStart + 10_000L, 0L)
+        val inverted = AppUsageEvent("com.app.inverted", dayStart + 20_000L, dayStart + 10_000L, -10_000L)
+        val blankPkg = AppUsageEvent("   ", dayStart + 30_000L, dayStart + 40_000L, 10_000L)
+        val valid = AppUsageEvent("com.app.valid", dayStart + 50_000L, dayStart + 100_000L, 50_000L)
+
+        fakeProvider.events = listOf(zeroDuration, inverted, blankPkg, valid)
+
+        val result = useCase(userId = testUserId, customWindowStartMs = dayStart, customWindowEndMs = dayEnd)
+        assertTrue(result is Result.Success)
+        val data = (result as Result.Success).data
+
+        assertEquals(1, data.appUsages.size)
+        assertEquals("com.app.valid", data.appUsages[0].packageName)
+        assertEquals(50_000L, data.totalObservedDurationMs)
+    }
+
+    @Test
+    fun daylightSavingTransitionDay_respectsTrueDayBoundariesWithoutAssuming24Hours() = runBlocking {
+        fakeProvider.permissionGranted = true
+        fakeSettingsRepo.isEnabled = true
+
+        // Europe/London spring forward (23-hour day) on 2026-03-29
+        val londonZone = java.time.ZoneId.of("Europe/London")
+        val springForwardDate = java.time.LocalDate.of(2026, 3, 29)
+        val dayStartLondon = springForwardDate.atStartOfDay(londonZone).toInstant().toEpochMilli()
+        val dayEndLondon = springForwardDate.plusDays(1).atStartOfDay(londonZone).toInstant().toEpochMilli()
+
+        // Verify day duration is exactly 23 hours (82_800_000ms), not 24 hours
+        assertEquals(23 * 3600_000L, dayEndLondon - dayStartLondon)
+
+        val ev = AppUsageEvent("com.app.uk", dayStartLondon + 3600_000L, dayStartLondon + 7200_000L, 3600_000L)
+        fakeProvider.events = listOf(ev)
+
+        val result = useCase(
+            userId = testUserId,
+            targetDayMillis = dayStartLondon + 10_000L,
+            zoneId = londonZone
+        )
+
+        assertTrue(result is Result.Success)
+        val data = (result as Result.Success).data
+
+        assertEquals(dayStartLondon, data.targetDayStartMs)
+        assertEquals(dayEndLondon, data.targetDayEndMs)
+        assertEquals(3600_000L, data.totalObservedDurationMs)
+    }
+
+    // =========================================================================
     // Test Doubles
     // =========================================================================
 

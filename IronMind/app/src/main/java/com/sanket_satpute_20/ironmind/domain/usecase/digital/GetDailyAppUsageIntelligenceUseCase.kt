@@ -1,7 +1,9 @@
 package com.sanket_satpute_20.ironmind.domain.usecase.digital
 
 import com.sanket_satpute_20.ironmind.domain.common.Clock
+import com.sanket_satpute_20.ironmind.domain.common.IntervalMath
 import com.sanket_satpute_20.ironmind.domain.common.Result
+import com.sanket_satpute_20.ironmind.domain.engine.AppUsageIntervalAnalyzer
 import com.sanket_satpute_20.ironmind.domain.model.context.EpistemicAuthority
 import com.sanket_satpute_20.ironmind.domain.model.context.SourceAvailability
 import com.sanket_satpute_20.ironmind.domain.model.context.UsagePermissionStatus
@@ -149,51 +151,88 @@ class GetDailyAppUsageIntelligenceUseCase(
             )
         }
 
-        // 4. Group and compute per-app usage metrics
+        // 4. Group and compute per-app usage metrics using authoritative union interval mathematics
         val grouped = events.groupBy { it.packageName }
         val appItems = mutableListOf<AppUsageItem>()
-        var totalDayDurationMs = 0L
         var latestEventEndTime: Long? = null
 
         for ((pkg, pkgEvents) in grouped) {
-            var pkgDuration = 0L
-            var firstObserved: Long? = null
-            var lastObserved: Long? = null
+            val validPkgIntervals = mutableListOf<IntervalMath.Interval>()
+            var pkgFirstObserved: Long? = null
+            var pkgLastObserved: Long? = null
 
-            for (ev in pkgEvents) {
-                // Clamping to target day window boundaries for strict mathematical accuracy
-                val clampedStart = maxOf(ev.startTimeMillis, windowStartMs)
-                val clampedEnd = minOf(ev.endTimeMillis, windowEndMs)
-                val duration = (clampedEnd - clampedStart).coerceAtLeast(0L)
-
-                pkgDuration += duration
-
-                if (firstObserved == null || ev.startTimeMillis < firstObserved) {
-                    firstObserved = ev.startTimeMillis
+            // Semantic deduplication per package: distinctBy (packageName, startTimeMillis, rawEndMs)
+            val deduplicatedEvents = pkgEvents
+                .mapNotNull { ev ->
+                    val pkgName = ev.packageName.trim()
+                    if (pkgName.isEmpty() || ev.startTimeMillis < 0L) return@mapNotNull null
+                    val rawEnd = if (ev.endTimeMillis > ev.startTimeMillis) {
+                        ev.endTimeMillis
+                    } else if (ev.totalDurationMillis > 0L) {
+                        IntervalMath.safeRawEndMs(ev.startTimeMillis, ev.totalDurationMillis)
+                    } else null
+                    rawEnd?.let { endMs -> Triple(pkgName, ev.startTimeMillis, endMs) }
                 }
-                if (lastObserved == null || ev.endTimeMillis > lastObserved) {
-                    lastObserved = ev.endTimeMillis
+                .distinct()
+
+            for ((_, rawStart, rawEnd) in deduplicatedEvents) {
+                val clipped = IntervalMath.clipInterval(rawStart, rawEnd, windowStartMs, windowEndMs) ?: continue
+                validPkgIntervals.add(clipped)
+                if (pkgFirstObserved == null || clipped.startMs < pkgFirstObserved) {
+                    pkgFirstObserved = clipped.startMs
+                }
+                if (pkgLastObserved == null || clipped.endMs > pkgLastObserved) {
+                    pkgLastObserved = clipped.endMs
                 }
             }
 
-            if (lastObserved != null && (latestEventEndTime == null || lastObserved > latestEventEndTime)) {
-                latestEventEndTime = lastObserved
-            }
+            if (validPkgIntervals.isEmpty()) continue
 
-            totalDayDurationMs += pkgDuration
+            // Union overlapping and adjacent intervals so no millisecond within this package is double-counted
+            val mergedIntervals = IntervalMath.mergeIntervals(validPkgIntervals)
+            val pkgDuration = mergedIntervals.sumOf { it.durationMs }
+            if (pkgDuration <= 0L) continue
+
+            if (pkgLastObserved != null && (latestEventEndTime == null || pkgLastObserved > latestEventEndTime)) {
+                latestEventEndTime = pkgLastObserved
+            }
 
             appItems.add(
                 AppUsageItem(
                     packageName = pkg,
                     appName = null,
                     totalDurationMs = pkgDuration,
-                    sessionCount = pkgEvents.size,
-                    firstObservedAt = firstObserved,
-                    lastObservedAt = lastObserved,
+                    sessionCount = validPkgIntervals.size,
+                    firstObservedAt = pkgFirstObserved,
+                    lastObservedAt = pkgLastObserved,
                     epistemicAuthority = EpistemicAuthority.SYSTEM_RECORDED_OBSERVATION
                 )
             )
         }
+
+        if (appItems.isEmpty()) {
+            return Result.Success(
+                DailyAppUsageIntelligence(
+                    userId = userId,
+                    targetDayStartMs = windowStartMs,
+                    targetDayEndMs = windowEndMs,
+                    permissionStatus = UsagePermissionStatus.GRANTED,
+                    availability = SourceAvailability.EMPTY_NO_DATA,
+                    totalObservedDurationMs = 0L, // Valid observed 0ms because permission was granted
+                    totalSessionsCount = 0,
+                    appUsages = emptyList(),
+                    mostUsedApps = emptyList(),
+                    comparisonWithPreviousDay = null,
+                    dataFreshnessMs = null,
+                    isFresh = true,
+                    isRealTime = false,
+                    notes = "No app usage events observed for this day window."
+                )
+            )
+        }
+
+        val totalDayDurationMs = appItems.sumOf { it.totalDurationMs }
+        val totalSessionsCount = appItems.sumOf { it.sessionCount }
 
         // Deterministic sort: totalDurationMs descending, then packageName ascending
         val sortedAppItems = appItems
@@ -211,19 +250,49 @@ class GetDailyAppUsageIntelligenceUseCase(
         val mostUsed = sortedAppItems.take(topAppsLimit)
 
         // 5. Previous day comparison (only when prior baseline data exists)
-        val dayWindowDuration = windowEndMs - windowStartMs
-        val prevDayStartMs = windowStartMs - dayWindowDuration
-        val prevDayEndMs = windowStartMs
+        val (prevDayStartMs, prevDayEndMs) = if (customWindowStartMs != null && customWindowEndMs != null) {
+            val dayWindowDuration = windowEndMs - windowStartMs
+            Pair(windowStartMs - dayWindowDuration, windowStartMs)
+        } else {
+            val localDate = Instant.ofEpochMilli(targetDayMillis).atZone(zoneId).toLocalDate()
+            val prevLocalDate = localDate.minusDays(1)
+            val prevStart = prevLocalDate.atStartOfDay(zoneId).toInstant().toEpochMilli()
+            Pair(prevStart, windowStartMs)
+        }
 
         val previousDayEvents = collectEventsForWindow(userId, prevDayStartMs, prevDayEndMs)
-        val comparison = if (previousDayEvents.isNotEmpty()) {
-            var prevTotalMs = 0L
-            for (ev in previousDayEvents) {
-                val clampedStart = maxOf(ev.startTimeMillis, prevDayStartMs)
-                val clampedEnd = minOf(ev.endTimeMillis, prevDayEndMs)
-                prevTotalMs += (clampedEnd - clampedStart).coerceAtLeast(0L)
+        val prevGrouped = previousDayEvents.groupBy { it.packageName }
+        var prevTotalMs = 0L
+        var hasPrevValidData = false
+
+        for ((_, prevEvents) in prevGrouped) {
+            val deduplicated = prevEvents
+                .mapNotNull { ev ->
+                    val pkgName = ev.packageName.trim()
+                    if (pkgName.isEmpty() || ev.startTimeMillis < 0L) return@mapNotNull null
+                    val rawEnd = if (ev.endTimeMillis > ev.startTimeMillis) {
+                        ev.endTimeMillis
+                    } else if (ev.totalDurationMillis > 0L) {
+                        IntervalMath.safeRawEndMs(ev.startTimeMillis, ev.totalDurationMillis)
+                    } else null
+                    rawEnd?.let { endMs -> Triple(pkgName, ev.startTimeMillis, endMs) }
+                }
+                .distinct()
+
+            val clippedIntervals = deduplicated.mapNotNull { (_, rawStart, rawEnd) ->
+                IntervalMath.clipInterval(rawStart, rawEnd, prevDayStartMs, prevDayEndMs)
             }
 
+            if (clippedIntervals.isNotEmpty()) {
+                val unionDuration = IntervalMath.unionDurationMs(clippedIntervals)
+                if (unionDuration > 0L) {
+                    hasPrevValidData = true
+                    prevTotalMs += unionDuration
+                }
+            }
+        }
+
+        val comparison = if (hasPrevValidData) {
             val deltaMs = totalDayDurationMs - prevTotalMs
             val percentageDelta = if (prevTotalMs > 0L) {
                 ((deltaMs.toFloat()) / prevTotalMs.toFloat()) * 100f
@@ -253,7 +322,7 @@ class GetDailyAppUsageIntelligenceUseCase(
                 permissionStatus = UsagePermissionStatus.GRANTED,
                 availability = SourceAvailability.AVAILABLE,
                 totalObservedDurationMs = totalDayDurationMs,
-                totalSessionsCount = events.size,
+                totalSessionsCount = totalSessionsCount,
                 appUsages = sortedAppItems,
                 mostUsedApps = mostUsed,
                 comparisonWithPreviousDay = comparison,
@@ -292,13 +361,14 @@ class GetDailyAppUsageIntelligenceUseCase(
             if (obsResult is Result.Success) {
                 for (obs in obsResult.data) {
                     if (obs.userId != userId) continue
-                    val durationStr = obs.context.removePrefix("duration_ms=")
-                    val duration = durationStr.toLongOrNull() ?: 0L
+                    val duration = AppUsageIntervalAnalyzer.parseDurationMs(obs.context) ?: continue
+                    if (duration <= 0L) continue
+                    val rawEnd = IntervalMath.safeRawEndMs(obs.occurredAt, duration) ?: continue
                     resultList.add(
                         AppUsageEvent(
                             packageName = obs.value,
                             startTimeMillis = obs.occurredAt,
-                            endTimeMillis = obs.occurredAt + duration,
+                            endTimeMillis = rawEnd,
                             totalDurationMillis = duration
                         )
                     )
