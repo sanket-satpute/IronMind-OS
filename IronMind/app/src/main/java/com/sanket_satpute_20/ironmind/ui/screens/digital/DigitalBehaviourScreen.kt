@@ -45,6 +45,7 @@ import com.sanket_satpute_20.ironmind.domain.model.context.SourceAvailability
 import com.sanket_satpute_20.ironmind.domain.model.context.SourceFreshness
 import com.sanket_satpute_20.ironmind.domain.model.digital.AppUsageItem
 import com.sanket_satpute_20.ironmind.domain.model.digital.DailyAppUsageIntelligence
+import com.sanket_satpute_20.ironmind.domain.model.digital.UsageSourceProvenance
 import com.sanket_satpute_20.ironmind.domain.model.insight.InsightCategory
 import com.sanket_satpute_20.ironmind.domain.model.insight.InsightReviewStatus
 import com.sanket_satpute_20.ironmind.domain.model.insight.PersonalInsight
@@ -538,7 +539,10 @@ private fun DailyUsageSummaryCard(
             // Availability status chip / text
             Text(
                 text = when (availability) {
-                    SourceAvailability.AVAILABLE -> "Observed screen time"
+                    SourceAvailability.AVAILABLE -> when (dailyUsage?.sourceProvenance) {
+                        UsageSourceProvenance.ROOM_PERSISTED_OBSERVATIONS -> "Cumulative app usage (persisted history)"
+                        else -> "Cumulative app usage"
+                    }
                     SourceAvailability.EMPTY_NO_DATA -> "No device activity recorded for this date"
                     SourceAvailability.PARTIAL_HISTORY -> "Partial observation history"
                     SourceAvailability.PERMISSION_DENIED -> "Permission denied: Duration unavailable"

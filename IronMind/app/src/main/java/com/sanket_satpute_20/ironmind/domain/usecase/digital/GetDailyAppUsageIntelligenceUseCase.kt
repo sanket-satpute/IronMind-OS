@@ -10,9 +10,12 @@ import com.sanket_satpute_20.ironmind.domain.model.context.UsagePermissionStatus
 import com.sanket_satpute_20.ironmind.domain.model.digital.AppUsageItem
 import com.sanket_satpute_20.ironmind.domain.model.digital.DailyAppUsageIntelligence
 import com.sanket_satpute_20.ironmind.domain.model.digital.DailyUsageComparison
+import com.sanket_satpute_20.ironmind.domain.model.digital.UsageSourceProvenance
 import com.sanket_satpute_20.ironmind.domain.model.observation.ObservationType
 import com.sanket_satpute_20.ironmind.domain.provider.AppUsageEvent
 import com.sanket_satpute_20.ironmind.domain.provider.AppUsageObservationProvider
+import com.sanket_satpute_20.ironmind.domain.provider.AppUsageProviderResult
+import com.sanket_satpute_20.ironmind.domain.repository.AppUsageCheckpointStore
 import com.sanket_satpute_20.ironmind.domain.repository.AppUsageObservationSettingsRepository
 import com.sanket_satpute_20.ironmind.domain.repository.ObservationRepository
 import java.time.Instant
@@ -35,11 +38,32 @@ class GetDailyAppUsageIntelligenceUseCase(
     private val appUsageObservationProvider: AppUsageObservationProvider? = null,
     private val appUsageSettingsRepository: AppUsageObservationSettingsRepository? = null,
     private val observationRepository: ObservationRepository? = null,
-    private val clock: Clock
+    private val clock: Clock,
+    private val checkpointStore: AppUsageCheckpointStore? = null
 ) {
     companion object {
         const val DEFAULT_TOP_APPS_LIMIT = 5
         const val STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000L // 24 hours
+        private const val MIN_FULL_DAY_WINDOW_MS = 20 * 60 * 60 * 1000L // 20 hours (accommodates 23h DST spring-forward)
+    }
+
+    private sealed interface WindowCollectionResult {
+        data class Success(
+            val events: List<AppUsageEvent>,
+            val provenance: UsageSourceProvenance,
+            val isPartial: Boolean = false
+        ) : WindowCollectionResult
+
+        data class EmptyConfirmed(
+            val provenance: UsageSourceProvenance
+        ) : WindowCollectionResult
+
+        data object PermissionDenied : WindowCollectionResult
+        data object ProviderUnavailable : WindowCollectionResult
+        data class Failure(
+            val diagnosticCategory: String,
+            val cause: Throwable? = null
+        ) : WindowCollectionResult
     }
 
     suspend operator fun invoke(
@@ -54,16 +78,17 @@ class GetDailyAppUsageIntelligenceUseCase(
             return Result.Failure(IllegalArgumentException("userId cannot be blank"))
         }
 
-        val (windowStartMs, windowEndMs) = if (customWindowStartMs != null && customWindowEndMs != null) {
+        val (windowStartMs, windowEndMs, isDocumentedPartialWindow) = if (customWindowStartMs != null && customWindowEndMs != null) {
             if (customWindowStartMs >= customWindowEndMs) {
                 return Result.Failure(IllegalArgumentException("customWindowStartMs must be less than customWindowEndMs"))
             }
-            Pair(customWindowStartMs, customWindowEndMs)
+            val isPartial = (customWindowEndMs - customWindowStartMs) < MIN_FULL_DAY_WINDOW_MS
+            Triple(customWindowStartMs, customWindowEndMs, isPartial)
         } else {
             val localDate = Instant.ofEpochMilli(targetDayMillis).atZone(zoneId).toLocalDate()
             val startOfDay = localDate.atStartOfDay(zoneId).toInstant().toEpochMilli()
             val endOfDay = localDate.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
-            Pair(startOfDay, endOfDay)
+            Triple(startOfDay, endOfDay, false)
         }
 
         val now = clock.currentTimeMillis()
@@ -89,69 +114,111 @@ class GetDailyAppUsageIntelligenceUseCase(
                     dataFreshnessMs = null,
                     isFresh = false,
                     isRealTime = false,
+                    sourceProvenance = UsageSourceProvenance.NONE,
                     notes = "App usage observation is disabled in user settings."
                 )
             )
         }
 
-        // 2. Platform Permission check: PACKAGE_USAGE_STATS
-        val isPermissionGranted = appUsageObservationProvider?.isPermissionGranted() ?: false
-        if (!isPermissionGranted) {
-            val availability = if (appUsageObservationProvider == null) {
-                SourceAvailability.UNAVAILABLE_HARDWARE
-            } else {
-                SourceAvailability.PERMISSION_DENIED
-            }
-            val note = if (appUsageObservationProvider == null) {
-                "UsageStatsManager is not available on this device."
-            } else {
-                "Usage Access permission (PACKAGE_USAGE_STATS) is not granted in Android system settings."
-            }
-            return Result.Success(
-                DailyAppUsageIntelligence(
-                    userId = userId,
-                    targetDayStartMs = windowStartMs,
-                    targetDayEndMs = windowEndMs,
-                    permissionStatus = UsagePermissionStatus.DENIED,
-                    availability = availability,
-                    totalObservedDurationMs = null, // Strictly null, NEVER zero
-                    totalSessionsCount = null,
-                    appUsages = emptyList(),
-                    mostUsedApps = emptyList(),
-                    comparisonWithPreviousDay = null,
-                    dataFreshnessMs = null,
-                    isFresh = false,
-                    isRealTime = false,
-                    notes = note
+        // 2. Collect and resolve usage events for the target day window
+        val collectionResult = collectEventsForWindow(
+            userId = userId,
+            startTimeMs = windowStartMs,
+            endTimeMs = windowEndMs,
+            isDocumentedPartialWindow = isDocumentedPartialWindow
+        )
+
+        val (events, provenance, isPartialCoverage) = when (collectionResult) {
+            is WindowCollectionResult.PermissionDenied -> {
+                return Result.Success(
+                    DailyAppUsageIntelligence(
+                        userId = userId,
+                        targetDayStartMs = windowStartMs,
+                        targetDayEndMs = windowEndMs,
+                        permissionStatus = UsagePermissionStatus.DENIED,
+                        availability = SourceAvailability.PERMISSION_DENIED,
+                        totalObservedDurationMs = null, // Strictly null, NEVER zero
+                        totalSessionsCount = null,
+                        appUsages = emptyList(),
+                        mostUsedApps = emptyList(),
+                        comparisonWithPreviousDay = null,
+                        dataFreshnessMs = null,
+                        isFresh = false,
+                        isRealTime = false,
+                        sourceProvenance = UsageSourceProvenance.NONE,
+                        notes = "Usage Access permission (PACKAGE_USAGE_STATS) is not granted in Android system settings."
+                    )
                 )
-            )
+            }
+            is WindowCollectionResult.ProviderUnavailable -> {
+                return Result.Success(
+                    DailyAppUsageIntelligence(
+                        userId = userId,
+                        targetDayStartMs = windowStartMs,
+                        targetDayEndMs = windowEndMs,
+                        permissionStatus = UsagePermissionStatus.UNAVAILABLE,
+                        availability = SourceAvailability.UNAVAILABLE_HARDWARE,
+                        totalObservedDurationMs = null, // Strictly null, NEVER zero
+                        totalSessionsCount = null,
+                        appUsages = emptyList(),
+                        mostUsedApps = emptyList(),
+                        comparisonWithPreviousDay = null,
+                        dataFreshnessMs = null,
+                        isFresh = false,
+                        isRealTime = false,
+                        sourceProvenance = UsageSourceProvenance.NONE,
+                        notes = "UsageStatsManager is not available on this device."
+                    )
+                )
+            }
+            is WindowCollectionResult.Failure -> {
+                return Result.Success(
+                    DailyAppUsageIntelligence(
+                        userId = userId,
+                        targetDayStartMs = windowStartMs,
+                        targetDayEndMs = windowEndMs,
+                        permissionStatus = UsagePermissionStatus.GRANTED,
+                        availability = SourceAvailability.UNAVAILABLE_HARDWARE,
+                        totalObservedDurationMs = null, // Strictly null, NEVER zero on query failure
+                        totalSessionsCount = null,
+                        appUsages = emptyList(),
+                        mostUsedApps = emptyList(),
+                        comparisonWithPreviousDay = null,
+                        dataFreshnessMs = null,
+                        isFresh = false,
+                        isRealTime = false,
+                        sourceProvenance = UsageSourceProvenance.NONE,
+                        notes = "App usage query failed: ${collectionResult.diagnosticCategory}"
+                    )
+                )
+            }
+            is WindowCollectionResult.EmptyConfirmed -> {
+                return Result.Success(
+                    DailyAppUsageIntelligence(
+                        userId = userId,
+                        targetDayStartMs = windowStartMs,
+                        targetDayEndMs = windowEndMs,
+                        permissionStatus = UsagePermissionStatus.GRANTED,
+                        availability = SourceAvailability.EMPTY_NO_DATA,
+                        totalObservedDurationMs = 0L, // Valid observed 0ms because permission was granted and query confirmed empty
+                        totalSessionsCount = 0,
+                        appUsages = emptyList(),
+                        mostUsedApps = emptyList(),
+                        comparisonWithPreviousDay = null,
+                        dataFreshnessMs = null,
+                        isFresh = true,
+                        isRealTime = false,
+                        sourceProvenance = collectionResult.provenance,
+                        notes = "No app usage events observed for this day window."
+                    )
+                )
+            }
+            is WindowCollectionResult.Success -> {
+                Triple(collectionResult.events, collectionResult.provenance, collectionResult.isPartial)
+            }
         }
 
-        // 3. Collect usage events for the target day window
-        val events = collectEventsForWindow(userId, windowStartMs, windowEndMs)
-
-        if (events.isEmpty()) {
-            return Result.Success(
-                DailyAppUsageIntelligence(
-                    userId = userId,
-                    targetDayStartMs = windowStartMs,
-                    targetDayEndMs = windowEndMs,
-                    permissionStatus = UsagePermissionStatus.GRANTED,
-                    availability = SourceAvailability.EMPTY_NO_DATA,
-                    totalObservedDurationMs = 0L, // Valid observed 0ms because permission was granted
-                    totalSessionsCount = 0,
-                    appUsages = emptyList(),
-                    mostUsedApps = emptyList(),
-                    comparisonWithPreviousDay = null,
-                    dataFreshnessMs = null,
-                    isFresh = true,
-                    isRealTime = false,
-                    notes = "No app usage events observed for this day window."
-                )
-            )
-        }
-
-        // 4. Group and compute per-app usage metrics using authoritative union interval mathematics
+        // 3. Group and compute per-app usage metrics using authoritative union interval mathematics
         val grouped = events.groupBy { it.packageName }
         val appItems = mutableListOf<AppUsageItem>()
         var latestEventEndTime: Long? = null
@@ -205,7 +272,8 @@ class GetDailyAppUsageIntelligenceUseCase(
                     sessionCount = validPkgIntervals.size,
                     firstObservedAt = pkgFirstObserved,
                     lastObservedAt = pkgLastObserved,
-                    epistemicAuthority = EpistemicAuthority.SYSTEM_RECORDED_OBSERVATION
+                    epistemicAuthority = EpistemicAuthority.SYSTEM_RECORDED_OBSERVATION,
+                    sourceProvenance = provenance
                 )
             )
         }
@@ -226,6 +294,7 @@ class GetDailyAppUsageIntelligenceUseCase(
                     dataFreshnessMs = null,
                     isFresh = true,
                     isRealTime = false,
+                    sourceProvenance = provenance,
                     notes = "No app usage events observed for this day window."
                 )
             )
@@ -249,7 +318,7 @@ class GetDailyAppUsageIntelligenceUseCase(
 
         val mostUsed = sortedAppItems.take(topAppsLimit)
 
-        // 5. Previous day comparison (only when prior baseline data exists)
+        // 4. Previous day comparison (only when prior baseline data exists)
         val (prevDayStartMs, prevDayEndMs) = if (customWindowStartMs != null && customWindowEndMs != null) {
             val dayWindowDuration = windowEndMs - windowStartMs
             Pair(windowStartMs - dayWindowDuration, windowStartMs)
@@ -260,59 +329,82 @@ class GetDailyAppUsageIntelligenceUseCase(
             Pair(prevStart, windowStartMs)
         }
 
-        val previousDayEvents = collectEventsForWindow(userId, prevDayStartMs, prevDayEndMs)
-        val prevGrouped = previousDayEvents.groupBy { it.packageName }
-        var prevTotalMs = 0L
-        var hasPrevValidData = false
+        val previousDayResult = collectEventsForWindow(
+            userId = userId,
+            startTimeMs = prevDayStartMs,
+            endTimeMs = prevDayEndMs,
+            isDocumentedPartialWindow = isDocumentedPartialWindow
+        )
 
-        for ((_, prevEvents) in prevGrouped) {
-            val deduplicated = prevEvents
-                .mapNotNull { ev ->
-                    val pkgName = ev.packageName.trim()
-                    if (pkgName.isEmpty() || ev.startTimeMillis < 0L) return@mapNotNull null
-                    val rawEnd = if (ev.endTimeMillis > ev.startTimeMillis) {
-                        ev.endTimeMillis
-                    } else if (ev.totalDurationMillis > 0L) {
-                        IntervalMath.safeRawEndMs(ev.startTimeMillis, ev.totalDurationMillis)
-                    } else null
-                    rawEnd?.let { endMs -> Triple(pkgName, ev.startTimeMillis, endMs) }
+        val comparison = if (previousDayResult is WindowCollectionResult.Success) {
+            val previousDayEvents = previousDayResult.events
+            val prevGrouped = previousDayEvents.groupBy { it.packageName }
+            var prevTotalMs = 0L
+            var hasPrevValidData = false
+
+            for ((_, prevEvents) in prevGrouped) {
+                val deduplicated = prevEvents
+                    .mapNotNull { ev ->
+                        val pkgName = ev.packageName.trim()
+                        if (pkgName.isEmpty() || ev.startTimeMillis < 0L) return@mapNotNull null
+                        val rawEnd = if (ev.endTimeMillis > ev.startTimeMillis) {
+                            ev.endTimeMillis
+                        } else if (ev.totalDurationMillis > 0L) {
+                            IntervalMath.safeRawEndMs(ev.startTimeMillis, ev.totalDurationMillis)
+                        } else null
+                        rawEnd?.let { endMs -> Triple(pkgName, ev.startTimeMillis, endMs) }
+                    }
+                    .distinct()
+
+                val clippedIntervals = deduplicated.mapNotNull { (_, rawStart, rawEnd) ->
+                    IntervalMath.clipInterval(rawStart, rawEnd, prevDayStartMs, prevDayEndMs)
                 }
-                .distinct()
 
-            val clippedIntervals = deduplicated.mapNotNull { (_, rawStart, rawEnd) ->
-                IntervalMath.clipInterval(rawStart, rawEnd, prevDayStartMs, prevDayEndMs)
+                if (clippedIntervals.isNotEmpty()) {
+                    val unionDuration = IntervalMath.unionDurationMs(clippedIntervals)
+                    if (unionDuration > 0L) {
+                        hasPrevValidData = true
+                        prevTotalMs += unionDuration
+                    }
+                }
             }
 
-            if (clippedIntervals.isNotEmpty()) {
-                val unionDuration = IntervalMath.unionDurationMs(clippedIntervals)
-                if (unionDuration > 0L) {
-                    hasPrevValidData = true
-                    prevTotalMs += unionDuration
-                }
+            if (hasPrevValidData) {
+                val deltaMs = totalDayDurationMs - prevTotalMs
+                val percentageDelta = if (prevTotalMs > 0L) {
+                    ((deltaMs.toFloat()) / prevTotalMs.toFloat()) * 100f
+                } else null
+
+                val note = formatComparisonNote(deltaMs, percentageDelta)
+
+                DailyUsageComparison(
+                    previousDayDurationMs = prevTotalMs,
+                    currentDayDurationMs = totalDayDurationMs,
+                    durationDeltaMs = deltaMs,
+                    percentageDelta = percentageDelta,
+                    comparisonNote = note
+                )
+            } else {
+                null
             }
-        }
-
-        val comparison = if (hasPrevValidData) {
-            val deltaMs = totalDayDurationMs - prevTotalMs
-            val percentageDelta = if (prevTotalMs > 0L) {
-                ((deltaMs.toFloat()) / prevTotalMs.toFloat()) * 100f
-            } else null
-
-            val note = formatComparisonNote(deltaMs, percentageDelta)
-
-            DailyUsageComparison(
-                previousDayDurationMs = prevTotalMs,
-                currentDayDurationMs = totalDayDurationMs,
-                durationDeltaMs = deltaMs,
-                percentageDelta = percentageDelta,
-                comparisonNote = note
-            )
         } else {
             null // Baseline missing or empty: do not fabricate false comparison
         }
 
         val freshnessMs = latestEventEndTime?.let { (now - it).coerceAtLeast(0L) }
         val isFresh = freshnessMs == null || freshnessMs <= STALE_THRESHOLD_MS
+        val isRealTime = provenance == UsageSourceProvenance.LIVE_USAGE_STATS
+        val availability = if (isPartialCoverage) {
+            SourceAvailability.PARTIAL_HISTORY
+        } else {
+            SourceAvailability.AVAILABLE
+        }
+        val note = when (provenance) {
+            UsageSourceProvenance.ROOM_PERSISTED_OBSERVATIONS ->
+                "Retrieved ${sortedAppItems.size} applications from persisted observations over ${formatDuration(totalDayDurationMs)}."
+            else ->
+                "Observed ${sortedAppItems.size} applications over ${formatDuration(totalDayDurationMs)}."
+        }
 
         return Result.Success(
             DailyAppUsageIntelligence(
@@ -320,7 +412,7 @@ class GetDailyAppUsageIntelligenceUseCase(
                 targetDayStartMs = windowStartMs,
                 targetDayEndMs = windowEndMs,
                 permissionStatus = UsagePermissionStatus.GRANTED,
-                availability = SourceAvailability.AVAILABLE,
+                availability = availability,
                 totalObservedDurationMs = totalDayDurationMs,
                 totalSessionsCount = totalSessionsCount,
                 appUsages = sortedAppItems,
@@ -328,8 +420,9 @@ class GetDailyAppUsageIntelligenceUseCase(
                 comparisonWithPreviousDay = comparison,
                 dataFreshnessMs = freshnessMs,
                 isFresh = isFresh,
-                isRealTime = false,
-                notes = "Observed ${sortedAppItems.size} applications over ${formatDuration(totalDayDurationMs)}."
+                isRealTime = isRealTime,
+                sourceProvenance = provenance,
+                notes = note
             )
         )
     }
@@ -337,34 +430,117 @@ class GetDailyAppUsageIntelligenceUseCase(
     private suspend fun collectEventsForWindow(
         userId: String,
         startTimeMs: Long,
-        endTimeMs: Long
-    ): List<AppUsageEvent> {
-        val resultList = mutableListOf<AppUsageEvent>()
-
+        endTimeMs: Long,
+        isDocumentedPartialWindow: Boolean = false
+    ): WindowCollectionResult {
         // Source A: On-demand UsageStatsManager query via AppUsageObservationProvider
-        if (appUsageObservationProvider != null && appUsageObservationProvider.isPermissionGranted()) {
-            val providerEvents = appUsageObservationProvider.getAppUsageSince(startTimeMs)
-            val windowEvents = providerEvents.filter {
-                it.startTimeMillis < endTimeMs && it.endTimeMillis >= startTimeMs
+        if (appUsageObservationProvider == null) {
+            val roomResult = fetchRoomEvents(userId, startTimeMs, endTimeMs)
+            return if (roomResult is Result.Success && roomResult.data.isNotEmpty()) {
+                val isPartial = isDocumentedPartialWindow || isRoomCheckpointPartial(userId, startTimeMs, endTimeMs)
+                WindowCollectionResult.Success(
+                    events = roomResult.data,
+                    provenance = UsageSourceProvenance.ROOM_PERSISTED_OBSERVATIONS,
+                    isPartial = isPartial
+                )
+            } else {
+                WindowCollectionResult.ProviderUnavailable
             }
-            resultList.addAll(windowEvents)
         }
 
-        // Source B: ObservationRepository fallback if on-demand query returned nothing (e.g., historical day)
-        if (resultList.isEmpty() && observationRepository != null) {
-            val obsResult = observationRepository.getObservationsForTimeWindow(
-                userId = userId,
-                type = ObservationType.APP_USAGE_SESSION,
-                startTimeMs = startTimeMs,
-                endTimeMs = endTimeMs
-            )
-            if (obsResult is Result.Success) {
+        if (!appUsageObservationProvider.isPermissionGranted()) {
+            return WindowCollectionResult.PermissionDenied
+        }
+
+        val providerResult = appUsageObservationProvider.queryAppUsage(startTimeMs, endTimeMs)
+        return when (providerResult) {
+            is AppUsageProviderResult.PermissionDenied -> {
+                WindowCollectionResult.PermissionDenied
+            }
+            is AppUsageProviderResult.ProviderUnavailable -> {
+                val roomResult = fetchRoomEvents(userId, startTimeMs, endTimeMs)
+                if (roomResult is Result.Success && roomResult.data.isNotEmpty()) {
+                    val isPartial = isDocumentedPartialWindow || isRoomCheckpointPartial(userId, startTimeMs, endTimeMs)
+                    WindowCollectionResult.Success(
+                        events = roomResult.data,
+                        provenance = UsageSourceProvenance.ROOM_PERSISTED_OBSERVATIONS,
+                        isPartial = isPartial
+                    )
+                } else {
+                    WindowCollectionResult.ProviderUnavailable
+                }
+            }
+            is AppUsageProviderResult.Failure -> {
+                // Provider query failed with an exception: check if Room fallback has records
+                val roomResult = fetchRoomEvents(userId, startTimeMs, endTimeMs)
+                if (roomResult is Result.Success && roomResult.data.isNotEmpty()) {
+                    val isPartial = isDocumentedPartialWindow || isRoomCheckpointPartial(userId, startTimeMs, endTimeMs)
+                    WindowCollectionResult.Success(
+                        events = roomResult.data,
+                        provenance = UsageSourceProvenance.ROOM_PERSISTED_OBSERVATIONS,
+                        isPartial = isPartial
+                    )
+                } else {
+                    // Live query failed and Room has no records: report failure explicitly (never false zero)
+                    WindowCollectionResult.Failure(
+                        diagnosticCategory = providerResult.diagnosticCategory,
+                        cause = providerResult.cause
+                    )
+                }
+            }
+            is AppUsageProviderResult.Success -> {
+                val filtered = providerResult.events.filter {
+                    it.startTimeMillis < endTimeMs && it.endTimeMillis >= startTimeMs
+                }
+                if (filtered.isNotEmpty()) {
+                    val isPartial = isDocumentedPartialWindow || providerResult.isTruncated
+                    WindowCollectionResult.Success(
+                        events = filtered,
+                        provenance = UsageSourceProvenance.LIVE_USAGE_STATS,
+                        isPartial = isPartial
+                    )
+                } else {
+                    // Live query succeeded with zero events. Check Room fallback:
+                    val roomResult = fetchRoomEvents(userId, startTimeMs, endTimeMs)
+                    if (roomResult is Result.Success && roomResult.data.isNotEmpty()) {
+                        val isPartial = isDocumentedPartialWindow || isRoomCheckpointPartial(userId, startTimeMs, endTimeMs)
+                        WindowCollectionResult.Success(
+                            events = roomResult.data,
+                            provenance = UsageSourceProvenance.ROOM_PERSISTED_OBSERVATIONS,
+                            isPartial = isPartial
+                        )
+                    } else {
+                        WindowCollectionResult.EmptyConfirmed(
+                            provenance = UsageSourceProvenance.LIVE_USAGE_STATS
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun fetchRoomEvents(
+        userId: String,
+        startTimeMs: Long,
+        endTimeMs: Long
+    ): Result<List<AppUsageEvent>, Exception> {
+        val repo = observationRepository ?: return Result.Success(emptyList())
+        val obsResult = repo.getObservationsForTimeWindow(
+            userId = userId,
+            type = ObservationType.APP_USAGE_SESSION,
+            startTimeMs = startTimeMs,
+            endTimeMs = endTimeMs
+        )
+        return when (obsResult) {
+            is Result.Failure -> Result.Failure(obsResult.error)
+            is Result.Success -> {
+                val events = mutableListOf<AppUsageEvent>()
                 for (obs in obsResult.data) {
                     if (obs.userId != userId) continue
                     val duration = AppUsageIntervalAnalyzer.parseDurationMs(obs.context) ?: continue
                     if (duration <= 0L) continue
                     val rawEnd = IntervalMath.safeRawEndMs(obs.occurredAt, duration) ?: continue
-                    resultList.add(
+                    events.add(
                         AppUsageEvent(
                             packageName = obs.value,
                             startTimeMillis = obs.occurredAt,
@@ -373,10 +549,19 @@ class GetDailyAppUsageIntelligenceUseCase(
                         )
                     )
                 }
+                Result.Success(events)
             }
         }
+    }
 
-        return resultList
+    private suspend fun isRoomCheckpointPartial(
+        userId: String,
+        startTimeMs: Long,
+        endTimeMs: Long
+    ): Boolean {
+        val store = checkpointStore ?: return false
+        val cp = (store.getCheckpoint(userId) as? Result.Success)?.data ?: return false
+        return cp.lastCollectedIntervalEndMs in (startTimeMs + 1) until endTimeMs
     }
 
     private fun formatComparisonNote(deltaMs: Long, percentageDelta: Float?): String {

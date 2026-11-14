@@ -29,6 +29,28 @@ data class AppUsageReconstructionResult(
 )
 
 /**
+ * Explicit result contract for app usage queries, distinguishing success, empty results,
+ * permission status, hardware/provider availability, and query failure.
+ */
+sealed interface AppUsageProviderResult {
+    data class Success(
+        val events: List<AppUsageEvent>,
+        val activeSession: ActiveForegroundSession? = null,
+        val isTruncated: Boolean = false
+    ) : AppUsageProviderResult {
+        val hasEvents: Boolean get() = events.isNotEmpty()
+    }
+
+    data object PermissionDenied : AppUsageProviderResult
+    data object ProviderUnavailable : AppUsageProviderResult
+
+    data class Failure(
+        val diagnosticCategory: String = "USAGE_STATS_QUERY_FAILED",
+        val cause: Throwable? = null
+    ) : AppUsageProviderResult
+}
+
+/**
  * Abstraction over the Android UsageStatsManager.
  * Hides the platform dependency from the domain layer.
  */
@@ -60,5 +82,31 @@ interface AppUsageObservationProvider {
             it.startTimeMillis < toTimeMillis && it.endTimeMillis >= fromTimeMillis
         }
         return AppUsageReconstructionResult(events, null)
+    }
+
+    /**
+     * Explicit query contract returning [AppUsageProviderResult].
+     * Distinguishes success (with or without events), permission denial, provider unreachability,
+     * and query failure.
+     */
+    fun queryAppUsage(
+        fromTimeMillis: Long,
+        toTimeMillis: Long,
+        initialActiveSession: ActiveForegroundSession? = null
+    ): AppUsageProviderResult {
+        if (!isPermissionGranted()) {
+            return AppUsageProviderResult.PermissionDenied
+        }
+        return try {
+            val events = getAppUsageSince(fromTimeMillis).filter {
+                it.startTimeMillis < toTimeMillis && it.endTimeMillis >= fromTimeMillis
+            }
+            AppUsageProviderResult.Success(events, null)
+        } catch (e: Exception) {
+            AppUsageProviderResult.Failure(
+                diagnosticCategory = "QUERY_EXECUTION_FAILED",
+                cause = e
+            )
+        }
     }
 }

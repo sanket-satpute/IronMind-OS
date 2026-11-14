@@ -530,7 +530,8 @@ class DigitalBehaviourViewModel(
                     appUsageObservationProvider = container.appUsageObservationProvider,
                     appUsageSettingsRepository = container.appUsageObservationSettingsRepository,
                     observationRepository = container.observationRepository,
-                    clock = container.clock
+                    clock = container.clock,
+                    checkpointStore = container.appUsageCheckpointStore
                 )
                 val appNameResolver: (String) -> String? = { pkg ->
                     try {

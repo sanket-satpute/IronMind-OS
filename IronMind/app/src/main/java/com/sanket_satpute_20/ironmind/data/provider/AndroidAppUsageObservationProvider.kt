@@ -8,6 +8,7 @@ import android.os.Process
 import com.sanket_satpute_20.ironmind.domain.provider.ActiveForegroundSession
 import com.sanket_satpute_20.ironmind.domain.provider.AppUsageEvent
 import com.sanket_satpute_20.ironmind.domain.provider.AppUsageObservationProvider
+import com.sanket_satpute_20.ironmind.domain.provider.AppUsageProviderResult
 import com.sanket_satpute_20.ironmind.domain.provider.AppUsageReconstructionResult
 
 /**
@@ -44,11 +45,10 @@ class AndroidAppUsageObservationProvider(
     }
 
     override fun getAppUsageSince(fromTimeMillis: Long): List<AppUsageEvent> {
-        return getAppUsageBetween(
-            fromTimeMillis = fromTimeMillis,
-            toTimeMillis = System.currentTimeMillis(),
-            initialActiveSession = null
-        ).events
+        return when (val result = queryAppUsage(fromTimeMillis, System.currentTimeMillis(), null)) {
+            is AppUsageProviderResult.Success -> result.events
+            else -> emptyList()
+        }
     }
 
     override fun getAppUsageBetween(
@@ -56,18 +56,48 @@ class AndroidAppUsageObservationProvider(
         toTimeMillis: Long,
         initialActiveSession: ActiveForegroundSession?
     ): AppUsageReconstructionResult {
+        return when (val result = queryAppUsage(fromTimeMillis, toTimeMillis, initialActiveSession)) {
+            is AppUsageProviderResult.Success -> AppUsageReconstructionResult(
+                events = result.events,
+                activeSession = result.activeSession
+            )
+            else -> AppUsageReconstructionResult(emptyList(), initialActiveSession)
+        }
+    }
+
+    override fun queryAppUsage(
+        fromTimeMillis: Long,
+        toTimeMillis: Long,
+        initialActiveSession: ActiveForegroundSession?
+    ): AppUsageProviderResult {
         if (fromTimeMillis >= toTimeMillis) {
-            return AppUsageReconstructionResult(emptyList(), initialActiveSession)
+            return AppUsageProviderResult.Success(emptyList(), initialActiveSession)
         }
 
         if (!isPermissionGranted()) {
             println("IronMindLifecycle [AppUsageObservation] [SKIPPED] reason=permission_not_granted")
-            return AppUsageReconstructionResult(emptyList(), initialActiveSession)
+            return AppUsageProviderResult.PermissionDenied
+        }
+
+        val usageStatsManager = try {
+            context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
+        } catch (e: Exception) {
+            null
+        }
+
+        if (usageStatsManager == null) {
+            println("IronMindLifecycle [AppUsageObservation] [UNAVAILABLE] reason=usage_stats_service_null")
+            return AppUsageProviderResult.ProviderUnavailable
         }
 
         return try {
-            val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
             val usageEvents = usageStatsManager.queryEvents(fromTimeMillis, toTimeMillis)
+            if (usageEvents == null) {
+                return AppUsageProviderResult.Failure(
+                    diagnosticCategory = "USAGE_EVENTS_NULL",
+                    cause = null
+                )
+            }
             val eventList = mutableListOf<AppUsageEvent>()
 
             // Track active foreground sessions.
@@ -147,13 +177,16 @@ class AndroidAppUsageObservationProvider(
             }
 
             println("IronMindLifecycle [AppUsageObservation] [COLLECTED] window=[$fromTimeMillis, $toTimeMillis] count=${eventList.size} active=${nextActiveSession?.packageName}")
-            AppUsageReconstructionResult(
+            AppUsageProviderResult.Success(
                 events = eventList,
                 activeSession = nextActiveSession
             )
         } catch (e: Exception) {
             println("IronMindLifecycle [AppUsageObservation] [COLLECTION_FAILED] error=${e.message}")
-            AppUsageReconstructionResult(emptyList(), initialActiveSession)
+            AppUsageProviderResult.Failure(
+                diagnosticCategory = "USAGE_STATS_QUERY_FAILED",
+                cause = e
+            )
         }
     }
 }

@@ -6,6 +6,7 @@ import com.sanket_satpute_20.ironmind.domain.model.barrier.BarrierHypothesis
 import com.sanket_satpute_20.ironmind.domain.model.barrier.BarrierStatus
 import com.sanket_satpute_20.ironmind.domain.model.context.SourceAvailability
 import com.sanket_satpute_20.ironmind.domain.model.digital.DailyAppUsageIntelligence
+import com.sanket_satpute_20.ironmind.domain.model.digital.UsageSourceProvenance
 import com.sanket_satpute_20.ironmind.domain.model.insight.InsightCategory
 import com.sanket_satpute_20.ironmind.domain.model.insight.PersonalInsight
 import com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern
@@ -35,6 +36,9 @@ data class DigitalBehaviourUiState(
             dailyUsage != null -> dailyUsage.availability
             else -> SourceAvailability.EMPTY_NO_DATA
         }
+
+    val usageProvenance: UsageSourceProvenance
+        get() = dailyUsage?.sourceProvenance ?: UsageSourceProvenance.NONE
 
     val digitalPatterns: List<Pattern>
         get() = patterns.filter { pattern ->

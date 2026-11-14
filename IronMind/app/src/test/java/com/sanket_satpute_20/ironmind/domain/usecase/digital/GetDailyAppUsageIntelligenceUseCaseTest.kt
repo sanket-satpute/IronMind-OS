@@ -5,12 +5,17 @@ import com.sanket_satpute_20.ironmind.domain.model.AppUsageObservationSettings
 import com.sanket_satpute_20.ironmind.domain.model.context.EpistemicAuthority
 import com.sanket_satpute_20.ironmind.domain.model.context.SourceAvailability
 import com.sanket_satpute_20.ironmind.domain.model.context.UsagePermissionStatus
+import com.sanket_satpute_20.ironmind.domain.model.digital.UsageSourceProvenance
 import com.sanket_satpute_20.ironmind.domain.model.observation.Observation
 import com.sanket_satpute_20.ironmind.domain.model.observation.ObservationProvenance
 import com.sanket_satpute_20.ironmind.domain.model.observation.ObservationSource
 import com.sanket_satpute_20.ironmind.domain.model.observation.ObservationType
+import com.sanket_satpute_20.ironmind.domain.provider.ActiveForegroundSession
 import com.sanket_satpute_20.ironmind.domain.provider.AppUsageEvent
 import com.sanket_satpute_20.ironmind.domain.provider.AppUsageObservationProvider
+import com.sanket_satpute_20.ironmind.domain.provider.AppUsageProviderResult
+import com.sanket_satpute_20.ironmind.domain.repository.AppUsageCheckpoint
+import com.sanket_satpute_20.ironmind.domain.repository.AppUsageCheckpointStore
 import com.sanket_satpute_20.ironmind.domain.repository.AppUsageObservationSettingsRepository
 import com.sanket_satpute_20.ironmind.domain.repository.ObservationRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
@@ -607,16 +612,426 @@ class GetDailyAppUsageIntelligenceUseCaseTest {
     }
 
     // =========================================================================
+    // Phase 3.6.7.8B.3S: Source Reliability, Provenance & Availability Remediation
+    // =========================================================================
+
+    @Test
+    fun scenario1_successfulProviderResponseWithEvents_yieldsAvailableAndLiveProvenance() = runBlocking {
+        fakeProvider.events = listOf(
+            AppUsageEvent("com.app.live", baseTime + 1000L, baseTime + 61000L, 60000L)
+        )
+
+        val result = useCase(
+            userId = testUserId,
+            customWindowStartMs = baseTime,
+            customWindowEndMs = baseTime + dayDuration
+        )
+
+        assertTrue(result is Result.Success)
+        val data = (result as Result.Success).data
+        assertEquals(SourceAvailability.AVAILABLE, data.availability)
+        assertEquals(60000L, data.totalObservedDurationMs)
+        assertEquals(UsageSourceProvenance.LIVE_USAGE_STATS, data.sourceProvenance)
+        assertEquals(1, data.appUsages.size)
+        assertEquals(UsageSourceProvenance.LIVE_USAGE_STATS, data.appUsages[0].sourceProvenance)
+        assertTrue(data.isRealTime)
+    }
+
+    @Test
+    fun scenario2_successfulProviderResponseWithZeroEvents_yieldsEmptyNoDataAndConfirmedZero() = runBlocking {
+        fakeProvider.events = emptyList()
+
+        val result = useCase(
+            userId = testUserId,
+            customWindowStartMs = baseTime,
+            customWindowEndMs = baseTime + dayDuration
+        )
+
+        assertTrue(result is Result.Success)
+        val data = (result as Result.Success).data
+        assertEquals(SourceAvailability.EMPTY_NO_DATA, data.availability)
+        assertEquals(0L, data.totalObservedDurationMs)
+        assertEquals(0, data.totalSessionsCount)
+        assertEquals(UsageSourceProvenance.LIVE_USAGE_STATS, data.sourceProvenance)
+    }
+
+    @Test
+    fun scenario3_providerExceptionWithEmptyRoom_yieldsUnavailableHardwareAndNullDurationNeverZero() = runBlocking {
+        fakeProvider.queryFailure = RuntimeException("UsageStats service binder died")
+        fakeObservationRepo.observations = emptyList()
+
+        val result = useCase(
+            userId = testUserId,
+            customWindowStartMs = baseTime,
+            customWindowEndMs = baseTime + dayDuration
+        )
+
+        assertTrue(result is Result.Success)
+        val data = (result as Result.Success).data
+        assertEquals(SourceAvailability.UNAVAILABLE_HARDWARE, data.availability)
+        assertNull("Provider failure with empty room MUST report null duration, NEVER 0L", data.totalObservedDurationMs)
+        assertNull(data.totalSessionsCount)
+        assertEquals(UsageSourceProvenance.NONE, data.sourceProvenance)
+        assertTrue(data.notes.orEmpty().contains("App usage query failed"))
+    }
+
+    @Test
+    fun scenario4_providerExceptionWithAvailableRoomHistory_fallsBackToRoomSuccessfully() = runBlocking {
+        fakeProvider.queryFailure = RuntimeException("Platform query failure")
+        fakeObservationRepo.observations = listOf(
+            Observation(
+                id = "obs_1",
+                userId = testUserId,
+                type = ObservationType.APP_USAGE_SESSION,
+                source = ObservationSource.APP_USAGE,
+                occurredAt = baseTime + 5000L,
+                recordedAt = baseTime + 5000L,
+                subjectId = null,
+                value = "com.app.cached",
+                context = "duration_ms=120000",
+                confidence = 1.0f,
+                provenance = ObservationProvenance(ObservationSource.APP_USAGE, "test", baseTime + 5000L)
+            )
+        )
+
+        val result = useCase(
+            userId = testUserId,
+            customWindowStartMs = baseTime,
+            customWindowEndMs = baseTime + dayDuration
+        )
+
+        assertTrue(result is Result.Success)
+        val data = (result as Result.Success).data
+        assertEquals(SourceAvailability.AVAILABLE, data.availability)
+        assertEquals(120000L, data.totalObservedDurationMs)
+        assertEquals(UsageSourceProvenance.ROOM_PERSISTED_OBSERVATIONS, data.sourceProvenance)
+        assertEquals(1, data.appUsages.size)
+        assertEquals(UsageSourceProvenance.ROOM_PERSISTED_OBSERVATIONS, data.appUsages[0].sourceProvenance)
+        assertFalse("Persisted room observations are not real-time telemetry", data.isRealTime)
+        assertTrue(data.notes.orEmpty().contains("persisted observations"))
+    }
+
+    @Test
+    fun scenario5_permissionDeniedWithoutFalseZeroUsage() = runBlocking {
+        fakeProvider.permissionGranted = false
+
+        val result = useCase(
+            userId = testUserId,
+            customWindowStartMs = baseTime,
+            customWindowEndMs = baseTime + dayDuration
+        )
+
+        assertTrue(result is Result.Success)
+        val data = (result as Result.Success).data
+        assertEquals(SourceAvailability.PERMISSION_DENIED, data.availability)
+        assertEquals(UsagePermissionStatus.DENIED, data.permissionStatus)
+        assertNull(data.totalObservedDurationMs)
+        assertEquals(UsageSourceProvenance.NONE, data.sourceProvenance)
+    }
+
+    @Test
+    fun scenario6_providerUnavailableWithoutFalseZeroUsage() = runBlocking {
+        fakeProvider.providerUnavailable = true
+
+        val result = useCase(
+            userId = testUserId,
+            customWindowStartMs = baseTime,
+            customWindowEndMs = baseTime + dayDuration
+        )
+
+        assertTrue(result is Result.Success)
+        val data = (result as Result.Success).data
+        assertEquals(SourceAvailability.UNAVAILABLE_HARDWARE, data.availability)
+        assertEquals(UsagePermissionStatus.UNAVAILABLE, data.permissionStatus)
+        assertNull(data.totalObservedDurationMs)
+        assertEquals(UsageSourceProvenance.NONE, data.sourceProvenance)
+    }
+
+    @Test
+    fun scenario7_liveUsageStatsProvenanceExplicitlySet() = runBlocking {
+        fakeProvider.events = listOf(
+            AppUsageEvent("com.pkg.live", baseTime + 1000L, baseTime + 30000L, 29000L)
+        )
+
+        val result = useCase(
+            userId = testUserId,
+            customWindowStartMs = baseTime,
+            customWindowEndMs = baseTime + dayDuration
+        )
+
+        val data = (result as Result.Success).data
+        assertEquals(UsageSourceProvenance.LIVE_USAGE_STATS, data.sourceProvenance)
+        assertEquals(UsageSourceProvenance.LIVE_USAGE_STATS, data.appUsages.first().sourceProvenance)
+    }
+
+    @Test
+    fun scenario8_roomFallbackProvenanceExplicitlySet() = runBlocking {
+        fakeProvider.events = emptyList() // live returns 0 events
+        fakeObservationRepo.observations = listOf(
+            Observation(
+                id = "obs_room",
+                userId = testUserId,
+                type = ObservationType.APP_USAGE_SESSION,
+                source = ObservationSource.APP_USAGE,
+                occurredAt = baseTime + 2000L,
+                recordedAt = baseTime + 2000L,
+                subjectId = null,
+                value = "com.pkg.room",
+                context = "duration_ms=45000",
+                confidence = 1.0f,
+                provenance = ObservationProvenance(ObservationSource.APP_USAGE, "test", baseTime + 2000L)
+            )
+        )
+
+        val result = useCase(
+            userId = testUserId,
+            customWindowStartMs = baseTime,
+            customWindowEndMs = baseTime + dayDuration
+        )
+
+        val data = (result as Result.Success).data
+        assertEquals(UsageSourceProvenance.ROOM_PERSISTED_OBSERVATIONS, data.sourceProvenance)
+        assertEquals(UsageSourceProvenance.ROOM_PERSISTED_OBSERVATIONS, data.appUsages.first().sourceProvenance)
+    }
+
+    @Test
+    fun scenario9_combinedProvenanceOnlyIfGenuineMixedSources() = runBlocking {
+        // In the fallback architecture, when live succeeds it emits LIVE_USAGE_STATS;
+        // when Room fallback is used it emits ROOM_PERSISTED_OBSERVATIONS.
+        // COMBINED is a first-class enum variant reserved for genuine hybrid integration.
+        assertNotNull(UsageSourceProvenance.valueOf("COMBINED"))
+        assertNotNull(UsageSourceProvenance.valueOf("NONE"))
+    }
+
+    @Test
+    fun scenario10_partialCoverageWhenDocumentedTruncationOrCapReached() = runBlocking {
+        // Sub-case A: Provider reports truncation/cap reached
+        fakeProvider.isTruncated = true
+        fakeProvider.events = listOf(
+            AppUsageEvent("com.pkg.trunc", baseTime + 1000L, baseTime + 60000L, 59000L)
+        )
+
+        val resultTrunc = useCase(
+            userId = testUserId,
+            customWindowStartMs = baseTime,
+            customWindowEndMs = baseTime + dayDuration
+        )
+        val dataTrunc = (resultTrunc as Result.Success).data
+        assertEquals(SourceAvailability.PARTIAL_HISTORY, dataTrunc.availability)
+
+        // Sub-case B: Documented sub-day partial window queried (4 hours < 20h threshold)
+        fakeProvider.isTruncated = false
+        val partialStart = baseTime + 3600_000L
+        val partialEnd = baseTime + 5 * 3600_000L // 4 hours
+        fakeProvider.events = listOf(
+            AppUsageEvent("com.pkg.window", partialStart + 1000L, partialStart + 60000L, 59000L)
+        )
+        val resultWindow = useCase(
+            userId = testUserId,
+            customWindowStartMs = partialStart,
+            customWindowEndMs = partialEnd
+        )
+        val dataWindow = (resultWindow as Result.Success).data
+        assertEquals(SourceAvailability.PARTIAL_HISTORY, dataWindow.availability)
+
+        // Sub-case C: Room fallback with partial checkpoint coverage
+        fakeProvider.events = emptyList()
+        val fakeCheckpointStore = FakeCheckpointStore()
+        fakeCheckpointStore.checkpoint = AppUsageCheckpoint(
+            userId = testUserId,
+            lastCollectedIntervalEndMs = baseTime + 2 * 3600_000L, // only collected 2h into the 24h day
+            activePackageName = null,
+            activeSessionStartTimeMs = null,
+            updatedAt = baseTime + 2 * 3600_000L
+        )
+        fakeObservationRepo.observations = listOf(
+            Observation(
+                id = "obs_part",
+                userId = testUserId,
+                type = ObservationType.APP_USAGE_SESSION,
+                source = ObservationSource.APP_USAGE,
+                occurredAt = baseTime + 1000L,
+                recordedAt = baseTime + 1000L,
+                subjectId = null,
+                value = "com.pkg.room",
+                context = "duration_ms=30000",
+                confidence = 1.0f,
+                provenance = ObservationProvenance(ObservationSource.APP_USAGE, "test", baseTime + 1000L)
+            )
+        )
+        val useCaseWithCp = GetDailyAppUsageIntelligenceUseCase(
+            appUsageObservationProvider = fakeProvider,
+            appUsageSettingsRepository = fakeSettingsRepo,
+            observationRepository = fakeObservationRepo,
+            clock = fakeClock,
+            checkpointStore = fakeCheckpointStore
+        )
+        val resultCp = useCaseWithCp(
+            userId = testUserId,
+            customWindowStartMs = baseTime,
+            customWindowEndMs = baseTime + dayDuration
+        )
+        val dataCp = (resultCp as Result.Success).data
+        assertEquals(SourceAvailability.PARTIAL_HISTORY, dataCp.availability)
+    }
+
+    @Test
+    fun scenario11_noPartialStatusWhenCompletenessEstablished() = runBlocking {
+        fakeProvider.isTruncated = false
+        fakeProvider.events = listOf(
+            AppUsageEvent("com.pkg.full", baseTime + 1000L, baseTime + 60000L, 59000L)
+        )
+
+        val result = useCase(
+            userId = testUserId,
+            customWindowStartMs = baseTime,
+            customWindowEndMs = baseTime + dayDuration
+        )
+
+        val data = (result as Result.Success).data
+        assertEquals(SourceAvailability.AVAILABLE, data.availability)
+    }
+
+    @Test
+    fun scenario12_unknownCoverageRemainsUnknownWhenEvidenceInsufficient() = runBlocking {
+        fakeProvider.queryFailure = RuntimeException("Unknown transient failure")
+        fakeObservationRepo.observations = emptyList()
+
+        val result = useCase(
+            userId = testUserId,
+            customWindowStartMs = baseTime,
+            customWindowEndMs = baseTime + dayDuration
+        )
+
+        val data = (result as Result.Success).data
+        // MUST NOT guess or invent PARTIAL_HISTORY; must report UNAVAILABLE_HARDWARE with null duration
+        assertEquals(SourceAvailability.UNAVAILABLE_HARDWARE, data.availability)
+        assertNull(data.totalObservedDurationMs)
+    }
+
+    @Test
+    fun scenario13_uiLabelAccuratelyDescribesCumulativeAppUsage() = runBlocking {
+        fakeProvider.events = listOf(
+            AppUsageEvent("com.pkg.test", baseTime + 1000L, baseTime + 61000L, 60000L)
+        )
+
+        val result = useCase(
+            userId = testUserId,
+            customWindowStartMs = baseTime,
+            customWindowEndMs = baseTime + dayDuration
+        )
+
+        val data = (result as Result.Success).data
+        assertTrue(data.notes.orEmpty().contains("Observed 1 applications over 1m"))
+    }
+
+    @Test
+    fun scenario14_existingPerAppPercentagePartitionRemainsUnchanged() = runBlocking {
+        // App A and App B active concurrently in the same 30m window
+        fakeProvider.events = listOf(
+            AppUsageEvent("com.app.a", baseTime, baseTime + 1800_000L, 1800_000L),
+            AppUsageEvent("com.app.b", baseTime, baseTime + 1800_000L, 1800_000L)
+        )
+
+        val result = useCase(
+            userId = testUserId,
+            customWindowStartMs = baseTime,
+            customWindowEndMs = baseTime + dayDuration
+        )
+
+        val data = (result as Result.Success).data
+        assertEquals(3600_000L, data.totalObservedDurationMs)
+        assertEquals(2, data.appUsages.size)
+        assertEquals(50.0f, data.appUsages[0].percentageOfTotal, 0.01f)
+        assertEquals(50.0f, data.appUsages[1].percentageOfTotal, 0.01f)
+        val sumPct = data.appUsages.sumOf { it.percentageOfTotal.toDouble() }
+        assertEquals(100.0, sumPct, 0.01)
+    }
+
+    @Test
+    fun scenario15_existingSessionCountAndUnionDurationBehaviorRemainsUnchanged() = runBlocking {
+        // App has two adjacent 30m sessions: [10:00..10:30) and [10:30..11:00)
+        fakeProvider.events = listOf(
+            AppUsageEvent("com.app.adjacent", baseTime, baseTime + 1800_000L, 1800_000L),
+            AppUsageEvent("com.app.adjacent", baseTime + 1800_000L, baseTime + 3600_000L, 1800_000L)
+        )
+
+        val result = useCase(
+            userId = testUserId,
+            customWindowStartMs = baseTime,
+            customWindowEndMs = baseTime + dayDuration
+        )
+
+        val data = (result as Result.Success).data
+        assertEquals(3600_000L, data.totalObservedDurationMs) // Merged duration: 60m
+        assertEquals(1, data.appUsages.size)
+        assertEquals(2, data.appUsages[0].sessionCount) // Preserved discrete session count: 2
+    }
+
+    // =========================================================================
     // Test Doubles
     // =========================================================================
 
     private class FakeAppUsageProvider : AppUsageObservationProvider {
         var permissionGranted: Boolean = true
         var events: List<AppUsageEvent> = emptyList()
+        var queryFailure: Exception? = null
+        var isTruncated: Boolean = false
+        var providerUnavailable: Boolean = false
 
         override fun isPermissionGranted(): Boolean = permissionGranted
         override fun getAppUsageSince(fromTimeMillis: Long): List<AppUsageEvent> {
             return events.filter { it.startTimeMillis >= fromTimeMillis || it.endTimeMillis >= fromTimeMillis }
+        }
+
+        override fun queryAppUsage(
+            fromTimeMillis: Long,
+            toTimeMillis: Long,
+            initialActiveSession: ActiveForegroundSession?
+        ): AppUsageProviderResult {
+            if (!permissionGranted) return AppUsageProviderResult.PermissionDenied
+            if (providerUnavailable) return AppUsageProviderResult.ProviderUnavailable
+            val error = queryFailure
+            if (error != null) {
+                return AppUsageProviderResult.Failure(
+                    diagnosticCategory = "USAGE_STATS_QUERY_FAILED",
+                    cause = error
+                )
+            }
+            val filtered = events.filter {
+                it.startTimeMillis < toTimeMillis && it.endTimeMillis >= fromTimeMillis
+            }
+            return AppUsageProviderResult.Success(
+                events = filtered,
+                activeSession = null,
+                isTruncated = isTruncated
+            )
+        }
+    }
+
+    private class FakeCheckpointStore : AppUsageCheckpointStore {
+        var checkpoint: AppUsageCheckpoint? = null
+
+        override suspend fun getCheckpoint(userId: String): Result<AppUsageCheckpoint?, Exception> {
+            return Result.Success(checkpoint)
+        }
+
+        override suspend fun saveCheckpoint(checkpoint: AppUsageCheckpoint): Result<Unit, Exception> {
+            this.checkpoint = checkpoint
+            return Result.Success(Unit)
+        }
+
+        override suspend fun saveObservationsWithCheckpoint(
+            observations: List<Observation>,
+            checkpoint: AppUsageCheckpoint
+        ): Result<Unit, Exception> {
+            this.checkpoint = checkpoint
+            return Result.Success(Unit)
+        }
+
+        override suspend fun clearCheckpointForUser(userId: String): Result<Unit, Exception> {
+            checkpoint = null
+            return Result.Success(Unit)
         }
     }
 

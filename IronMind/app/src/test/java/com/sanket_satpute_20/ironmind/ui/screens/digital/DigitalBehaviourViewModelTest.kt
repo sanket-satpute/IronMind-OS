@@ -17,6 +17,7 @@ import com.sanket_satpute_20.ironmind.domain.model.context.EpistemicAuthority
 import com.sanket_satpute_20.ironmind.domain.model.context.SourceAvailability
 import com.sanket_satpute_20.ironmind.domain.model.context.SourceFreshness
 import com.sanket_satpute_20.ironmind.domain.model.insight.ExplainabilityBlock
+import com.sanket_satpute_20.ironmind.domain.model.digital.UsageSourceProvenance
 import com.sanket_satpute_20.ironmind.domain.model.insight.InsightCategory
 import com.sanket_satpute_20.ironmind.domain.model.insight.InsightReviewStatus
 import com.sanket_satpute_20.ironmind.domain.model.insight.PersonalInsight
@@ -331,6 +332,7 @@ class DigitalBehaviourViewModelTest {
         assertTrue(state.isUsageAccessPermissionGranted)
         assertTrue(state.isUsageObservationEnabled)
         assertEquals(SourceAvailability.AVAILABLE, state.effectiveAvailability)
+        assertEquals(UsageSourceProvenance.LIVE_USAGE_STATS, state.usageProvenance)
 
         val usage = state.dailyUsage
         assertNotNull(usage)
@@ -345,6 +347,49 @@ class DigitalBehaviourViewModelTest {
         assertEquals("com.youtube", usage.mostUsedApps[1].packageName)
         assertEquals("YouTube", usage.mostUsedApps[1].appName)
         assertEquals(60_000L, usage.mostUsedApps[1].totalDurationMs)
+    }
+
+    @Test
+    fun `room fallback sets room observations provenance on UI state`() = runTest {
+        appUsageProvider.events = emptyList() // live returns nothing
+        val obsTime = today.atStartOfDay(zoneId).toInstant().toEpochMilli() + 1000L
+        observationRepository.observations = listOf(
+            Observation(
+                id = "obs_room_vm",
+                userId = "user_test",
+                type = ObservationType.APP_USAGE_SESSION,
+                source = com.sanket_satpute_20.ironmind.domain.model.observation.ObservationSource.APP_USAGE,
+                occurredAt = obsTime,
+                recordedAt = obsTime,
+                subjectId = null,
+                value = "com.room.app",
+                context = "duration_ms=75000",
+                confidence = 1.0f,
+                provenance = com.sanket_satpute_20.ironmind.domain.model.observation.ObservationProvenance(
+                    source = com.sanket_satpute_20.ironmind.domain.model.observation.ObservationSource.APP_USAGE,
+                    sourceReference = "test",
+                    capturedAt = obsTime
+                )
+            )
+        )
+
+        val viewModel = DigitalBehaviourViewModel(
+            getDailyAppUsageIntelligenceUseCase = useCase,
+            appUsageObservationProvider = appUsageProvider,
+            appUsageSettingsRepository = settingsRepository,
+            protectionRepository = protectionRepository,
+            userSessionProvider = userSessionProvider,
+            appNameResolver = appNameResolver,
+            clock = testClock,
+            zoneId = zoneId
+        )
+
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(SourceAvailability.AVAILABLE, state.effectiveAvailability)
+        assertEquals(UsageSourceProvenance.ROOM_PERSISTED_OBSERVATIONS, state.usageProvenance)
+        assertEquals(75_000L, state.dailyUsage?.totalObservedDurationMs)
     }
 
     @Test

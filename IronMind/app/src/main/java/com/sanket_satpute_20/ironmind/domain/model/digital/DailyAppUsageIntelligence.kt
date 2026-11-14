@@ -5,6 +5,16 @@ import com.sanket_satpute_20.ironmind.domain.model.context.SourceAvailability
 import com.sanket_satpute_20.ironmind.domain.model.context.UsagePermissionStatus
 
 /**
+ * Explicit provenance identifying the underlying data source supplying app usage intelligence.
+ */
+enum class UsageSourceProvenance {
+    LIVE_USAGE_STATS,
+    ROOM_PERSISTED_OBSERVATIONS,
+    COMBINED,
+    NONE
+}
+
+/**
  * Represents per-app usage metrics for an observed calendar day or time window.
  *
  * Epistemic Rules:
@@ -20,7 +30,8 @@ data class AppUsageItem(
     val firstObservedAt: Long? = null,
     val lastObservedAt: Long? = null,
     val percentageOfTotal: Float = 0f,
-    val epistemicAuthority: EpistemicAuthority = EpistemicAuthority.SYSTEM_RECORDED_OBSERVATION
+    val epistemicAuthority: EpistemicAuthority = EpistemicAuthority.SYSTEM_RECORDED_OBSERVATION,
+    val sourceProvenance: UsageSourceProvenance = UsageSourceProvenance.NONE
 )
 
 /**
@@ -66,5 +77,6 @@ data class DailyAppUsageIntelligence(
     val dataFreshnessMs: Long? = null,
     val isFresh: Boolean = true,
     val isRealTime: Boolean = false,
+    val sourceProvenance: UsageSourceProvenance = UsageSourceProvenance.NONE,
     val notes: String? = null
 )
