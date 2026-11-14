@@ -19,9 +19,11 @@ import com.sanket_satpute_20.ironmind.domain.model.ProtectionSession
 import com.sanket_satpute_20.ironmind.domain.model.ProtectionSessionStatus
 import com.sanket_satpute_20.ironmind.domain.model.digital.AppRestrictionConfig
 import com.sanket_satpute_20.ironmind.domain.model.digital.AppRestrictionConfigCodec
+import com.sanket_satpute_20.ironmind.domain.model.protection.PersistentEnforcementState
 import com.sanket_satpute_20.ironmind.domain.provider.AppProtectionProvider
 import com.sanket_satpute_20.ironmind.domain.provider.DiscoveredApp
 import com.sanket_satpute_20.ironmind.domain.provider.InstalledAppDiscoveryProvider
+import com.sanket_satpute_20.ironmind.domain.provider.ProtectionEnforcementStateStore
 import com.sanket_satpute_20.ironmind.domain.session.SessionState
 import com.sanket_satpute_20.ironmind.domain.usecase.digital.GetAppRestrictionConfigsUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.digital.GetEligibleRestrictionsForEnforcementUseCase
@@ -1182,6 +1184,48 @@ class AuthoritativeProtectionSessionRecoveryTest {
         assertEquals(originalScheduledEndAt, IronMindProtectionService.getActiveScheduledEndAt())
     }
 
+    // 26. Protection provider failure is not silently treated as successful recovery
+    @Test
+    fun `scenario 26 - protection provider failure during recovery fails closed and does not report restored`() = runTest {
+        saveConfigUseCase(testUserId, "com.target.app", "Target App", isEnabled = true)
+
+        val session = ProtectionSession(
+            id = "session_provider_fail",
+            userId = testUserId,
+            startedAt = 1_000_000L,
+            scheduledEndAt = 2_000_000L,
+            endedAt = null,
+            status = ProtectionSessionStatus.ACTIVE,
+            source = EntitySource.USER,
+            overrideAllowed = true,
+            createdAt = 1_000_000L,
+            updatedAt = 1_000_000L
+        )
+        protectionRepository.saveProtectionSession(session)
+        store.saveEnforcementState(
+            sessionId = session.id,
+            userId = testUserId,
+            isActive = true,
+            packages = setOf("com.target.app"),
+            scheduledEndAt = 2_000_000L
+        )
+
+        // Simulate provider applyProtection failure
+        fakeProtectionProvider.shouldFailApplyProtection = true
+
+        val result = recoveryUseCase()
+
+        // Must fail closed and NEVER report Restored
+        assertTrue(result is ProtectionRecoveryResult.FailedClosed)
+        val failedClosed = result as ProtectionRecoveryResult.FailedClosed
+        assertEquals(ProtectionRecoveryResult.FailClosedReason.INTERNAL_ERROR, failedClosed.reason)
+
+        // Store and service state must not remain active
+        assertFalse(fakeProtectionProvider.isProtectionActive())
+        assertFalse(store.getEnforcementState()?.isActive == true)
+        assertFalse(IronMindProtectionService.isProtectionActive())
+    }
+
     @Test
     fun getProtectionSessionsForUser_roomBacked_returnsAllStatusesScopedByUser() = runTest {
         val otherUser = "user_other_room"
@@ -1272,9 +1316,11 @@ class AuthoritativeProtectionSessionRecoveryTest {
     }
 
     private class FakeAlwaysPermittedProtectionProvider(
-        private val store: ProtectionEnforcementStore
+        private val store: ProtectionEnforcementStateStore
     ) : AppProtectionProvider {
         var hasPermissions: Boolean = true
+        var shouldFailApplyProtection: Boolean = false
+        var applyProtectionError: Exception? = null
         private var isActive = false
         private val enforced = mutableSetOf<String>()
 
@@ -1301,6 +1347,12 @@ class AuthoritativeProtectionSessionRecoveryTest {
             userId: String?,
             scheduledEndAt: Long?
         ): Result<Unit, Exception> {
+            if (!hasPermissions) {
+                return Result.Failure(Exception("Missing required protection permissions"))
+            }
+            if (shouldFailApplyProtection) {
+                return Result.Failure(applyProtectionError ?: Exception("Simulated provider applyProtection failure"))
+            }
             val sanitized = targetPackages.filter { it != ProtectionEnforcementStore.IRONMIND_PACKAGE }
             isActive = true
             enforced.clear()

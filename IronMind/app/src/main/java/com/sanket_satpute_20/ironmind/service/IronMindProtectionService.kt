@@ -5,6 +5,7 @@ import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.widget.Toast
 import com.sanket_satpute_20.ironmind.IronMindApplication
+import com.sanket_satpute_20.ironmind.data.provider.AndroidAppProtectionProvider
 import com.sanket_satpute_20.ironmind.data.provider.AndroidInstalledAppDiscoveryProvider
 import com.sanket_satpute_20.ironmind.data.provider.ProtectionEnforcementStore
 import com.sanket_satpute_20.ironmind.domain.usecase.digital.GetAppRestrictionConfigsUseCase
@@ -113,12 +114,14 @@ class IronMindProtectionService : AccessibilityService() {
         val container = app?.container
         val recoveryUseCase = recoveryUseCaseProvider?.invoke()
             ?: if (container != null) {
+                val store = (container.appProtectionProvider as? AndroidAppProtectionProvider)?.enforcementStore
+                    ?: ProtectionEnforcementStore(applicationContext)
                 AuthoritativeProtectionSessionRecoveryUseCase(
                     protectionRepository = container.protectionRepository,
                     userSessionProvider = container.userSessionProvider,
                     clock = container.clock,
                     appProtectionProvider = container.appProtectionProvider,
-                    enforcementStore = ProtectionEnforcementStore(applicationContext),
+                    enforcementStore = store,
                     getEligibleRestrictionsForEnforcementUseCase = GetEligibleRestrictionsForEnforcementUseCase(
                         getAppRestrictionConfigsUseCase = GetAppRestrictionConfigsUseCase(container.protectionRepository),
                         installedAppDiscoveryProvider = AndroidInstalledAppDiscoveryProvider(applicationContext)

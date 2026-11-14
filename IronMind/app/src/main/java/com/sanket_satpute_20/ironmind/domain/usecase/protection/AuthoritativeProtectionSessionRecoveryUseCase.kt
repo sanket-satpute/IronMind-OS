@@ -1,18 +1,18 @@
 package com.sanket_satpute_20.ironmind.domain.usecase.protection
 
-import com.sanket_satpute_20.ironmind.data.provider.ProtectionEnforcementStore
 import com.sanket_satpute_20.ironmind.domain.common.Clock
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.EntitySource
 import com.sanket_satpute_20.ironmind.domain.model.Event
 import com.sanket_satpute_20.ironmind.domain.model.EventType
 import com.sanket_satpute_20.ironmind.domain.model.ProtectionSessionStatus
+import com.sanket_satpute_20.ironmind.domain.model.protection.PersistentEnforcementState
 import com.sanket_satpute_20.ironmind.domain.provider.AppProtectionProvider
+import com.sanket_satpute_20.ironmind.domain.provider.ProtectionEnforcementStateStore
 import com.sanket_satpute_20.ironmind.domain.repository.EventRepository
 import com.sanket_satpute_20.ironmind.domain.repository.ProtectionRepository
 import com.sanket_satpute_20.ironmind.domain.session.UserSessionProvider
 import com.sanket_satpute_20.ironmind.domain.usecase.digital.GetEligibleRestrictionsForEnforcementUseCase
-import com.sanket_satpute_20.ironmind.service.IronMindProtectionService
 import kotlinx.coroutines.CancellationException
 
 sealed interface ProtectionRecoveryResult {
@@ -61,7 +61,7 @@ class AuthoritativeProtectionSessionRecoveryUseCase(
     private val userSessionProvider: UserSessionProvider,
     private val clock: Clock,
     private val appProtectionProvider: AppProtectionProvider,
-    private val enforcementStore: ProtectionEnforcementStore,
+    private val enforcementStore: ProtectionEnforcementStateStore,
     private val getEligibleRestrictionsForEnforcementUseCase: GetEligibleRestrictionsForEnforcementUseCase? = null,
     private val eventRepository: EventRepository? = null
 ) {
@@ -186,23 +186,45 @@ class AuthoritativeProtectionSessionRecoveryUseCase(
                 return ProtectionRecoveryResult.FailedClosed(ProtectionRecoveryResult.FailClosedReason.NO_ELIGIBLE_PACKAGES)
             }
 
-            // 10. Authorization confirmed! Restore enforcement
-            IronMindProtectionService.setActiveSessionIdentity(session.id, activeUserId, session.scheduledEndAt)
-            IronMindProtectionService.setProtectedPackages(packagesToEnforce)
-            IronMindProtectionService.setProtectionActive(true)
-            enforcementStore.saveEnforcementState(
+            // 10. Authorization confirmed! Restore enforcement through provider abstraction
+            val applyResult = appProtectionProvider.applyProtection(
+                targetPackages = packagesToEnforce.toList(),
                 sessionId = session.id,
                 userId = activeUserId,
-                isActive = true,
-                packages = packagesToEnforce,
                 scheduledEndAt = session.scheduledEndAt
             )
-
-            return ProtectionRecoveryResult.Restored(
-                sessionId = session.id,
-                userId = activeUserId,
-                enforcedPackages = packagesToEnforce
-            )
+            return when (applyResult) {
+                is Result.Success -> {
+                    enforcementStore.saveEnforcementState(
+                        sessionId = session.id,
+                        userId = activeUserId,
+                        isActive = true,
+                        packages = packagesToEnforce,
+                        scheduledEndAt = session.scheduledEndAt
+                    )
+                    ProtectionRecoveryResult.Restored(
+                        sessionId = session.id,
+                        userId = activeUserId,
+                        enforcedPackages = packagesToEnforce
+                    )
+                }
+                is Result.Failure -> {
+                    val reason = if (!appProtectionProvider.hasRequiredPermissions()) {
+                        ProtectionRecoveryResult.FailClosedReason.PERMISSION_REVOKED
+                    } else if (packagesToEnforce.isEmpty()) {
+                        ProtectionRecoveryResult.FailClosedReason.NO_ELIGIBLE_PACKAGES
+                    } else {
+                        ProtectionRecoveryResult.FailClosedReason.INTERNAL_ERROR
+                    }
+                    failClosed(
+                        clearStore = (reason != ProtectionRecoveryResult.FailClosedReason.PERMISSION_REVOKED),
+                        preservedSessionId = session.id,
+                        preservedUserId = activeUserId,
+                        preservedScheduledEndAt = session.scheduledEndAt
+                    )
+                    ProtectionRecoveryResult.FailedClosed(reason)
+                }
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -211,12 +233,13 @@ class AuthoritativeProtectionSessionRecoveryUseCase(
         }
     }
 
-    private fun failClosed(
+    private suspend fun failClosed(
         clearStore: Boolean = true,
         preservedSessionId: String? = null,
         preservedUserId: String? = null,
         preservedScheduledEndAt: Long? = null
     ) {
+        appProtectionProvider.removeProtection()
         if (clearStore) {
             enforcementStore.clearEnforcementState()
         } else {
@@ -228,8 +251,5 @@ class AuthoritativeProtectionSessionRecoveryUseCase(
                 scheduledEndAt = preservedScheduledEndAt
             )
         }
-        IronMindProtectionService.setProtectionActive(false)
-        IronMindProtectionService.setProtectedPackages(emptySet())
-        IronMindProtectionService.setActiveSessionIdentity(null, null, null)
     }
 }

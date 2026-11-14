@@ -11,7 +11,7 @@ import com.sanket_satpute_20.ironmind.service.IronMindProtectionService
 
 class AndroidAppProtectionProvider(
     private val context: Context,
-    private val enforcementStore: ProtectionEnforcementStore = ProtectionEnforcementStore(context),
+    val enforcementStore: ProtectionEnforcementStore = ProtectionEnforcementStore(context),
     private val userSessionProvider: UserSessionProvider? = null
 ) : AppProtectionProvider {
 

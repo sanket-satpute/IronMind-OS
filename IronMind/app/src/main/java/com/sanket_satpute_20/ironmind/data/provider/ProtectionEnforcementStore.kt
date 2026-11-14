@@ -3,15 +3,8 @@ package com.sanket_satpute_20.ironmind.data.provider
 import android.content.Context
 import android.content.SharedPreferences
 import com.sanket_satpute_20.ironmind.domain.common.Clock
-
-data class PersistentEnforcementState(
-    val sessionId: String?,
-    val userId: String,
-    val isActive: Boolean,
-    val protectedPackages: Set<String>,
-    val scheduledEndAt: Long? = null,
-    val lastUpdatedEpochMs: Long
-)
+import com.sanket_satpute_20.ironmind.domain.model.protection.PersistentEnforcementState
+import com.sanket_satpute_20.ironmind.domain.provider.ProtectionEnforcementStateStore
 
 /**
  * Thread-safe persistent store for active app restriction enforcement.
@@ -26,17 +19,17 @@ data class PersistentEnforcementState(
 class ProtectionEnforcementStore(
     context: Context,
     private val clock: Clock? = null
-) {
+) : ProtectionEnforcementStateStore {
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     private fun now(): Long = clock?.currentTimeMillis() ?: Companion.clock?.currentTimeMillis() ?: System.currentTimeMillis()
 
-    fun saveEnforcementState(
+    override fun saveEnforcementState(
         sessionId: String?,
         userId: String,
         isActive: Boolean,
         packages: Set<String>,
-        scheduledEndAt: Long? = null
+        scheduledEndAt: Long?
     ) {
         val filtered = packages.filter { it.isNotBlank() && it != IRONMIND_PACKAGE }.toSet()
         val isExpired = scheduledEndAt != null && now() >= scheduledEndAt
@@ -51,11 +44,11 @@ class ProtectionEnforcementStore(
             .apply()
     }
 
-    fun saveEnforcementState(userId: String, isActive: Boolean, packages: Set<String>) {
+    override fun saveEnforcementState(userId: String, isActive: Boolean, packages: Set<String>) {
         saveEnforcementState(sessionId = null, userId = userId, isActive = isActive, packages = packages, scheduledEndAt = null)
     }
 
-    fun clearEnforcementState() {
+    override fun clearEnforcementState() {
         prefs.edit()
             .putString(KEY_SESSION_ID, null)
             .putBoolean(KEY_IS_ACTIVE, false)
@@ -66,7 +59,7 @@ class ProtectionEnforcementStore(
             .apply()
     }
 
-    fun getEnforcementState(): PersistentEnforcementState? {
+    override fun getEnforcementState(): PersistentEnforcementState? {
         val isActive = prefs.getBoolean(KEY_IS_ACTIVE, false)
         val userId = prefs.getString(KEY_USER_ID, null) ?: return null
         val sessionId = prefs.getString(KEY_SESSION_ID, null)
@@ -85,9 +78,9 @@ class ProtectionEnforcementStore(
             sessionId = sessionId,
             userId = userId,
             isActive = genuinelyActive,
-            protectedPackages = if (genuinelyActive) packages else emptySet(),
+            packages = if (genuinelyActive) packages else emptySet(),
             scheduledEndAt = scheduledEndAt,
-            lastUpdatedEpochMs = lastUpdated
+            enactedAt = lastUpdated
         )
     }
 
