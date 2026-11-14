@@ -7,6 +7,7 @@ import com.sanket_satpute_20.ironmind.domain.model.observation.ObservationType
 import com.sanket_satpute_20.ironmind.domain.provider.ActiveForegroundSession
 import com.sanket_satpute_20.ironmind.domain.provider.AppUsageEvent
 import com.sanket_satpute_20.ironmind.domain.provider.AppUsageObservationProvider
+import com.sanket_satpute_20.ironmind.domain.provider.AppUsageProviderResult
 import com.sanket_satpute_20.ironmind.domain.provider.AppUsageReconstructionResult
 import com.sanket_satpute_20.ironmind.domain.repository.AppUsageCheckpoint
 import com.sanket_satpute_20.ironmind.domain.repository.AppUsageCheckpointStore
@@ -22,6 +23,7 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import java.time.ZoneId
@@ -151,6 +153,152 @@ class CollectAppUsageObservationsUseCaseTest {
         val cp = (checkpointStore.getCheckpoint(userId) as Result.Success).data
         assertEquals("Checkpoint must remain at baseEpoch after transaction rollback", baseEpoch, cp?.lastCollectedIntervalEndMs)
         assertEquals("No observations must be committed if transaction fails", 0, checkpointStore.committedObservationBatches.size)
+    }
+
+    @Test
+    fun `production-equivalent typed Failure does not advance checkpoint`() = runTest {
+        val userId = "user-typed-fail"
+        checkpointStore.saveCheckpoint(AppUsageCheckpoint(userId, baseEpoch, null, null, baseEpoch))
+
+        val newTime = baseEpoch + 3600_000L
+        clock.setTime(newTime)
+
+        appUsageObservationProvider.queryFailure = RuntimeException("UsageStats binder died")
+
+        val result = useCase(userId)
+        assertTrue("Must return failure when queryAppUsage returns Failure", result is Result.Failure)
+
+        val cp = (checkpointStore.getCheckpoint(userId) as Result.Success).data
+        assertEquals("Checkpoint must not advance on typed provider failure", baseEpoch, cp?.lastCollectedIntervalEndMs)
+    }
+
+    @Test
+    fun `ProviderUnavailable does not advance checkpoint`() = runTest {
+        val userId = "user-unavail"
+        checkpointStore.saveCheckpoint(AppUsageCheckpoint(userId, baseEpoch, null, null, baseEpoch))
+
+        val newTime = baseEpoch + 3600_000L
+        clock.setTime(newTime)
+
+        appUsageObservationProvider.providerUnavailable = true
+
+        val result = useCase(userId)
+        assertTrue("Must return failure when provider is unavailable", result is Result.Failure)
+
+        val cp = (checkpointStore.getCheckpoint(userId) as Result.Success).data
+        assertEquals("Checkpoint must not advance when provider is unavailable", baseEpoch, cp?.lastCollectedIntervalEndMs)
+    }
+
+    @Test
+    fun `permission denial does not advance checkpoint or persist empty observation batch`() = runTest {
+        val userId = "user-perm-denied"
+        checkpointStore.saveCheckpoint(AppUsageCheckpoint(userId, baseEpoch, null, null, baseEpoch))
+
+        val newTime = baseEpoch + 3600_000L
+        clock.setTime(newTime)
+
+        appUsageObservationProvider.permissionGranted = false
+
+        val result = useCase(userId)
+        assertTrue(result is Result.Success)
+        assertEquals(0, (result as Result.Success).data)
+
+        val cp = (checkpointStore.getCheckpoint(userId) as Result.Success).data
+        assertEquals("Checkpoint must remain at baseEpoch when permission is denied", baseEpoch, cp?.lastCollectedIntervalEndMs)
+        assertEquals("No observations committed on permission denial", 0, checkpointStore.committedObservationBatches.size)
+    }
+
+    @Test
+    fun `previously committed chunks remain intact when a later chunk fails`() = runTest {
+        val userId = "user-multi-chunk"
+        checkpointStore.saveCheckpoint(AppUsageCheckpoint(userId, baseEpoch, null, null, baseEpoch))
+
+        // Time advanced by 2 chunks (each chunk is 2 hours = 7200_000L)
+        val chunk1End = baseEpoch + 7200_000L
+        val chunk2End = baseEpoch + 14400_000L
+        clock.setTime(chunk2End)
+
+        val eventChunk1 = AppUsageEvent("com.chunk1.app", baseEpoch + 1000L, baseEpoch + 2000L, 1000L)
+        val eventChunk2 = AppUsageEvent("com.chunk2.app", chunk1End + 1000L, chunk1End + 2000L, 1000L)
+
+        // Provider succeeds on chunk 1 and fails on chunk 2
+        var callIndex = 0
+        val customProvider = object : AppUsageObservationProvider {
+            override fun isPermissionGranted(): Boolean = true
+            override fun getAppUsageSince(fromTimeMillis: Long): List<AppUsageEvent> = emptyList()
+            override fun queryAppUsage(
+                fromTimeMillis: Long,
+                toTimeMillis: Long,
+                initialActiveSession: ActiveForegroundSession?
+            ): AppUsageProviderResult {
+                callIndex++
+                return if (callIndex == 1) {
+                    AppUsageProviderResult.Success(listOf(eventChunk1), null)
+                } else {
+                    AppUsageProviderResult.Failure("IPC_CRASH", RuntimeException("Chunk 2 failed"))
+                }
+            }
+        }
+
+        val testUseCase = CollectAppUsageObservationsUseCase(
+            settingsRepository = settingsRepository,
+            observationRepository = observationRepository,
+            appUsageObservationProvider = customProvider,
+            idGenerator = idGenerator,
+            clock = clock,
+            checkpointStore = checkpointStore,
+            zoneId = fixedZone,
+            maxChunkDurationMillis = 2 * 3600_000L // 2 hours chunk size for multi-chunk test
+        )
+
+        val result = testUseCase(userId)
+        assertTrue("Must return failure when second chunk fails", result is Result.Failure)
+
+        // Chunk 1 must remain committed!
+        val cp = (checkpointStore.getCheckpoint(userId) as Result.Success).data
+        assertEquals("Checkpoint must reflect successfully committed chunk 1", chunk1End, cp?.lastCollectedIntervalEndMs)
+        assertEquals("Chunk 1 observation batch must be committed", 1, checkpointStore.committedObservationBatches.size)
+    }
+
+    @Test
+    fun `failed chunk is retried on next invocation and succeeds after recovery`() = runTest {
+        val userId = "user-retry"
+        checkpointStore.saveCheckpoint(AppUsageCheckpoint(userId, baseEpoch, null, null, baseEpoch))
+
+        val newTime = baseEpoch + 3600_000L
+        clock.setTime(newTime)
+
+        val event = AppUsageEvent("com.retry.app", baseEpoch + 1000L, baseEpoch + 2000L, 1000L)
+        appUsageObservationProvider.mockEvents = listOf(event)
+
+        // Run 1: provider fails
+        appUsageObservationProvider.queryFailure = RuntimeException("Transient failure")
+        val run1 = useCase(userId)
+        assertTrue(run1 is Result.Failure)
+        var cp = (checkpointStore.getCheckpoint(userId) as Result.Success).data
+        assertEquals("Checkpoint does not advance on run 1", baseEpoch, cp?.lastCollectedIntervalEndMs)
+
+        // Run 2: provider recovers
+        appUsageObservationProvider.queryFailure = null
+        val run2 = useCase(userId)
+        assertTrue(run2 is Result.Success)
+        assertEquals(1, (run2 as Result.Success).data)
+
+        cp = (checkpointStore.getCheckpoint(userId) as Result.Success).data
+        assertEquals("Checkpoint advances after successful retry", newTime, cp?.lastCollectedIntervalEndMs)
+        assertEquals(1, checkpointStore.committedObservationBatches.size)
+    }
+
+    @Test
+    fun `legacy adapter getAppUsageBetween does not silently swallow provider failures`() {
+        appUsageObservationProvider.queryFailure = RuntimeException("Platform query crash")
+
+        try {
+            appUsageObservationProvider.getAppUsageBetween(baseEpoch, baseEpoch + 3600_000L, null)
+            fail("getAppUsageBetween must throw exception on query failure instead of returning empty results")
+        } catch (e: Exception) {
+            assertTrue("Exception message preserved", e.message?.contains("Platform query crash") == true || e.message?.contains("query failed") == true)
+        }
     }
 
     // =========================================================================
@@ -539,6 +687,8 @@ class CollectAppUsageObservationsUseCaseTest {
     class FakeAppUsageObservationProvider : AppUsageObservationProvider {
         var permissionGranted = true
         var shouldThrow = false
+        var queryFailure: Exception? = null
+        var providerUnavailable = false
         var mockEvents = emptyList<AppUsageEvent>()
         var mockActiveSession: ActiveForegroundSession? = null
         val recordedCalls = mutableListOf<Triple<Long, Long, ActiveForegroundSession?>>()
@@ -552,14 +702,49 @@ class CollectAppUsageObservationsUseCaseTest {
             toTimeMillis: Long,
             initialActiveSession: ActiveForegroundSession?
         ): AppUsageReconstructionResult {
-            if (shouldThrow) throw IllegalStateException("Provider simulated failure")
-            if (!permissionGranted) return AppUsageReconstructionResult(emptyList(), initialActiveSession)
+            return when (val result = queryAppUsage(fromTimeMillis, toTimeMillis, initialActiveSession)) {
+                is AppUsageProviderResult.Success -> AppUsageReconstructionResult(
+                    events = result.events,
+                    activeSession = result.activeSession
+                )
+                is AppUsageProviderResult.Failure -> {
+                    throw (result.cause as? RuntimeException)
+                        ?: IllegalStateException("App usage query failed: ${result.diagnosticCategory}", result.cause)
+                }
+                is AppUsageProviderResult.ProviderUnavailable -> {
+                    throw IllegalStateException("UsageStatsManager is unavailable")
+                }
+                is AppUsageProviderResult.PermissionDenied -> {
+                    AppUsageReconstructionResult(emptyList(), initialActiveSession)
+                }
+            }
+        }
+
+        override fun queryAppUsage(
+            fromTimeMillis: Long,
+            toTimeMillis: Long,
+            initialActiveSession: ActiveForegroundSession?
+        ): AppUsageProviderResult {
+            if (!permissionGranted) return AppUsageProviderResult.PermissionDenied
+            if (providerUnavailable) return AppUsageProviderResult.ProviderUnavailable
+            if (shouldThrow) {
+                return AppUsageProviderResult.Failure(
+                    diagnosticCategory = "SIMULATED_FAILURE",
+                    cause = IllegalStateException("Provider simulated failure")
+                )
+            }
+            queryFailure?.let {
+                return AppUsageProviderResult.Failure(
+                    diagnosticCategory = "USAGE_STATS_QUERY_FAILED",
+                    cause = it
+                )
+            }
 
             recordedCalls.add(Triple(fromTimeMillis, toTimeMillis, initialActiveSession))
             val filteredEvents = mockEvents.filter {
                 it.startTimeMillis < toTimeMillis && it.endTimeMillis >= fromTimeMillis
             }
-            return AppUsageReconstructionResult(filteredEvents, mockActiveSession)
+            return AppUsageProviderResult.Success(filteredEvents, mockActiveSession)
         }
     }
 

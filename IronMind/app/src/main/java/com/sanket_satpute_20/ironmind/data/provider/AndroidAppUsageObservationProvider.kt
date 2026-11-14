@@ -47,7 +47,14 @@ class AndroidAppUsageObservationProvider(
     override fun getAppUsageSince(fromTimeMillis: Long): List<AppUsageEvent> {
         return when (val result = queryAppUsage(fromTimeMillis, System.currentTimeMillis(), null)) {
             is AppUsageProviderResult.Success -> result.events
-            else -> emptyList()
+            is AppUsageProviderResult.Failure -> {
+                throw (result.cause as? RuntimeException)
+                    ?: IllegalStateException("App usage query failed: ${result.diagnosticCategory}", result.cause)
+            }
+            is AppUsageProviderResult.ProviderUnavailable -> {
+                throw IllegalStateException("UsageStatsManager is unavailable")
+            }
+            is AppUsageProviderResult.PermissionDenied -> emptyList()
         }
     }
 
@@ -61,7 +68,16 @@ class AndroidAppUsageObservationProvider(
                 events = result.events,
                 activeSession = result.activeSession
             )
-            else -> AppUsageReconstructionResult(emptyList(), initialActiveSession)
+            is AppUsageProviderResult.Failure -> {
+                throw (result.cause as? RuntimeException)
+                    ?: IllegalStateException("App usage query failed: ${result.diagnosticCategory}", result.cause)
+            }
+            is AppUsageProviderResult.ProviderUnavailable -> {
+                throw IllegalStateException("UsageStatsManager is unavailable")
+            }
+            is AppUsageProviderResult.PermissionDenied -> {
+                AppUsageReconstructionResult(emptyList(), initialActiveSession)
+            }
         }
     }
 

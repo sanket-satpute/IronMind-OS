@@ -98,10 +98,8 @@ interface AppUsageObservationProvider {
             return AppUsageProviderResult.PermissionDenied
         }
         return try {
-            val events = getAppUsageSince(fromTimeMillis).filter {
-                it.startTimeMillis < toTimeMillis && it.endTimeMillis >= fromTimeMillis
-            }
-            AppUsageProviderResult.Success(events, null)
+            val reconstruction = getAppUsageBetween(fromTimeMillis, toTimeMillis, initialActiveSession)
+            AppUsageProviderResult.Success(reconstruction.events, reconstruction.activeSession)
         } catch (e: Exception) {
             AppUsageProviderResult.Failure(
                 diagnosticCategory = "QUERY_EXECUTION_FAILED",

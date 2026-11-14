@@ -11,6 +11,7 @@ import com.sanket_satpute_20.ironmind.domain.model.observation.ObservationType
 import com.sanket_satpute_20.ironmind.domain.provider.ActiveForegroundSession
 import com.sanket_satpute_20.ironmind.domain.provider.AppUsageEvent
 import com.sanket_satpute_20.ironmind.domain.provider.AppUsageObservationProvider
+import com.sanket_satpute_20.ironmind.domain.provider.AppUsageProviderResult
 import com.sanket_satpute_20.ironmind.domain.repository.AppUsageCheckpoint
 import com.sanket_satpute_20.ironmind.domain.repository.AppUsageCheckpointStore
 import com.sanket_satpute_20.ironmind.domain.repository.AppUsageObservationSettingsRepository
@@ -127,17 +128,37 @@ class CollectAppUsageObservationsUseCase(
                 while (chunkStart < now) {
                     val chunkEnd = minOf(chunkStart + maxChunkDurationMillis, now)
 
-                    val reconstruction = appUsageObservationProvider.getAppUsageBetween(
+                    val providerResult = appUsageObservationProvider.queryAppUsage(
                         fromTimeMillis = chunkStart,
                         toTimeMillis = chunkEnd,
                         initialActiveSession = currentActiveSession
                     )
 
-                    currentActiveSession = reconstruction.activeSession
+                    val chunkEvents: List<AppUsageEvent>
+                    when (providerResult) {
+                        is AppUsageProviderResult.Success -> {
+                            chunkEvents = providerResult.events
+                            currentActiveSession = providerResult.activeSession
+                        }
+                        is AppUsageProviderResult.Failure -> {
+                            val error = (providerResult.cause as? Exception)
+                                ?: IllegalStateException("App usage query failed: ${providerResult.diagnosticCategory}", providerResult.cause)
+                            println("IronMindLifecycle [AppUsageObservation] [CHUNK_QUERY_FAILED] userId=$userId chunk=[$chunkStart, $chunkEnd] error=${error.message}")
+                            return@withLock Result.Failure(error)
+                        }
+                        is AppUsageProviderResult.ProviderUnavailable -> {
+                            println("IronMindLifecycle [AppUsageObservation] [PROVIDER_UNAVAILABLE] userId=$userId chunk=[$chunkStart, $chunkEnd]")
+                            return@withLock Result.Failure(IllegalStateException("UsageStatsManager is unavailable"))
+                        }
+                        is AppUsageProviderResult.PermissionDenied -> {
+                            println("IronMindLifecycle [AppUsageObservation] [PERMISSION_DENIED] userId=$userId chunk=[$chunkStart, $chunkEnd]")
+                            return@withLock Result.Success(totalSavedCount)
+                        }
+                    }
 
                     val chunkObservations = mutableListOf<Observation>()
 
-                    for (event in reconstruction.events) {
+                    for (event in chunkEvents) {
                         // Step 3: Split sessions crossing midnight into daily bounded slices
                         val slices = splitEventByDay(event, zoneId)
 

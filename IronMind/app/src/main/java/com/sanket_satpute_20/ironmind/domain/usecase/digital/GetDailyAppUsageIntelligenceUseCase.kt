@@ -44,7 +44,6 @@ class GetDailyAppUsageIntelligenceUseCase(
     companion object {
         const val DEFAULT_TOP_APPS_LIMIT = 5
         const val STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000L // 24 hours
-        private const val MIN_FULL_DAY_WINDOW_MS = 20 * 60 * 60 * 1000L // 20 hours (accommodates 23h DST spring-forward)
     }
 
     private sealed interface WindowCollectionResult {
@@ -56,6 +55,11 @@ class GetDailyAppUsageIntelligenceUseCase(
 
         data class EmptyConfirmed(
             val provenance: UsageSourceProvenance
+        ) : WindowCollectionResult
+
+        data class PartialWithNoEvents(
+            val provenance: UsageSourceProvenance,
+            val notes: String? = null
         ) : WindowCollectionResult
 
         data object PermissionDenied : WindowCollectionResult
@@ -78,17 +82,16 @@ class GetDailyAppUsageIntelligenceUseCase(
             return Result.Failure(IllegalArgumentException("userId cannot be blank"))
         }
 
-        val (windowStartMs, windowEndMs, isDocumentedPartialWindow) = if (customWindowStartMs != null && customWindowEndMs != null) {
+        val (windowStartMs, windowEndMs) = if (customWindowStartMs != null && customWindowEndMs != null) {
             if (customWindowStartMs >= customWindowEndMs) {
                 return Result.Failure(IllegalArgumentException("customWindowStartMs must be less than customWindowEndMs"))
             }
-            val isPartial = (customWindowEndMs - customWindowStartMs) < MIN_FULL_DAY_WINDOW_MS
-            Triple(customWindowStartMs, customWindowEndMs, isPartial)
+            Pair(customWindowStartMs, customWindowEndMs)
         } else {
             val localDate = Instant.ofEpochMilli(targetDayMillis).atZone(zoneId).toLocalDate()
             val startOfDay = localDate.atStartOfDay(zoneId).toInstant().toEpochMilli()
             val endOfDay = localDate.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
-            Triple(startOfDay, endOfDay, false)
+            Pair(startOfDay, endOfDay)
         }
 
         val now = clock.currentTimeMillis()
@@ -124,8 +127,7 @@ class GetDailyAppUsageIntelligenceUseCase(
         val collectionResult = collectEventsForWindow(
             userId = userId,
             startTimeMs = windowStartMs,
-            endTimeMs = windowEndMs,
-            isDocumentedPartialWindow = isDocumentedPartialWindow
+            endTimeMs = windowEndMs
         )
 
         val (events, provenance, isPartialCoverage) = when (collectionResult) {
@@ -189,6 +191,27 @@ class GetDailyAppUsageIntelligenceUseCase(
                         isRealTime = false,
                         sourceProvenance = UsageSourceProvenance.NONE,
                         notes = "App usage query failed: ${collectionResult.diagnosticCategory}"
+                    )
+                )
+            }
+            is WindowCollectionResult.PartialWithNoEvents -> {
+                return Result.Success(
+                    DailyAppUsageIntelligence(
+                        userId = userId,
+                        targetDayStartMs = windowStartMs,
+                        targetDayEndMs = windowEndMs,
+                        permissionStatus = UsagePermissionStatus.GRANTED,
+                        availability = SourceAvailability.PARTIAL_HISTORY,
+                        totalObservedDurationMs = null, // Strictly null, NEVER zero on truncated/unknown usage
+                        totalSessionsCount = null,
+                        appUsages = emptyList(),
+                        mostUsedApps = emptyList(),
+                        comparisonWithPreviousDay = null,
+                        dataFreshnessMs = null,
+                        isFresh = true,
+                        isRealTime = collectionResult.provenance == UsageSourceProvenance.LIVE_USAGE_STATS,
+                        sourceProvenance = collectionResult.provenance,
+                        notes = collectionResult.notes ?: "App usage data is incomplete due to query truncation."
                     )
                 )
             }
@@ -279,15 +302,23 @@ class GetDailyAppUsageIntelligenceUseCase(
         }
 
         if (appItems.isEmpty()) {
+            val availability = if (isPartialCoverage) SourceAvailability.PARTIAL_HISTORY else SourceAvailability.EMPTY_NO_DATA
+            val totalDuration = if (isPartialCoverage) null else 0L
+            val sessionCount = if (isPartialCoverage) null else 0
+            val emptyNote = if (isPartialCoverage) {
+                "App usage data is incomplete for this window."
+            } else {
+                "No app usage events observed for this day window."
+            }
             return Result.Success(
                 DailyAppUsageIntelligence(
                     userId = userId,
                     targetDayStartMs = windowStartMs,
                     targetDayEndMs = windowEndMs,
                     permissionStatus = UsagePermissionStatus.GRANTED,
-                    availability = SourceAvailability.EMPTY_NO_DATA,
-                    totalObservedDurationMs = 0L, // Valid observed 0ms because permission was granted
-                    totalSessionsCount = 0,
+                    availability = availability,
+                    totalObservedDurationMs = totalDuration,
+                    totalSessionsCount = sessionCount,
                     appUsages = emptyList(),
                     mostUsedApps = emptyList(),
                     comparisonWithPreviousDay = null,
@@ -295,7 +326,7 @@ class GetDailyAppUsageIntelligenceUseCase(
                     isFresh = true,
                     isRealTime = false,
                     sourceProvenance = provenance,
-                    notes = "No app usage events observed for this day window."
+                    notes = emptyNote
                 )
             )
         }
@@ -332,8 +363,7 @@ class GetDailyAppUsageIntelligenceUseCase(
         val previousDayResult = collectEventsForWindow(
             userId = userId,
             startTimeMs = prevDayStartMs,
-            endTimeMs = prevDayEndMs,
-            isDocumentedPartialWindow = isDocumentedPartialWindow
+            endTimeMs = prevDayEndMs
         )
 
         val comparison = if (previousDayResult is WindowCollectionResult.Success) {
@@ -430,14 +460,13 @@ class GetDailyAppUsageIntelligenceUseCase(
     private suspend fun collectEventsForWindow(
         userId: String,
         startTimeMs: Long,
-        endTimeMs: Long,
-        isDocumentedPartialWindow: Boolean = false
+        endTimeMs: Long
     ): WindowCollectionResult {
         // Source A: On-demand UsageStatsManager query via AppUsageObservationProvider
         if (appUsageObservationProvider == null) {
             val roomResult = fetchRoomEvents(userId, startTimeMs, endTimeMs)
             return if (roomResult is Result.Success && roomResult.data.isNotEmpty()) {
-                val isPartial = isDocumentedPartialWindow || isRoomCheckpointPartial(userId, startTimeMs, endTimeMs)
+                val isPartial = isRoomCheckpointPartial(userId, startTimeMs, endTimeMs)
                 WindowCollectionResult.Success(
                     events = roomResult.data,
                     provenance = UsageSourceProvenance.ROOM_PERSISTED_OBSERVATIONS,
@@ -460,7 +489,7 @@ class GetDailyAppUsageIntelligenceUseCase(
             is AppUsageProviderResult.ProviderUnavailable -> {
                 val roomResult = fetchRoomEvents(userId, startTimeMs, endTimeMs)
                 if (roomResult is Result.Success && roomResult.data.isNotEmpty()) {
-                    val isPartial = isDocumentedPartialWindow || isRoomCheckpointPartial(userId, startTimeMs, endTimeMs)
+                    val isPartial = isRoomCheckpointPartial(userId, startTimeMs, endTimeMs)
                     WindowCollectionResult.Success(
                         events = roomResult.data,
                         provenance = UsageSourceProvenance.ROOM_PERSISTED_OBSERVATIONS,
@@ -474,7 +503,7 @@ class GetDailyAppUsageIntelligenceUseCase(
                 // Provider query failed with an exception: check if Room fallback has records
                 val roomResult = fetchRoomEvents(userId, startTimeMs, endTimeMs)
                 if (roomResult is Result.Success && roomResult.data.isNotEmpty()) {
-                    val isPartial = isDocumentedPartialWindow || isRoomCheckpointPartial(userId, startTimeMs, endTimeMs)
+                    val isPartial = isRoomCheckpointPartial(userId, startTimeMs, endTimeMs)
                     WindowCollectionResult.Success(
                         events = roomResult.data,
                         provenance = UsageSourceProvenance.ROOM_PERSISTED_OBSERVATIONS,
@@ -493,7 +522,7 @@ class GetDailyAppUsageIntelligenceUseCase(
                     it.startTimeMillis < endTimeMs && it.endTimeMillis >= startTimeMs
                 }
                 if (filtered.isNotEmpty()) {
-                    val isPartial = isDocumentedPartialWindow || providerResult.isTruncated
+                    val isPartial = providerResult.isTruncated
                     WindowCollectionResult.Success(
                         events = filtered,
                         provenance = UsageSourceProvenance.LIVE_USAGE_STATS,
@@ -503,11 +532,18 @@ class GetDailyAppUsageIntelligenceUseCase(
                     // Live query succeeded with zero events. Check Room fallback:
                     val roomResult = fetchRoomEvents(userId, startTimeMs, endTimeMs)
                     if (roomResult is Result.Success && roomResult.data.isNotEmpty()) {
-                        val isPartial = isDocumentedPartialWindow || isRoomCheckpointPartial(userId, startTimeMs, endTimeMs)
+                        val isPartial = isRoomCheckpointPartial(userId, startTimeMs, endTimeMs)
                         WindowCollectionResult.Success(
                             events = roomResult.data,
                             provenance = UsageSourceProvenance.ROOM_PERSISTED_OBSERVATIONS,
                             isPartial = isPartial
+                        )
+                    } else if (providerResult.isTruncated) {
+                        // Live query was truncated and yielded no filtered events, and Room has no data.
+                        // Do not fabricate confirmed 0L / EMPTY_NO_DATA; report partial history with unknown duration.
+                        WindowCollectionResult.PartialWithNoEvents(
+                            provenance = UsageSourceProvenance.LIVE_USAGE_STATS,
+                            notes = "App usage query was truncated by system limit; usage data is incomplete."
                         )
                     } else {
                         WindowCollectionResult.EmptyConfirmed(
