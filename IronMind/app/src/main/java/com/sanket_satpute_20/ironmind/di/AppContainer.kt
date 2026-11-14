@@ -1351,8 +1351,7 @@ class DefaultAppContainer(
             updatePlanStatusUseCase = updatePlanStatusUseCase,
             clock = clock,
             idGenerator = idGenerator,
-            commitmentRepository = commitmentRepository,
-            database = database
+            commitmentRepository = commitmentRepository
         )
     }
 

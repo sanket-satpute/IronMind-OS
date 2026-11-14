@@ -1,7 +1,5 @@
-﻿package com.sanket_satpute_20.ironmind.domain.usecase.action
+package com.sanket_satpute_20.ironmind.domain.usecase.action
 
-import androidx.room.withTransaction
-import com.sanket_satpute_20.ironmind.data.local.IronMindDatabase
 import com.sanket_satpute_20.ironmind.domain.common.Clock
 import com.sanket_satpute_20.ironmind.domain.common.IdGenerator
 import com.sanket_satpute_20.ironmind.domain.common.Result
@@ -47,7 +45,7 @@ import java.util.concurrent.ConcurrentHashMap
  * 9. Outcome Invariant: Outcomes can ONLY be recorded for EXECUTED actions.
  * 10. Outcome Idempotency: Recording outcome multiple times returns existing outcome without duplicate creation.
  * 11. Durable Persistence: All state transitions are saved to ActionRepository.
- * 12. Crash-Safety: Atomic shared transactions when database is present; deterministic entity IDs and recovery when interrupted.
+ * 12. Crash-Safety: Deterministic entity IDs and idempotent recovery when interrupted.
  */
 class ActionLifecycleUseCase(
     private val actionRepository: ActionRepository? = null,
@@ -62,8 +60,7 @@ class ActionLifecycleUseCase(
     private val updatePlanStatusUseCase: UpdatePlanStatusUseCase? = null,
     private val clock: Clock,
     private val idGenerator: IdGenerator,
-    private val commitmentRepository: CommitmentRepository? = null,
-    private val database: IronMindDatabase? = null
+    private val commitmentRepository: CommitmentRepository? = null
 ) {
 
     private val executionLocks = ConcurrentHashMap<String, Mutex>()
@@ -200,7 +197,7 @@ class ActionLifecycleUseCase(
      * - Cannot execute an already EXECUTED action.
      * - Cannot silently retry an EXECUTION_FAILED action without explicit user reset.
      * - Concurrent executions on the same action are blocked via JVM Mutex.
-     * - Uses shared Room transaction when database is available for atomic crash safety.
+     * - Deterministic entity IDs and domain repository contracts provide crash-safe idempotency.
      * - Subtasks and focus commitments use deterministic IDs to prevent duplicates on retry.
      * - Execution does not automatically record success; outcome recording is a separate step.
      */

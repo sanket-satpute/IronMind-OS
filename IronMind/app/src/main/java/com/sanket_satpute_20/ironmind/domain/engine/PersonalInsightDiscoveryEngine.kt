@@ -715,7 +715,7 @@ class PersonalInsightDiscoveryEngine(
         }
 
         val limitationNotes = buildList {
-            add("The available records show a recurring difference between planned and recorded execution times. Does not imply procrastination, lack of discipline, or poor focus.")
+            add("The available records show a recurring difference between planned and recorded execution times. Reflects temporal variance only and does not establish intent or execution quality.")
             if (timing.provenance.unmeasuredStartsMissingScheduleCount > 0) {
                 add("${timing.provenance.unmeasuredStartsMissingScheduleCount} task(s) started without a scheduled start time were excluded from delay calculation.")
             }
@@ -803,7 +803,7 @@ class PersonalInsightDiscoveryEngine(
         }
 
         val limitationNotes = buildList {
-            add("The available records show a recurring difference between planned and recorded execution times. Does not imply lack of discipline or poor execution.")
+            add("The available records show a recurring difference between planned and recorded execution times. Reflects temporal variance only and does not establish intent or execution quality.")
             if (!timing.provenance.eventRepositoryAvailable) {
                 add("Event repository was unavailable; completion timestamps were taken from task completion records where available.")
             } else if (hasFallbacks) {
@@ -877,3 +877,4 @@ class PersonalInsightDiscoveryEngine(
         }
     }
 }
+

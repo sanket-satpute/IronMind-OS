@@ -122,8 +122,7 @@ class ActionExecutionCrashSafetyIntegrationTest {
             createTaskUseCase = createTaskUseCase,
             clock = clock,
             idGenerator = idGen,
-            commitmentRepository = commitmentRepository,
-            database = db
+            commitmentRepository = commitmentRepository
         )
     }
 
