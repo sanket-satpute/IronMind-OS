@@ -134,16 +134,23 @@ class Migration21To22Test {
         ).addMigrations(
             *historicalMigrations.toTypedArray(),
             IronMindDatabase.MIGRATION_21_22,
-            IronMindDatabase.MIGRATION_22_23
+            IronMindDatabase.MIGRATION_22_23,
+            IronMindDatabase.MIGRATION_23_24,
+            IronMindDatabase.MIGRATION_24_25,
+            IronMindDatabase.MIGRATION_25_26,
+            IronMindDatabase.MIGRATION_26_27,
+            IronMindDatabase.MIGRATION_27_28,
+            IronMindDatabase.MIGRATION_28_29,
+            IronMindDatabase.MIGRATION_29_30
         ).build()
 
         // Step 4: Exercise Room's normal schema-validation path (RoomOpenHelper.onValidateSchema)
         val writableDb = roomDb.openHelper.writableDatabase
 
-        // Verify version is 23
+        // Verify version is 30
         val versionCursor = writableDb.query("PRAGMA user_version")
         assertTrue(versionCursor.moveToFirst())
-        assertEquals(23, versionCursor.getInt(0))
+        assertEquals(30, versionCursor.getInt(0))
         versionCursor.close()
 
         // Step 5: Verify the version-22 schema and all three indexes in sqlite_master

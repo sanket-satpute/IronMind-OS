@@ -106,16 +106,23 @@ class Migration22To23Test {
             dbName
         ).addMigrations(
             *historicalMigrations.toTypedArray(),
-            IronMindDatabase.MIGRATION_22_23
+            IronMindDatabase.MIGRATION_22_23,
+            IronMindDatabase.MIGRATION_23_24,
+            IronMindDatabase.MIGRATION_24_25,
+            IronMindDatabase.MIGRATION_25_26,
+            IronMindDatabase.MIGRATION_26_27,
+            IronMindDatabase.MIGRATION_27_28,
+            IronMindDatabase.MIGRATION_28_29,
+            IronMindDatabase.MIGRATION_29_30
         ).allowMainThreadQueries()
         .build()
 
         val writableDb = roomDb.openHelper.writableDatabase
 
-        // Step 4: Verify schema version is 23
+        // Step 4: Verify schema version is 30
         val versionCursor = writableDb.query("PRAGMA user_version")
         assertTrue(versionCursor.moveToFirst())
-        assertEquals(23, versionCursor.getInt(0))
+        assertEquals(30, versionCursor.getInt(0))
         versionCursor.close()
 
         // Step 5: Verify columns causalHypothesisId and causalHypothesisType exist in intervention_recommendations
