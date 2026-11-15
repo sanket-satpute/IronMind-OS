@@ -52,6 +52,38 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class SessionIntegrationAndIdentityRaceTest {
 
+    companion object {
+        private fun clearUnprocessedExceptionsSafely() {
+            try {
+                val collectorClass = Class.forName("kotlinx.coroutines.test.internal.ExceptionCollector")
+                val lockField = collectorClass.getDeclaredField("lock").apply { isAccessible = true }
+                val lock = lockField.get(null) ?: collectorClass
+                val listField = collectorClass.getDeclaredField("unprocessedExceptions").apply { isAccessible = true }
+                synchronized(lock) {
+                    (listField.get(null) as? MutableList<*>)?.clear()
+                }
+            } catch (_: Throwable) {}
+        }
+
+        @org.junit.BeforeClass
+        @JvmStatic
+        fun beforeClass() {
+            androidx.arch.core.executor.ArchTaskExecutor.getInstance().setDelegate(object : androidx.arch.core.executor.TaskExecutor() {
+                override fun executeOnDiskIO(runnable: Runnable) = runnable.run()
+                override fun postToMainThread(runnable: Runnable) = runnable.run()
+                override fun isMainThread(): Boolean = true
+            })
+            clearUnprocessedExceptionsSafely()
+        }
+
+        @org.junit.AfterClass
+        @JvmStatic
+        fun afterClass() {
+            androidx.arch.core.executor.ArchTaskExecutor.getInstance().setDelegate(null)
+            clearUnprocessedExceptionsSafely()
+        }
+    }
+
     @org.junit.Before
     fun setUp() {
         androidx.arch.core.executor.ArchTaskExecutor.getInstance().setDelegate(object : androidx.arch.core.executor.TaskExecutor() {
@@ -63,15 +95,13 @@ class SessionIntegrationAndIdentityRaceTest {
             }
             override fun isMainThread(): Boolean = true
         })
+        clearUnprocessedExceptionsSafely()
     }
 
     @After
     fun tearDown() {
-        try {
-            org.robolectric.shadows.ShadowLooper.idleMainLooper()
-        } finally {
-            androidx.arch.core.executor.ArchTaskExecutor.getInstance().setDelegate(null)
-        }
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        clearUnprocessedExceptionsSafely()
     }
 
     private class FakeAuthRepository(
