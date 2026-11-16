@@ -106,7 +106,7 @@ class ObservationDatabasePerformanceTest {
             indexedPlan.none { it.contains("TEMP B-TREE") }
         )
 
-        // 5. Indexed Latest Observation Query Plan
+        // 5. Indexed Latest Observation Query
         val indexedLatestPlan = explainQueryPlan(latestObsSql, arrayOf(userId, "APP_USAGE_SESSION"))
         println("=== Indexed Latest Observation Query Plan ===")
         indexedLatestPlan.forEach { println("  $it") }
@@ -214,7 +214,13 @@ class ObservationDatabasePerformanceTest {
         val avgIndexedMicros = (totalIndexedTimeNanos / indexedRuns) / 1000
         println("Indexed Query Latency (Mean of $indexedRuns runs): ${avgIndexedMicros} µs")
 
-        println("Speedup Factor: ${String.format("%.2f", avgUnindexedMicros.toDouble() / avgIndexedMicros.toDouble())}x")
-        assertTrue("Indexed query must complete faster than unindexed query", avgIndexedMicros <= avgUnindexedMicros)
+        val speedup = avgUnindexedMicros.toDouble() / avgIndexedMicros.toDouble()
+        println("Speedup Factor (diagnostic only; timing varies with host load): ${String.format("%.2f", speedup)}x")
+
+        // Wall-clock latency is diagnostic, not a correctness invariant. CI/host CPU contention,
+        // scheduler noise, and JVM warmup can make an indexed run slower in an individual test.
+        // Deterministic index behavior is asserted by the EXPLAIN QUERY PLAN test above.
+        assertTrue("Unindexed query benchmark must execute", avgUnindexedMicros > 0L)
+        assertTrue("Indexed query benchmark must execute", avgIndexedMicros > 0L)
     }
 }
