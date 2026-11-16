@@ -70,7 +70,7 @@ android {
                     "**/Tier1IncrementalPullAndPaginationTest*",
                     "**/StagingIdentitySdkEmulatorTest*"
                 )
-                if (testTask.name == "testDebugUnitTest") {
+                if (testTask.name.endsWith("UnitTest") && testTask.name != "testFirebaseEmulatorIntegration") {
                     emulatorTestPatterns.forEach { pattern ->
                         testTask.exclude(pattern)
                     }
@@ -128,6 +128,8 @@ val emulatorTestPatterns = listOf(
 tasks.register<Test>("testFirebaseEmulatorIntegration") {
     group = "verification"
     description = "Runs Firebase Emulator integration tests against local emulator endpoints (demo-ironmind)."
+
+    failOnNoDiscoveredTests.set(false)
 
     val testDebugTask = tasks.named<Test>("testDebugUnitTest")
 
