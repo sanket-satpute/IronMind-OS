@@ -130,3 +130,4 @@ class ObservationWorkerIntelligenceTriggerTest {
         assertEquals(Result.success(), result)
     }
 }
+

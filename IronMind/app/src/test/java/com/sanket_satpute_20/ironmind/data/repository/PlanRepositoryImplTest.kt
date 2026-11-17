@@ -36,11 +36,13 @@ class PlanRepositoryImplTest {
         }
         override fun getPlan(id: String): PlanEntity? = returnedPlan
         override fun getPlansForGoal(goalId: String): List<PlanEntity> = emptyList()
+        override fun getPlansForUser(userId: String): List<PlanEntity> = emptyList()
         
         override fun insertTask(task: TaskEntity) {}
         override fun getTask(id: String): TaskEntity? = null
         override fun getTasksForPlan(planId: String): List<TaskEntity> = emptyList()
         override fun getTasksForGoal(goalId: String): List<TaskEntity> = emptyList()
+        override fun getTasksForUser(userId: String): List<TaskEntity> = emptyList()
         override fun insertCommitment(commitment: CommitmentEntity) {}
         override fun getCommitment(id: String): CommitmentEntity? = null
         override fun getCommitmentsForUser(userId: String): List<CommitmentEntity> = emptyList()
@@ -53,9 +55,11 @@ class PlanRepositoryImplTest {
         override fun insertOutcome(outcome: OutcomeEntity) {}
         override fun getOutcome(id: String): OutcomeEntity? = null
         override fun getOutcomeForSource(sourceEntityId: String): OutcomeEntity? = null
+        override fun getOutcomesForUser(userId: String): List<OutcomeEntity> = emptyList()
         override fun insertReflection(reflection: ReflectionEntity) {}
         override fun getReflection(id: String): ReflectionEntity? = null
         override fun getReflectionForUser(userId: String, id: String): ReflectionEntity? = null
+        override fun getReflectionsForUser(userId: String): List<ReflectionEntity> = emptyList()
         override fun getReflectionsForDateRange(userId: String, startTime: Long, endTime: Long): List<ReflectionEntity> = emptyList()
         override fun insertProtectionRule(rule: ProtectionRuleEntity) {}
         override fun getProtectionRule(id: String): ProtectionRuleEntity? = null
@@ -63,6 +67,7 @@ class PlanRepositoryImplTest {
         override fun insertProtectionSession(session: ProtectionSessionEntity) {}
         override fun getProtectionSession(id: String): ProtectionSessionEntity? = null
         override fun getActiveProtectionSessionsForUser(userId: String): List<ProtectionSessionEntity> = emptyList()
+        override fun getProtectionSessionsForUser(userId: String): List<ProtectionSessionEntity> = emptyList()
         override fun insertEvent(event: EventEntity) {}
         override fun getEventsForEntity(entityId: String): List<EventEntity> = emptyList()
         override fun getEventsForUser(userId: String): List<EventEntity> = emptyList()
@@ -93,6 +98,7 @@ class PlanRepositoryImplTest {
         override fun deleteProtectionSessionsForUser(userId: String) {}
         override fun deleteEventsForUser(userId: String) {}
         override fun deleteMemoriesForUser(userId: String) {}
+        override fun deleteOutcomesForUser(userId: String) {}
         override fun deleteForgottenMemoriesOlderThan(userId: String, thresholdTime: Long) {}
     
     override fun getReflectionsForDateRangeAsc(userId: String, startTime: Long, endTime: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.ReflectionEntity> = emptyList()
@@ -102,6 +108,14 @@ class PlanRepositoryImplTest {
     override fun getEventsForDateRangeWithTypesAsc(userId: String, types: List<String>, startTime: Long, endTime: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.EventEntity> = emptyList()
     override fun getEventsForDateRangeWithTypesDesc(userId: String, types: List<String>, startTime: Long, endTime: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.EventEntity> = emptyList()
     override fun getEventsByCausationId(userId: String, causationId: String): List<com.sanket_satpute_20.ironmind.data.local.entity.EventEntity> = emptyList()
+    override fun observeMemoriesForUser(userId: String): Flow<List<MemoryEntity>> = flowOf(emptyList())
+    override fun deleteMemory(userId: String, id: String): Int = 0
+    override fun deleteGoal(userId: String, id: String): Int = 0
+    override fun deletePlan(userId: String, id: String): Int = 0
+    override fun deleteTask(userId: String, id: String): Int = 0
+    override fun deleteCommitment(userId: String, id: String): Int = 0
+    override fun deleteReflection(userId: String, id: String): Int = 0
+    override fun updateMemoryState(id: String, userId: String, confirmationState: String, status: String, updatedAt: Long): Int = 0
 }
 
     @Before

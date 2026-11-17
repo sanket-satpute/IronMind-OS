@@ -878,4 +878,46 @@ class RecommendInterventionUseCaseTest {
         val recB = ((resultB as Result.Success).data as InterventionRecommendationResult.Recommended).recommendation
         assertNull("Invalid type string must fail closed to null", recB.causalHypothesis)
     }
+
+    @Test
+    fun `prompt serialization includes confirmation states for patterns and barriers and excludes rejected`() = runBlocking {
+        setupAutonomy(AutonomyLevel.FULL_AUTO)
+        val requestSlot = io.mockk.slot<AIRequest>()
+        coEvery { ironMindAI.process(capture(requestSlot)) } returns Result.Success(validAIOutput())
+        setupTargetCompletion(TargetCompletionResult.NOT_COMPLETED)
+        setupHistory()
+        setupSaveSuccess()
+
+        val context = defaultContext().copy(
+            activePatterns = listOf(
+                ContextPattern("pat-conf", PatternType.TIME_PATTERN, "Works early morning", com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState.USER_CONFIRMED),
+                ContextPattern("pat-sys", PatternType.ENERGY_PATTERN, "Validated cadence", com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState.SYSTEM_CONFIRMED),
+                ContextPattern("pat-unconf", PatternType.CONTEXT_PATTERN, "Deep work 2pm", com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState.UNCONFIRMED),
+                ContextPattern("pat-rej", PatternType.DISTRACTION_PATTERN, "Late night stress", com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState.USER_REJECTED)
+            ),
+            activeBarriers = listOf(
+                ContextBarrier("bar-conf", BarrierCategory.DISTRACTION, "Phone notifications", BarrierConfirmationState.CONFIRMED),
+                ContextBarrier("bar-unconf", BarrierCategory.UNCERTAINTY, "Ambiguous spec", BarrierConfirmationState.UNCONFIRMED),
+                ContextBarrier("bar-rej", BarrierCategory.LOW_ENERGY, "Chronic fatigue", BarrierConfirmationState.REJECTED),
+                ContextBarrier("bar-dis", BarrierCategory.BOREDOM, "Boredom", BarrierConfirmationState.DISMISSED)
+            )
+        )
+
+        useCase(context)
+
+        assertTrue(requestSlot.isCaptured)
+        val prompt = requestSlot.captured.input
+
+        // Patterns verification:
+        assertTrue(prompt.contains("PATTERN [pat-conf]: TIME_PATTERN (CONFIRMED) - Works early morning"))
+        assertTrue(prompt.contains("PATTERN [pat-sys]: ENERGY_PATTERN ([System Confirmed]) - Validated cadence"))
+        assertTrue(prompt.contains("PATTERN [pat-unconf]: CONTEXT_PATTERN (UNCONFIRMED HYPOTHESIS) - Deep work 2pm"))
+        org.junit.Assert.assertFalse(prompt.contains("pat-rej"))
+
+        // Barriers verification:
+        assertTrue(prompt.contains("BARRIER [bar-conf]: DISTRACTION (CONFIRMED) - Phone notifications"))
+        assertTrue(prompt.contains("BARRIER [bar-unconf]: UNCERTAINTY (UNCONFIRMED HYPOTHESIS) - Ambiguous spec"))
+        org.junit.Assert.assertFalse(prompt.contains("bar-rej"))
+        org.junit.Assert.assertFalse(prompt.contains("bar-dis"))
+    }
 }

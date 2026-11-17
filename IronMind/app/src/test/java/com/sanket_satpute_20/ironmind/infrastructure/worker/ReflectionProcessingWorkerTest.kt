@@ -9,14 +9,19 @@ import com.sanket_satpute_20.ironmind.domain.model.Reflection
 import com.sanket_satpute_20.ironmind.domain.model.UserProfile
 import com.sanket_satpute_20.ironmind.domain.usecase.pattern.EvaluatePatternCandidatesUseCase
 import com.sanket_satpute_20.ironmind.domain.engine.BarrierUnderstandingOrchestrator
+import com.sanket_satpute_20.ironmind.domain.session.SessionState
+import com.sanket_satpute_20.ironmind.domain.session.UserSessionProvider
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeAutonomousReflectionEngine
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeReflectionRepository
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeUserProfileRepository
+import com.sanket_satpute_20.ironmind.testutil.FakeUserSessionProvider
 import io.mockk.coEvery
 import io.mockk.mockk
 import io.mockk.coVerify
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CancellationException
 import org.junit.Assert.assertEquals
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import java.time.ZoneId
@@ -31,6 +36,7 @@ class ReflectionProcessingWorkerTest {
     private lateinit var evaluateUseCase: EvaluatePatternCandidatesUseCase
     private lateinit var orchestrator: BarrierUnderstandingOrchestrator
     private lateinit var worker: ReflectionProcessingWorker
+    private lateinit var userSessionProvider: UserSessionProvider
 
     @Before
     fun setup() {
@@ -44,10 +50,14 @@ class ReflectionProcessingWorkerTest {
         evaluateUseCase = mockk(relaxed = true)
         orchestrator = mockk(relaxed = true)
         coEvery { orchestrator.processReflection(any()) } returns DomainResult.Success(Unit)
+        userSessionProvider = FakeUserSessionProvider(SessionState.Authenticated("user-1", true))
     }
 
-    private fun createWorker(reflectionId: String?): ReflectionProcessingWorker {
+    private fun createWorker(reflectionId: String?, generation: Long = 1L): ReflectionProcessingWorker {
         val dataBuilder = Data.Builder()
+        if (generation > 0L) {
+            dataBuilder.putLong(UserSessionProvider.KEY_SESSION_GENERATION, generation)
+        }
         if (reflectionId != null) {
             dataBuilder.putString(ReflectionProcessingWorker.KEY_REFLECTION_ID, reflectionId)
         }
@@ -60,7 +70,8 @@ class ReflectionProcessingWorkerTest {
             userProfileRepository,
             engine,
             evaluateUseCase,
-            orchestrator
+            orchestrator,
+            userSessionProvider
         )
     }
 
@@ -94,6 +105,41 @@ class ReflectionProcessingWorkerTest {
         worker = createWorker("ref-1")
         val result = worker.doWork()
         assertEquals(Result.failure(), result)
+    }
+
+    @Test
+    fun `reflection belonging to another session is not processed`() = runBlocking {
+        reflectionRepository.saveReflection(
+            Reflection(
+                id = "ref-other", userId = "another-user", content = "Private", createdAt = 0L,
+                targetEntityId = null, targetEntityType = null, sentiment = null
+            )
+        )
+
+        val result = createWorker("ref-other").doWork()
+
+        assertEquals(Result.retry(), result)
+        coVerify(exactly = 0) { orchestrator.processReflection(any()) }
+    }
+
+    @Test
+    fun `worker rethrows session cancellation`() = runBlocking {
+        val delegate = FakeUserSessionProvider(SessionState.Authenticated("user-1", true))
+        userSessionProvider = object : UserSessionProvider by delegate {
+            override suspend fun <T> withUserSession(action: suspend (userId: String) -> T): T {
+                throw CancellationException("work canceled")
+            }
+            override suspend fun <T> withUserSession(expectedGeneration: Long, action: suspend (userId: String) -> T): T {
+                throw CancellationException("work canceled")
+            }
+        }
+
+        try {
+            createWorker("ref-1").doWork()
+            fail("Worker cancellation must be rethrown to WorkManager")
+        } catch (_: CancellationException) {
+            // Expected.
+        }
     }
 
     @Test

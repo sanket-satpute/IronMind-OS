@@ -110,6 +110,7 @@ class DiscoveryDaoTest {
     fun `reflections date range DESC limit boundary`() = runTest {
         val r1 = ref("1", 10L) // Excluded (start)
         val r2a = ref("2a", 100L) // tie
+        val r2 = ref("2", 100L) // tie
         val r3 = ref("3", 200L)
         val r4 = ref("4", 300L) // Excluded (end boundary exclusive)
 
@@ -134,7 +135,8 @@ class DiscoveryDaoTest {
 
     private fun obs(id: String, type: String, occurredAt: Long) = ObservationEntity(
         id = id, userId = "user", type = type, source = "USER", occurredAt = occurredAt, recordedAt = 0L,
-        subjectId = null, value = "", context = "", confidence = null, provenance = "SYSTEM", schemaVersion = 1
+        subjectId = null, value = "", context = "", confidence = null,
+        provenanceSource = "USER", provenanceSourceReference = null, provenanceCapturedAt = 0L, schemaVersion = 1
     )
 
     private fun ref(id: String, createdAt: Long) = ReflectionEntity(

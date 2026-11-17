@@ -6,6 +6,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
+import kotlinx.coroutines.launch
+
 
 class GeminiIronMindAITest {
 
@@ -211,5 +213,264 @@ class GeminiIronMindAITest {
         val intervention = output as AIOutput.InterventionRecommendation
         org.junit.Assert.assertNull(intervention.causalHypothesisId)
         org.junit.Assert.assertNull(intervention.causalHypothesisType)
+    }
+
+    @Test
+    fun `process succeeds with structured AIOutput when content generator returns valid JSON`() = kotlinx.coroutines.runBlocking {
+        val validJson = """
+            {
+                "type": "INTENT",
+                "confidence": 0.9,
+                "reasoning": "Direct intent",
+                "schemaVersion": 1,
+                "intentDescription": "Read 20 pages"
+            }
+        """.trimIndent()
+
+        val ai = GeminiIronMindAI(
+            contentGenerator = { validJson }
+        )
+
+        val request = com.sanket_satpute_20.ironmind.domain.ai.AIRequest(
+            userId = "user-1",
+            input = "I want to read 20 pages",
+            requestType = AIRequestType.INTENT_EXTRACTION
+        )
+
+        val result = ai.process(request)
+        assertTrue(result is com.sanket_satpute_20.ironmind.domain.common.Result.Success)
+        val output = (result as com.sanket_satpute_20.ironmind.domain.common.Result.Success).data
+        assertTrue(output is AIOutput.IntentOutput)
+        assertEquals("Read 20 pages", (output as AIOutput.IntentOutput).intentDescription)
+    }
+
+    @Test
+    fun `process retries on transient failure and succeeds`() = kotlinx.coroutines.runBlocking {
+        var attempts = 0
+        val validJson = """
+            {
+                "type": "INTENT",
+                "confidence": 0.9,
+                "reasoning": "Direct intent",
+                "schemaVersion": 1,
+                "intentDescription": "Drink water"
+            }
+        """.trimIndent()
+
+        val ai = GeminiIronMindAI(
+            contentGenerator = {
+                attempts++
+                if (attempts == 1) {
+                    throw IOException("Temporary connection hiccup")
+                }
+                validJson
+            }
+        )
+
+        val request = com.sanket_satpute_20.ironmind.domain.ai.AIRequest(
+            userId = "user-1",
+            input = "Drink water",
+            requestType = AIRequestType.INTENT_EXTRACTION
+        )
+
+        val result = ai.process(request)
+        assertTrue(result is com.sanket_satpute_20.ironmind.domain.common.Result.Success)
+        assertEquals(2, attempts)
+    }
+
+    @Test
+    fun `process returns Result Failure on repeated failure without crashing`() = kotlinx.coroutines.runBlocking {
+        val ai = GeminiIronMindAI(
+            maxRetries = 1,
+            contentGenerator = {
+                throw IOException("Network unreachable")
+            }
+        )
+
+        val request = com.sanket_satpute_20.ironmind.domain.ai.AIRequest(
+            userId = "user-1",
+            input = "Failing task",
+            requestType = AIRequestType.INTENT_EXTRACTION
+        )
+
+        val result = ai.process(request)
+        assertTrue(result is com.sanket_satpute_20.ironmind.domain.common.Result.Failure)
+        assertTrue((result as com.sanket_satpute_20.ironmind.domain.common.Result.Failure).error is IOException)
+    }
+
+    @Test
+    fun `process returns Result Failure on timeout without throwing`() = kotlinx.coroutines.runBlocking {
+        val ai = GeminiIronMindAI(
+            timeoutMs = 50L,
+            maxRetries = 0,
+            contentGenerator = {
+                kotlinx.coroutines.delay(200L)
+                "{}"
+            }
+        )
+
+        val request = com.sanket_satpute_20.ironmind.domain.ai.AIRequest(
+            userId = "user-1",
+            input = "Slow task",
+            requestType = AIRequestType.INTENT_EXTRACTION
+        )
+
+        val result = ai.process(request)
+        assertTrue(result is com.sanket_satpute_20.ironmind.domain.common.Result.Failure)
+    }
+
+    @Test
+    fun `default model name is gemini-3-8-flash`() {
+        assertEquals("gemini-3.8-flash", GeminiIronMindAI.DEFAULT_MODEL_NAME)
+    }
+
+    @Test
+    fun `process returns Result Failure when Firebase is uninitialized instead of crashing`() = kotlinx.coroutines.runBlocking {
+        val ai = GeminiIronMindAI()
+
+        val request = com.sanket_satpute_20.ironmind.domain.ai.AIRequest(
+            userId = "user-1",
+            input = "Test uninitialized",
+            requestType = AIRequestType.INTENT_EXTRACTION
+        )
+
+        val result = ai.process(request)
+        assertTrue(result is com.sanket_satpute_20.ironmind.domain.common.Result.Failure)
+        val error = (result as com.sanket_satpute_20.ironmind.domain.common.Result.Failure).error
+        assertTrue(error is IOException)
+        assertTrue(error.message?.contains("Firebase") == true)
+    }
+
+    @Test
+    fun `process handles cancellation cleanly`() = kotlinx.coroutines.runBlocking {
+        val ai = GeminiIronMindAI(
+            contentGenerator = {
+                kotlinx.coroutines.delay(10000L)
+                "{}"
+            }
+        )
+
+        val job = launch {
+            val request = com.sanket_satpute_20.ironmind.domain.ai.AIRequest(
+                userId = "user-1",
+                input = "Long task",
+                requestType = AIRequestType.INTENT_EXTRACTION
+            )
+            ai.process(request)
+        }
+
+        kotlinx.coroutines.delay(50L)
+        job.cancel()
+        job.join()
+        assertTrue(job.isCancelled)
+    }
+
+    @Test
+    fun `buildPrompt serializes activeMemories and recentPatterns distinguishing confirmed facts from unconfirmed hypotheses and excluding rejected`() {
+        val ai = GeminiIronMindAI(contentGenerator = { "{}" })
+        val userId = "user-test"
+
+        val confirmedMem = com.sanket_satpute_20.ironmind.domain.model.Memory(
+            id = "mem-conf", userId = userId, type = "fact", content = "Works 9am-5pm",
+            source = com.sanket_satpute_20.ironmind.domain.model.EntitySource.USER,
+            confidence = 1.0f, evidenceCount = 1, firstObservedAt = 100L, lastObservedAt = 200L,
+            confirmationState = com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState.USER_CONFIRMED,
+            status = com.sanket_satpute_20.ironmind.domain.model.MemoryStatus.ACTIVE,
+            expiresAt = null, createdAt = 100L, updatedAt = 200L
+        )
+        val systemConfirmedMem = com.sanket_satpute_20.ironmind.domain.model.Memory(
+            id = "mem-sys", userId = userId, type = "routine", content = "Consistent bedtime 11pm",
+            source = com.sanket_satpute_20.ironmind.domain.model.EntitySource.SYSTEM,
+            confidence = 0.95f, evidenceCount = 10, firstObservedAt = 100L, lastObservedAt = 200L,
+            confirmationState = com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState.SYSTEM_CONFIRMED,
+            status = com.sanket_satpute_20.ironmind.domain.model.MemoryStatus.ACTIVE,
+            expiresAt = null, createdAt = 100L, updatedAt = 200L
+        )
+        val unconfirmedMem = com.sanket_satpute_20.ironmind.domain.model.Memory(
+            id = "mem-unconf", userId = userId, type = "hypothesis", content = "Likes green tea",
+            source = com.sanket_satpute_20.ironmind.domain.model.EntitySource.AI,
+            confidence = 0.65f, evidenceCount = 1, firstObservedAt = 100L, lastObservedAt = 200L,
+            confirmationState = com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState.UNCONFIRMED,
+            status = com.sanket_satpute_20.ironmind.domain.model.MemoryStatus.ACTIVE,
+            expiresAt = null, createdAt = 100L, updatedAt = 200L
+        )
+        val rejectedMem = com.sanket_satpute_20.ironmind.domain.model.Memory(
+            id = "mem-rej", userId = userId, type = "hypothesis", content = "Dislikes deadlines",
+            source = com.sanket_satpute_20.ironmind.domain.model.EntitySource.AI,
+            confidence = 0.5f, evidenceCount = 1, firstObservedAt = 100L, lastObservedAt = 200L,
+            confirmationState = com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState.USER_REJECTED,
+            status = com.sanket_satpute_20.ironmind.domain.model.MemoryStatus.INACTIVE,
+            expiresAt = null, createdAt = 100L, updatedAt = 200L
+        )
+        val foreignMem = com.sanket_satpute_20.ironmind.domain.model.Memory(
+            id = "mem-foreign", userId = "attacker-user", type = "fact", content = "Foreign secret",
+            source = com.sanket_satpute_20.ironmind.domain.model.EntitySource.USER,
+            confidence = 1.0f, evidenceCount = 1, firstObservedAt = 100L, lastObservedAt = 200L,
+            confirmationState = com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState.USER_CONFIRMED,
+            status = com.sanket_satpute_20.ironmind.domain.model.MemoryStatus.ACTIVE,
+            expiresAt = null, createdAt = 100L, updatedAt = 200L
+        )
+
+        val confirmedPat = com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern(
+            id = "pat-conf", userId = userId, fingerprint = "fp1", type = com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType.TIME_PATTERN,
+            description = "Peak morning focus", conditions = null, predictedBehavior = null, confidence = 0.9f,
+            evidenceCount = 3, evidenceReferences = emptyList(), firstObservedAt = 100L, lastObservedAt = 200L,
+            status = com.sanket_satpute_20.ironmind.domain.model.pattern.PatternStatus.ACTIVE,
+            confirmationState = com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState.USER_CONFIRMED,
+            createdAt = 100L, updatedAt = 200L
+        )
+        val systemConfirmedPat = com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern(
+            id = "pat-sys", userId = userId, fingerprint = "fp-sys", type = com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType.TIME_PATTERN,
+            description = "System validated cadence", conditions = null, predictedBehavior = null, confidence = 0.95f,
+            evidenceCount = 5, evidenceReferences = emptyList(), firstObservedAt = 100L, lastObservedAt = 200L,
+            status = com.sanket_satpute_20.ironmind.domain.model.pattern.PatternStatus.ACTIVE,
+            confirmationState = com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState.SYSTEM_CONFIRMED,
+            createdAt = 100L, updatedAt = 200L
+        )
+        val unconfirmedPat = com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern(
+            id = "pat-unconf", userId = userId, fingerprint = "fp2", type = com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType.CONTEXT_PATTERN,
+            description = "Distracted after lunch", conditions = null, predictedBehavior = null, confidence = 0.7f,
+            evidenceCount = 2, evidenceReferences = emptyList(), firstObservedAt = 100L, lastObservedAt = 200L,
+            status = com.sanket_satpute_20.ironmind.domain.model.pattern.PatternStatus.ACTIVE,
+            confirmationState = com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState.UNCONFIRMED,
+            createdAt = 100L, updatedAt = 200L
+        )
+
+        val snapshot = com.sanket_satpute_20.ironmind.domain.model.context.ContextSnapshot(
+            timestamp = 1000L,
+            dayOfWeek = 2,
+            activeCommitments = emptyList(),
+            recentEvents = emptyList(),
+            factualContextSnapshot = com.sanket_satpute_20.ironmind.domain.model.observation.FactualContextSnapshot(
+                userId = userId, startTimeMs = 0L, endTimeMs = 1000L,
+                appUsage = null, activity = null, calendar = null, location = null, notifications = null
+            ),
+            recentReflections = emptyList(),
+            recentPatterns = listOf(confirmedPat, systemConfirmedPat, unconfirmedPat),
+            activeProtectionSession = null,
+            activeGoals = emptyList(),
+            activeMemories = listOf(confirmedMem, systemConfirmedMem, unconfirmedMem, rejectedMem, foreignMem)
+        )
+
+        val request = com.sanket_satpute_20.ironmind.domain.ai.AIRequest(
+            userId = userId,
+            input = "Test input",
+            requestType = AIRequestType.INTENT_EXTRACTION,
+            contextSnapshot = snapshot
+        )
+
+        val prompt = ai.buildPrompt(request)
+
+        // Memory assertions
+        assertTrue(prompt.contains("- MEMORY [mem-conf]: \"Works 9am-5pm\" (CONFIRMED FACT, Confidence: 1.0)"))
+        assertTrue(prompt.contains("- MEMORY [mem-sys]: \"Consistent bedtime 11pm\" ([System Confirmed], Confidence: 0.95)"))
+        assertTrue(prompt.contains("- MEMORY [mem-unconf]: \"Likes green tea\" (UNCONFIRMED HYPOTHESIS, Confidence: 0.65)"))
+        org.junit.Assert.assertFalse(prompt.contains("mem-rej"))
+        org.junit.Assert.assertFalse(prompt.contains("mem-foreign"))
+
+        // Pattern assertions
+        assertTrue(prompt.contains("- PATTERN [pat-conf]: TIME_PATTERN (CONFIRMED) - Peak morning focus"))
+        assertTrue(prompt.contains("- PATTERN [pat-sys]: TIME_PATTERN ([System Confirmed]) - System validated cadence"))
+        assertTrue(prompt.contains("- PATTERN [pat-unconf]: CONTEXT_PATTERN (UNCONFIRMED HYPOTHESIS) - Distracted after lunch"))
     }
 }

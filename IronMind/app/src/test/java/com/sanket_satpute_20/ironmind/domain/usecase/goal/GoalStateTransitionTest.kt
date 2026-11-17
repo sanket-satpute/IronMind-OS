@@ -86,4 +86,40 @@ class GoalStateTransitionTest {
         assertEquals(GoalStatus.ACTIVE, activeGoal.status)
         assertNull(activeGoal.completedAt)
     }
+
+    @Test
+    fun `updating status to PAUSED does not set completedAt`() = runTest {
+        val createResult = createGoalUseCase("user-1", "Title", "Desc", "Why", 5, null)
+        val initialGoal = (createResult as Result.Success).data
+
+        clock.advanceTimeBy(1000)
+
+        val updateResult = updateGoalStatusUseCase(initialGoal.id, GoalStatus.PAUSED)
+        assertTrue(updateResult is Result.Success)
+        val updatedGoal = (updateResult as Result.Success).data
+
+        assertEquals(GoalStatus.PAUSED, updatedGoal.status)
+        assertNull(updatedGoal.completedAt)
+    }
+
+    @Test
+    fun `updating from PAUSED back to ACTIVE maintains null completedAt`() = runTest {
+        val createResult = createGoalUseCase("user-1", "Title", "Desc", "Why", 5, null)
+        val initialGoal = (createResult as Result.Success).data
+
+        clock.advanceTimeBy(1000)
+
+        val pausedResult = updateGoalStatusUseCase(initialGoal.id, GoalStatus.PAUSED)
+        val pausedGoal = (pausedResult as Result.Success).data
+        assertEquals(GoalStatus.PAUSED, pausedGoal.status)
+        assertNull(pausedGoal.completedAt)
+
+        clock.advanceTimeBy(1000)
+
+        val activeResult = updateGoalStatusUseCase(initialGoal.id, GoalStatus.ACTIVE)
+        val activeGoal = (activeResult as Result.Success).data
+
+        assertEquals(GoalStatus.ACTIVE, activeGoal.status)
+        assertNull(activeGoal.completedAt)
+    }
 }

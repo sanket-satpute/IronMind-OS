@@ -1,23 +1,24 @@
 package com.sanket_satpute_20.ironmind.infrastructure.worker
 
 import android.content.Context
+import androidx.work.Data
 import androidx.work.ListenableWorker.Result
 import androidx.work.WorkerParameters
 import com.sanket_satpute_20.ironmind.domain.common.Result as DomainResult
-import com.sanket_satpute_20.ironmind.domain.model.AuthUser
-import com.sanket_satpute_20.ironmind.domain.model.AuthStatus
-import com.sanket_satpute_20.ironmind.domain.repository.AuthRepository
+import com.sanket_satpute_20.ironmind.domain.session.SessionState
+import com.sanket_satpute_20.ironmind.domain.session.UserSessionProvider
 import com.sanket_satpute_20.ironmind.domain.usecase.observation.CollectObservationsUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.observation.ExecuteObservationCollectionUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.observation.ObservationCollector
 import com.sanket_satpute_20.ironmind.domain.usecase.observation.ObservationCollectionSummary
 import com.sanket_satpute_20.ironmind.domain.usecase.observation.ObservationExecutionError
+import com.sanket_satpute_20.ironmind.testutil.FakeUserSessionProvider
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -33,18 +34,10 @@ class ObservationWorkerTest {
     private lateinit var workerParams: WorkerParameters
     
     // Fakes
-    private lateinit var authRepository: FakeAuthRepository
+    private lateinit var userSessionProvider: FakeUserSessionProvider
     private lateinit var fakeCollector: FakeObservationCollector
     private lateinit var executeUseCase: ExecuteObservationCollectionUseCase
     private lateinit var worker: ObservationWorker
-
-    class FakeAuthRepository(var user: AuthUser?) : AuthRepository {
-        override val authStatus: Flow<AuthStatus> = flowOf()
-        override val currentUser: Flow<AuthUser?> = flowOf(user)
-        override suspend fun signInAnonymously(): DomainResult<AuthUser, Exception> = DomainResult.Failure(Exception())
-        override suspend fun signOut(): DomainResult<Unit, Exception> = DomainResult.Failure(Exception())
-        override fun getCurrentUser(): AuthUser? = user
-    }
 
     class FakeObservationCollector(
         override val collectorName: String = "FakeCollector",
@@ -61,12 +54,15 @@ class ObservationWorkerTest {
     fun setUp() {
         context = mockk(relaxed = true)
         workerParams = mockk(relaxed = true)
-        authRepository = FakeAuthRepository(AuthUser("user-1", true))
+        every { workerParams.inputData } returns Data.Builder()
+            .putLong(UserSessionProvider.KEY_SESSION_GENERATION, 1L)
+            .build()
+        userSessionProvider = FakeUserSessionProvider(SessionState.Authenticated("user-1", true))
         fakeCollector = FakeObservationCollector()
         val collectUseCase = CollectObservationsUseCase(listOf(fakeCollector))
         executeUseCase = ExecuteObservationCollectionUseCase(collectUseCase)
         
-        worker = ObservationWorker(context, workerParams, executeUseCase, authRepository)
+        worker = ObservationWorker(context, workerParams, executeUseCase, userSessionProvider)
     }
 
     @Test
@@ -78,12 +74,12 @@ class ObservationWorkerTest {
     }
 
     @Test
-    fun `Missing user context is handled truthfully and fails`() = runBlocking {
-        authRepository.user = null // No user
+    fun `Reconciliation failure prevents collection and retries safely`() = runBlocking {
+        userSessionProvider.setState(SessionState.ReconciliationFailed(Exception("reconcile failed"), "user-2"))
         
         val result = worker.doWork()
         
-        assertEquals(Result.failure(), result)
+        assertEquals(Result.retry(), result)
         assertEquals(null, fakeCollector.invokedUserId) // Didn't invoke execution
     }
 
@@ -121,6 +117,18 @@ class ObservationWorkerTest {
         assertEquals(Result.success(), result) // skipped implies success in this context
         
         backgroundJob.cancel()
+    }
+
+    @Test
+    fun `worker rethrows cancellation from observation collection`() = runBlocking {
+        fakeCollector.behavior = { throw CancellationException("work canceled") }
+
+        try {
+            worker.doWork()
+            org.junit.Assert.fail("Worker cancellation must be rethrown to WorkManager")
+        } catch (_: CancellationException) {
+            assertEquals("user-1", fakeCollector.invokedUserId)
+        }
     }
 
     @Test

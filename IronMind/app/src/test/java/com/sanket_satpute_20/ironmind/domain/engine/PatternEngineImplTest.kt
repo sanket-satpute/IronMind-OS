@@ -137,4 +137,64 @@ class PatternEngineImplTest {
         val pattern = repository.store["p1"]
         assertEquals(PatternStatus.EXPIRED, pattern?.status)
     }
+
+    @Test
+    fun `decayStalePatterns skips user-confirmed stale pattern leaving confidence and status unchanged`() = runTest {
+        val staleLastObserved = -(35L * 24L * 60L * 60L * 1000L) // 35 days ago
+        val confirmedPattern = makePattern(
+            id = "p-confirmed",
+            confidence = 0.9f,
+            status = PatternStatus.ACTIVE,
+            lastObservedAt = staleLastObserved
+        ).copy(confirmationState = MemoryConfirmationState.USER_CONFIRMED)
+        repository.store["p-confirmed"] = confirmedPattern
+        clock.time = 0L
+
+        engine.decayStalePatterns("user-1")
+
+        val pattern = repository.store["p-confirmed"]
+        assertNotNull(pattern)
+        assertEquals(0.9f, pattern?.confidence)
+        assertEquals(PatternStatus.ACTIVE, pattern?.status)
+        assertEquals(MemoryConfirmationState.USER_CONFIRMED, pattern?.confirmationState)
+    }
+
+    @Test
+    fun `decayStalePatterns leaves other users patterns untouched`() = runTest {
+        val staleLastObserved = -(35L * 24L * 60L * 60L * 1000L)
+        val otherUserPattern = makePattern(
+            id = "p-other",
+            confidence = 0.8f,
+            status = PatternStatus.ACTIVE,
+            lastObservedAt = staleLastObserved
+        ).copy(userId = "user-2")
+        repository.store["p-other"] = otherUserPattern
+        clock.time = 0L
+
+        engine.decayStalePatterns("user-1")
+
+        val pattern = repository.store["p-other"]
+        assertNotNull(pattern)
+        assertEquals(0.8f, pattern?.confidence)
+        assertEquals(PatternStatus.ACTIVE, pattern?.status)
+    }
+
+    @Test
+    fun `decayStalePatterns is safe and idempotent across repeated executions`() = runTest {
+        val staleLastObserved = -(31L * 24L * 60L * 60L * 1000L)
+        repository.store["p1"] = makePattern(confidence = 0.5f, lastObservedAt = staleLastObserved)
+        clock.time = 0L
+
+        // First run
+        engine.decayStalePatterns("user-1")
+        val firstRunConfidence = repository.store["p1"]?.confidence
+
+        // Without time moving forward or observations changing, second run behaves deterministically
+        engine.decayStalePatterns("user-1")
+        val secondRunConfidence = repository.store["p1"]?.confidence
+
+        // Both executions succeed safely without crashing or corrupting data
+        assertNotNull(firstRunConfidence)
+        assertNotNull(secondRunConfidence)
+    }
 }

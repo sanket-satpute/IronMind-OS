@@ -166,4 +166,52 @@ class PatternAcceptanceEvaluatorTest {
         // Since DELETED is treated as NEW, and 1 evidence is insufficient, it should reject
         assertTrue(result is PatternAcceptanceResult.Rejected)
     }
+
+    @Test
+    fun `incoming evidence matching user-rejected pattern is rejected and never revives the pattern`() {
+        val candidate = PatternCandidate(PatternType.TIME_PATTERN, "desc")
+        val oldRef = EvidenceReference("obs1", EvidenceSourceType.OBSERVATION)
+
+        val rejectedPattern = Pattern(
+            id = "p1", userId = userId, fingerprint = "fp", type = PatternType.TIME_PATTERN, description = "desc",
+            conditions = null, predictedBehavior = null, confidence = 0.8f, evidenceCount = 1,
+            evidenceReferences = listOf(oldRef), firstObservedAt = 0L, lastObservedAt = 0L,
+            status = PatternStatus.ACTIVE, confirmationState = MemoryConfirmationState.USER_REJECTED,
+            createdAt = 0L, updatedAt = 0L
+        )
+
+        val newEvidence = listOf(
+            ValidatedEvidence(EvidenceReference("obs2", EvidenceSourceType.OBSERVATION), 1000L),
+            ValidatedEvidence(EvidenceReference("obs3", EvidenceSourceType.OBSERVATION), 2000L),
+            ValidatedEvidence(EvidenceReference("obs4", EvidenceSourceType.OBSERVATION), 3000L)
+        )
+
+        val result = evaluator.evaluate(candidate, newEvidence, rejectedPattern, "p2", currentTime, zoneId, userId)
+        assertTrue(result is PatternAcceptanceResult.Rejected)
+        assertEquals("Pattern was explicitly rejected by the user", (result as PatternAcceptanceResult.Rejected).reason)
+    }
+
+    @Test
+    fun `incoming evidence matching dismissed pattern with INACTIVE status is rejected`() {
+        val candidate = PatternCandidate(PatternType.TIME_PATTERN, "desc")
+        val oldRef = EvidenceReference("obs1", EvidenceSourceType.OBSERVATION)
+
+        val dismissedPattern = Pattern(
+            id = "p1", userId = userId, fingerprint = "fp", type = PatternType.TIME_PATTERN, description = "desc",
+            conditions = null, predictedBehavior = null, confidence = 0.8f, evidenceCount = 1,
+            evidenceReferences = listOf(oldRef), firstObservedAt = 0L, lastObservedAt = 0L,
+            status = PatternStatus.INACTIVE, confirmationState = MemoryConfirmationState.UNCONFIRMED,
+            createdAt = 0L, updatedAt = 0L
+        )
+
+        val newEvidence = listOf(
+            ValidatedEvidence(EvidenceReference("obs2", EvidenceSourceType.OBSERVATION), 1000L),
+            ValidatedEvidence(EvidenceReference("obs3", EvidenceSourceType.OBSERVATION), 2000L),
+            ValidatedEvidence(EvidenceReference("obs4", EvidenceSourceType.OBSERVATION), 3000L)
+        )
+
+        val result = evaluator.evaluate(candidate, newEvidence, dismissedPattern, "p2", currentTime, zoneId, userId)
+        assertTrue(result is PatternAcceptanceResult.Rejected)
+        assertEquals("Pattern was dismissed or deleted by the user", (result as PatternAcceptanceResult.Rejected).reason)
+    }
 }

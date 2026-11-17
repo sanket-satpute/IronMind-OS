@@ -8,14 +8,12 @@ import com.sanket_satpute_20.ironmind.data.local.Jdk25CompatibleRobolectricTestR
 import com.sanket_satpute_20.ironmind.data.local.dao.BarrierDao
 import com.sanket_satpute_20.ironmind.data.local.dao.InterventionRecommendationDao
 import com.sanket_satpute_20.ironmind.data.local.dao.IronMindDao
-import com.sanket_satpute_20.ironmind.data.local.entity.BarrierHypothesisEntity
-import com.sanket_satpute_20.ironmind.data.local.entity.GoalEntity
-import com.sanket_satpute_20.ironmind.data.local.entity.InterventionRecommendationEntity
-import com.sanket_satpute_20.ironmind.data.local.entity.UserProfileEntity
+import com.sanket_satpute_20.ironmind.data.local.entity.*
 import com.sanket_satpute_20.ironmind.di.DefaultAppContainer
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -380,5 +378,281 @@ class CompleteUserDataErasureTest {
         assertNotNull(ironMindDao.getGoal("goal-2"))
         assertNotNull(recommendationDao.getById("rec-user2"))
         assertEquals(1, barrierDao.getBarriersByUserId(user2).size)
+    }
+
+    @Test
+    fun `erasingUser_removesOutcomesForThatUser_andPreservesOtherUsers`() = runBlocking {
+        insertUserProfile(user1)
+        insertUserProfile(user2)
+
+        val outcome1 = OutcomeEntity(
+            id = "out-1",
+            userId = user1,
+            sourceEntityId = "task-1",
+            sourceEntityType = "TASK",
+            resultStatus = "COMPLETED",
+            actualDurationMinutes = 25,
+            completedAt = 1000L,
+            createdAt = 1000L,
+            schemaVersion = 1
+        )
+        val outcome2 = outcome1.copy(id = "out-2", userId = user2)
+        ironMindDao.insertOutcome(outcome1)
+        ironMindDao.insertOutcome(outcome2)
+
+        assertNotNull(ironMindDao.getOutcome("out-1"))
+        assertNotNull(ironMindDao.getOutcome("out-2"))
+
+        val result = repository.deleteAllUserData(user1)
+        assertTrue(result is Result.Success)
+
+        assertNull("user1 outcome must be erased", ironMindDao.getOutcome("out-1"))
+        assertNotNull("user2 outcome must be preserved", ironMindDao.getOutcome("out-2"))
+    }
+
+    @Test
+    fun `erasingUser_removesObservationSettingsForThatUser_andPreservesOtherUsers`() = runBlocking {
+        insertUserProfile(user1)
+        insertUserProfile(user2)
+
+        val appDao = db.appUsageObservationSettingsDao()
+        val notifDao = db.notificationObservationSettingsDao()
+        val calDao = db.calendarObservationSettingsDao()
+        val locDao = db.locationObservationSettingsDao()
+        val actDao = db.activityObservationSettingsDao()
+
+        appDao.upsertSettings(AppUsageObservationSettingsEntity(userId = user1, isEnabled = true, updatedAt = 1000L))
+        appDao.upsertSettings(AppUsageObservationSettingsEntity(userId = user2, isEnabled = true, updatedAt = 1000L))
+
+        notifDao.upsertSettings(NotificationObservationSettingsEntity(userId = user1, isEnabled = true, updatedAt = 1000L))
+        notifDao.upsertSettings(NotificationObservationSettingsEntity(userId = user2, isEnabled = true, updatedAt = 1000L))
+
+        calDao.insertOrUpdate(CalendarObservationSettingsEntity(userId = user1, isEnabled = true, updatedAt = 1000L))
+        calDao.insertOrUpdate(CalendarObservationSettingsEntity(userId = user2, isEnabled = true, updatedAt = 1000L))
+
+        locDao.insertOrUpdate(LocationObservationSettingsEntity(userId = user1, isEnabled = true, updatedAt = 1000L))
+        locDao.insertOrUpdate(LocationObservationSettingsEntity(userId = user2, isEnabled = true, updatedAt = 1000L))
+
+        actDao.insertOrUpdateSettings(ActivityObservationSettingsEntity(userId = user1, isEnabled = true, lastUpdatedAt = 1000L))
+        actDao.insertOrUpdateSettings(ActivityObservationSettingsEntity(userId = user2, isEnabled = true, lastUpdatedAt = 1000L))
+
+        val result = repository.deleteAllUserData(user1)
+        assertTrue(result is Result.Success)
+
+        // user1 cleared
+        assertNull(appDao.getSettingsForUser(user1))
+        assertNull(notifDao.getSettings(user1))
+        assertNull(calDao.getSettings(user1))
+        assertNull(locDao.getSettings(user1))
+        assertNull(actDao.getSettings(user1))
+
+        // user2 preserved
+        assertNotNull(appDao.getSettingsForUser(user2))
+        assertNotNull(notifDao.getSettings(user2))
+        assertNotNull(calDao.getSettings(user2))
+        assertNotNull(locDao.getSettings(user2))
+        assertNotNull(actDao.getSettings(user2))
+    }
+
+    @Test
+    fun `erasingUser_deletesTargetUserOutboxEntries_preservesForeignAndAmbiguous`() = runBlocking {
+        insertUserProfile(user1)
+        insertUserProfile(user2)
+
+        val outboxDao = db.outboxDao()
+
+        val opUser1 = OutboxEntity(
+            operationId = "op-1",
+            entityType = "Goal",
+            entityId = "g-1",
+            operationType = "UPSERT",
+            payload = """{"id":"g-1","userId":"$user1","title":"Goal 1"}""",
+            createdAt = 1000L,
+            retryCount = 0,
+            lastAttemptAt = null,
+            status = "PENDING"
+        )
+        val opUser2 = OutboxEntity(
+            operationId = "op-2",
+            entityType = "Goal",
+            entityId = "g-2",
+            operationType = "UPSERT",
+            payload = """{"id":"g-2","userId":"$user2","title":"Goal 2"}""",
+            createdAt = 1000L,
+            retryCount = 0,
+            lastAttemptAt = null,
+            status = "PENDING"
+        )
+        val opAmbiguous = OutboxEntity(
+            operationId = "op-3",
+            entityType = "Goal",
+            entityId = "g-3",
+            operationType = "UPSERT",
+            payload = """{"id":"g-3","title":"Goal 3 without userId"}""",
+            createdAt = 1000L,
+            retryCount = 0,
+            lastAttemptAt = null,
+            status = "PENDING"
+        )
+        val opMalformed = OutboxEntity(
+            operationId = "op-4",
+            entityType = "Goal",
+            entityId = "g-4",
+            operationType = "UPSERT",
+            payload = "INVALID_CORRUPT_JSON{{{",
+            createdAt = 1000L,
+            retryCount = 0,
+            lastAttemptAt = null,
+            status = "PENDING"
+        )
+
+        outboxDao.insertEntry(opUser1)
+        outboxDao.insertEntry(opUser2)
+        outboxDao.insertEntry(opAmbiguous)
+        outboxDao.insertEntry(opMalformed)
+
+        val result = repository.deleteAllUserData(user1)
+        assertTrue(result is Result.Success)
+
+        // op-1 (user1) must be deleted
+        assertFalse("op-1 must be deleted", outboxDao.entryExists("op-1"))
+
+        // op-2 (user2) must be preserved
+        assertTrue("op-2 must be preserved", outboxDao.entryExists("op-2"))
+
+        // op-3 (ambiguous) must be preserved
+        assertTrue("op-3 must be preserved", outboxDao.entryExists("op-3"))
+
+        // op-4 (malformed) must be preserved
+        assertTrue("op-4 must be preserved", outboxDao.entryExists("op-4"))
+    }
+
+    @Test
+    fun erasingUser_removesTargetUserOutboxAcrossAllStatuses_includingConflictSyncingFailed_whilePreservingForeign() = runBlocking {
+        insertUserProfile(user1)
+        insertUserProfile(user2)
+
+        val outboxDao = db.outboxDao()
+
+        val statuses = listOf("LOCAL_ONLY", "PENDING", "SYNCING", "SYNCED", "FAILED", "CONFLICT")
+        statuses.forEachIndexed { index, status ->
+            // Insert target user entry for this status
+            outboxDao.insertEntry(
+                OutboxEntity(
+                    operationId = "op-user1-$status",
+                    entityType = "Goal",
+                    entityId = "g-user1-$index",
+                    operationType = "UPSERT",
+                    payload = """{"id":"g-user1-$index","userId":"$user1","title":"Goal user1 $status"}""",
+                    createdAt = 1000L + index,
+                    retryCount = 0,
+                    lastAttemptAt = null,
+                    status = status
+                )
+            )
+            // Insert foreign user entry for this status
+            outboxDao.insertEntry(
+                OutboxEntity(
+                    operationId = "op-user2-$status",
+                    entityType = "Goal",
+                    entityId = "g-user2-$index",
+                    operationType = "UPSERT",
+                    payload = """{"id":"g-user2-$index","userId":"$user2","title":"Goal user2 $status"}""",
+                    createdAt = 2000L + index,
+                    retryCount = 0,
+                    lastAttemptAt = null,
+                    status = status
+                )
+            )
+        }
+
+        // Also add ambiguous and malformed in CONFLICT status
+        outboxDao.insertEntry(
+            OutboxEntity(
+                operationId = "op-ambiguous-conflict",
+                entityType = "Goal",
+                entityId = "g-amb",
+                operationType = "UPSERT",
+                payload = """{"id":"g-amb","title":"No userId"}""",
+                createdAt = 3000L,
+                retryCount = 1,
+                lastAttemptAt = null,
+                status = "CONFLICT"
+            )
+        )
+        outboxDao.insertEntry(
+            OutboxEntity(
+                operationId = "op-malformed-conflict",
+                entityType = "Goal",
+                entityId = "g-mal",
+                operationType = "UPSERT",
+                payload = "CORRUPT_JSON_DATA",
+                createdAt = 3001L,
+                retryCount = 1,
+                lastAttemptAt = null,
+                status = "CONFLICT"
+            )
+        )
+
+        val result = repository.deleteAllUserData(user1)
+        assertTrue("Erasure must succeed", result is Result.Success)
+
+        // All target user entries across every status must be deleted
+        statuses.forEach { status ->
+            assertFalse(
+                "Target user entry for status $status must be deleted",
+                outboxDao.entryExists("op-user1-$status")
+            )
+        }
+
+        // All foreign user entries across every status must be preserved
+        statuses.forEach { status ->
+            assertTrue(
+                "Foreign user entry for status $status must be preserved",
+                outboxDao.entryExists("op-user2-$status")
+            )
+        }
+
+        // Ambiguous and malformed records must be preserved
+        assertTrue("Ambiguous CONFLICT record must be preserved", outboxDao.entryExists("op-ambiguous-conflict"))
+        assertTrue("Malformed CONFLICT record must be preserved", outboxDao.entryExists("op-malformed-conflict"))
+    }
+
+    @Test
+    fun `cancelAllUserWorkers_cancelsAllUniqueWorkAndTags`() {
+        val mockWorkManager = mockk<androidx.work.WorkManager>(relaxed = true)
+        val repoWithWm = DataManagementRepositoryImpl(
+            ironMindDao = ironMindDao,
+            patternDao = db.patternDao(),
+            observationDao = db.observationDao(),
+            interventionDao = db.interventionDao(),
+            experimentDao = db.experimentDao(),
+            autonomySettingsDao = db.autonomySettingsDao(),
+            globalAutonomyStateDao = db.globalAutonomyStateDao(),
+            learnerEventStatusDao = db.learnerEventStatusDao(),
+            database = db,
+            workManager = mockWorkManager
+        )
+
+        repoWithWm.cancelAllUserWorkers()
+
+        verify { mockWorkManager.cancelUniqueWork("SyncWorker") }
+        verify { mockWorkManager.cancelUniqueWork("PatternUpdateWorker") }
+        verify { mockWorkManager.cancelUniqueWork(com.sanket_satpute_20.ironmind.infrastructure.worker.EventProcessingWorker.UNIQUE_WORK_NAME) }
+        verify { mockWorkManager.cancelUniqueWork(com.sanket_satpute_20.ironmind.infrastructure.worker.EventProcessingWorker.RECONCILIATION_WORK_NAME) }
+        verify { mockWorkManager.cancelUniqueWork(com.sanket_satpute_20.ironmind.infrastructure.worker.ObservationScheduler.UNIQUE_WORK_NAME) }
+        verify { mockWorkManager.cancelUniqueWork(com.sanket_satpute_20.ironmind.infrastructure.worker.InterventionEvaluationWorker.UNIQUE_WORK_NAME) }
+        verify { mockWorkManager.cancelUniqueWork(com.sanket_satpute_20.ironmind.infrastructure.worker.InterventionEvaluationWorker.UNIQUE_WORK_NAME_SCHEDULED) }
+        verify { mockWorkManager.cancelUniqueWork(com.sanket_satpute_20.ironmind.infrastructure.worker.InterventionEvaluationWorker.UNIQUE_WORK_NAME_PERIODIC) }
+        verify { mockWorkManager.cancelUniqueWork(com.sanket_satpute_20.ironmind.infrastructure.worker.InterventionEvaluationWorker.UNIQUE_WORK_NAME_EVENT) }
+
+        verify { mockWorkManager.cancelAllWorkByTag(com.sanket_satpute_20.ironmind.infrastructure.worker.ReflectionProcessingWorker.TAG) }
+        verify { mockWorkManager.cancelAllWorkByTag(com.sanket_satpute_20.ironmind.infrastructure.worker.SyncWorker.TAG) }
+        verify { mockWorkManager.cancelAllWorkByTag(com.sanket_satpute_20.ironmind.infrastructure.worker.PatternUpdateWorker.TAG) }
+        verify { mockWorkManager.cancelAllWorkByTag(com.sanket_satpute_20.ironmind.infrastructure.worker.ObservationWorker.TAG) }
+        verify { mockWorkManager.cancelAllWorkByTag(com.sanket_satpute_20.ironmind.infrastructure.worker.EventProcessingWorker.UNIQUE_WORK_NAME) }
+        verify { mockWorkManager.cancelAllWorkByTag(com.sanket_satpute_20.ironmind.infrastructure.worker.EventProcessingWorker.RECONCILIATION_WORK_NAME) }
+        verify { mockWorkManager.cancelAllWorkByTag(com.sanket_satpute_20.ironmind.infrastructure.worker.ObservationScheduler.UNIQUE_WORK_NAME) }
+        verify { mockWorkManager.cancelAllWorkByTag(com.sanket_satpute_20.ironmind.infrastructure.worker.InterventionEvaluationWorker.TAG) }
     }
 }

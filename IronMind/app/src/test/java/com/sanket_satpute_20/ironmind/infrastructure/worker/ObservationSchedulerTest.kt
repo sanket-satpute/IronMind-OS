@@ -15,15 +15,21 @@ import org.junit.Test
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream
 
+import com.sanket_satpute_20.ironmind.domain.session.UserSessionProvider
+
 class ObservationSchedulerTest {
 
     private lateinit var workManager: WorkManager
     private lateinit var scheduler: ObservationScheduler
+    private lateinit var sessionProvider: UserSessionProvider
 
     @Before
     fun setUp() {
         workManager = mockk(relaxed = true)
-        scheduler = ObservationScheduler(workManager)
+        sessionProvider = mockk {
+            every { getSessionGeneration() } returns 1L
+        }
+        scheduler = ObservationScheduler(workManager, sessionProvider = { sessionProvider })
     }
 
     @Test
@@ -102,5 +108,54 @@ class ObservationSchedulerTest {
 
         assertTrue(scheduleResult is com.sanket_satpute_20.ironmind.domain.common.Result.Failure)
         assertTrue(cancelResult is com.sanket_satpute_20.ironmind.domain.common.Result.Failure)
+    }
+
+    @Test
+    fun `scheduleObservationCollection fails closed when generation is 0L`() {
+        val zeroGenProvider: UserSessionProvider = mockk {
+            every { getSessionGeneration() } returns 0L
+        }
+        val zeroScheduler = ObservationScheduler(workManager, sessionProvider = { zeroGenProvider })
+        val result = zeroScheduler.scheduleObservationCollection()
+        assertTrue(result is com.sanket_satpute_20.ironmind.domain.common.Result.Failure)
+        verify(exactly = 0) { workManager.enqueueUniquePeriodicWork(any(), any(), any()) }
+    }
+
+    @Test
+    fun `scheduleObservationCollection fails closed when session is Initializing`() {
+        val initProvider: UserSessionProvider = mockk {
+            every { getSessionGeneration() } returns 1L
+            every { sessionState } returns kotlinx.coroutines.flow.MutableStateFlow(com.sanket_satpute_20.ironmind.domain.session.SessionState.Initializing)
+        }
+        val initScheduler = ObservationScheduler(workManager, sessionProvider = { initProvider })
+        val result = initScheduler.scheduleObservationCollection()
+        assertTrue(result is com.sanket_satpute_20.ironmind.domain.common.Result.Failure)
+        verify(exactly = 0) { workManager.enqueueUniquePeriodicWork(any(), any(), any()) }
+    }
+
+    @Test
+    fun `scheduleObservationCollection fails closed when session is ReconciliationFailed`() {
+        val failProvider: UserSessionProvider = mockk {
+            every { getSessionGeneration() } returns 1L
+            every { sessionState } returns kotlinx.coroutines.flow.MutableStateFlow(com.sanket_satpute_20.ironmind.domain.session.SessionState.ReconciliationFailed(Exception("Failed"), "user1"))
+        }
+        val failScheduler = ObservationScheduler(workManager, sessionProvider = { failProvider })
+        val result = failScheduler.scheduleObservationCollection()
+        assertTrue(result is com.sanket_satpute_20.ironmind.domain.common.Result.Failure)
+        verify(exactly = 0) { workManager.enqueueUniquePeriodicWork(any(), any(), any()) }
+    }
+
+    @Test
+    fun `scheduleObservationCollection fails closed when user is marked erased`() {
+        val erasedProvider: UserSessionProvider = mockk {
+            every { getSessionGeneration() } returns 1L
+            every { sessionState } returns kotlinx.coroutines.flow.MutableStateFlow(com.sanket_satpute_20.ironmind.domain.session.SessionState.Authenticated("user1", isAnonymous = false))
+            every { getActiveUserId() } returns "user1"
+            every { isUserErased("user1", 1L) } returns true
+        }
+        val erasedScheduler = ObservationScheduler(workManager, sessionProvider = { erasedProvider })
+        val result = erasedScheduler.scheduleObservationCollection()
+        assertTrue(result is com.sanket_satpute_20.ironmind.domain.common.Result.Failure)
+        verify(exactly = 0) { workManager.enqueueUniquePeriodicWork(any(), any(), any()) }
     }
 }

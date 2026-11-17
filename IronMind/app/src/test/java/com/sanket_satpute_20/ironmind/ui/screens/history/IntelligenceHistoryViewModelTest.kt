@@ -7,14 +7,20 @@ import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendation
 import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendationStatus
 import com.sanket_satpute_20.ironmind.domain.repository.InterventionRecommendationRepository
+import com.sanket_satpute_20.ironmind.domain.session.SessionState
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.GetIntelligenceHistoryUseCase
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeEventRepository
+import com.sanket_satpute_20.ironmind.testutil.FakeUserSessionProvider
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -24,6 +30,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import io.mockk.coEvery
+import io.mockk.mockk
 import java.util.UUID
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -189,6 +197,33 @@ class IntelligenceHistoryViewModelTest {
         assertEquals("First", state.items[0].rationale)
         assertEquals("Second", state.items[1].rationale)
         assertEquals("Third", state.items[2].rationale)
+    }
+
+    @Test
+    fun `late result from old session cannot overwrite new intelligence history`() = runTest {
+        val useCase = mockk<GetIntelligenceHistoryUseCase>()
+        val oldLoadStarted = CompletableDeferred<Unit>()
+        val finishOldLoad = CompletableDeferred<Unit>()
+        coEvery { useCase("user-1", any(), any(), 50) } coAnswers {
+            oldLoadStarted.complete(Unit)
+            withContext(NonCancellable) {
+                finishOldLoad.await()
+                Result.Failure(IllegalStateException("old session result"))
+            }
+        }
+        coEvery { useCase("user-2", any(), any(), 50) } returns Result.Success(emptyList())
+        val provider = FakeUserSessionProvider(SessionState.OfflineFallback("user-1"))
+        val viewModel = IntelligenceHistoryViewModel(useCase, fakeClock, provider)
+
+        runCurrent()
+        oldLoadStarted.await()
+        provider.setState(SessionState.Authenticated("user-2", isAnonymous = true))
+        runCurrent()
+        assertTrue(viewModel.uiState.value is IntelligenceHistoryUiState.Success)
+
+        finishOldLoad.complete(Unit)
+        advanceUntilIdle()
+        assertTrue("Obsolete failure must not replace user-2 state", viewModel.uiState.value is IntelligenceHistoryUiState.Success)
     }
 }
 

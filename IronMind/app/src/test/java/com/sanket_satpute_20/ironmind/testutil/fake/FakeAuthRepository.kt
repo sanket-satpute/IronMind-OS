@@ -18,8 +18,10 @@ class FakeAuthRepository : AuthRepository {
     }
 
     var signInShouldFail = false
+    var signInCallCount = 0
 
     override suspend fun signInAnonymously(): Result<AuthUser, Exception> {
+        signInCallCount++
         if (signInShouldFail) {
             return Result.Failure(Exception("Simulated sign in failure"))
         }

@@ -44,6 +44,12 @@ class ObservationRepositoryImplTest {
                 .take(limit)
         }
 
+        override fun getAllObservationsForUser(userId: String): List<ObservationEntity> {
+            return entities.values
+                .filter { it.userId == userId }
+                .sortedWith(compareBy<ObservationEntity> { it.occurredAt }.thenBy { it.id })
+        }
+
         override fun getObservationById(id: String): ObservationEntity? {
             return entities[id]
         }

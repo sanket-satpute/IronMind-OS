@@ -38,12 +38,16 @@ class EventProcessingSchedulingTest {
     private lateinit var context: Context
     private lateinit var workManager: WorkManager
     private lateinit var backgroundExecutor: BackgroundExecutorImpl
+    private lateinit var sessionProvider: com.sanket_satpute_20.ironmind.domain.session.UserSessionProvider
 
     @Before
     fun setUp() {
         context = mockk(relaxed = true)
         workManager = mockk(relaxed = true)
-        backgroundExecutor = BackgroundExecutorImpl(context, workManager)
+        sessionProvider = mockk {
+            every { getSessionGeneration() } returns 1L
+        }
+        backgroundExecutor = BackgroundExecutorImpl(context, workManager, sessionProvider = { sessionProvider })
     }
 
     @Test
@@ -68,10 +72,11 @@ class EventProcessingSchedulingTest {
         assertEquals(EventProcessingWorker.UNIQUE_WORK_NAME, workNameSlot.captured)
         assertEquals(ExistingWorkPolicy.KEEP, policySlot.captured)
         assertEquals(EventProcessingWorker::class.java.name, requestSlot.captured.workSpec.workerClassName)
+        assertEquals(1L, requestSlot.captured.workSpec.input.getLong(com.sanket_satpute_20.ironmind.domain.session.UserSessionProvider.KEY_SESSION_GENERATION, -1L))
     }
 
     @Test
-    fun `scheduleEventReconciliation enqueues unique periodic work with 15min interval and KEEP policy`() {
+    fun `scheduleEventReconciliation enqueues unique periodic work with 15min interval and UPDATE policy`() {
         val workNameSlot = slot<String>()
         val policySlot = slot<ExistingPeriodicWorkPolicy>()
         val requestSlot = slot<PeriodicWorkRequest>()
@@ -90,9 +95,10 @@ class EventProcessingSchedulingTest {
             workManager.enqueueUniquePeriodicWork(any(), any(), any<PeriodicWorkRequest>())
         }
         assertEquals(EventProcessingWorker.RECONCILIATION_WORK_NAME, workNameSlot.captured)
-        assertEquals(ExistingPeriodicWorkPolicy.KEEP, policySlot.captured)
+        assertEquals(ExistingPeriodicWorkPolicy.UPDATE, policySlot.captured)
         assertEquals(EventProcessingWorker::class.java.name, requestSlot.captured.workSpec.workerClassName)
         assertEquals(15 * 60 * 1000L, requestSlot.captured.workSpec.intervalDuration)
+        assertEquals(1L, requestSlot.captured.workSpec.input.getLong(com.sanket_satpute_20.ironmind.domain.session.UserSessionProvider.KEY_SESSION_GENERATION, -1L))
     }
 
     @Test

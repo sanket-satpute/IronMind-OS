@@ -64,6 +64,18 @@ class PatternRepositoryImplTest {
         override fun deleteExpiredPatternsOlderThan(userId: String, thresholdTime: Long) {
             store.values.removeIf { it.userId == userId && it.updatedAt < thresholdTime }
         }
+
+        override fun observePatternsForUser(userId: String): Flow<List<PatternEntity>> =
+            flowOf(store.values.filter { it.userId == userId && it.status != "DELETED" })
+
+        override fun updatePatternState(id: String, userId: String, confirmationState: String, status: String, updatedAt: Long): Int {
+            val p = store[id]
+            if (p != null && p.userId == userId) {
+                store[id] = p.copy(confirmationState = confirmationState, status = status, updatedAt = updatedAt)
+                return 1
+            }
+            return 0
+        }
     }
 
     @Before
@@ -138,5 +150,15 @@ class PatternRepositoryImplTest {
         val result = repository.getPattern("p1")
         val retrieved = (result as Result.Success).data
         assertNull(retrieved)
+    }
+
+    @Test
+    fun `updatePatternState updates confirmation state and status`() = runTest {
+        val pattern = makePattern()
+        repository.savePattern(pattern)
+        val result = repository.updatePatternState("p1", "user-1", MemoryConfirmationState.USER_CONFIRMED, PatternStatus.ACTIVE, 5000L)
+        assertTrue(result is Result.Success)
+        val retrieved = (repository.getPattern("p1") as Result.Success).data
+        assertEquals(MemoryConfirmationState.USER_CONFIRMED, retrieved?.confirmationState)
     }
 }

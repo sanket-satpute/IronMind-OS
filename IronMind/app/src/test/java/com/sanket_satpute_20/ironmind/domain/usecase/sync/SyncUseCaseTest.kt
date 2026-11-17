@@ -29,18 +29,24 @@ class SyncUseCaseTest {
         syncUseCase = SyncUseCase(orchestrator)
     }
 
-    private fun entry(id: String, entityType: String = "Goal", status: SyncStatus = SyncStatus.PENDING, retryCount: Int = 0) =
-        OutboxEntry(
-            operationId = id,
-            entityType = entityType,
-            entityId = "entity-$id",
-            operationType = OutboxOperationType.UPSERT,
-            payload = """{"id":"entity-$id","title":"Test"}""",
-            createdAt = 1000L,
-            retryCount = retryCount,
-            lastAttemptAt = null,
-            status = status
-        )
+    private fun entry(
+        id: String,
+        entityType: String = "Goal",
+        status: SyncStatus = SyncStatus.PENDING,
+        retryCount: Int = 0,
+        userId: String = "user-1"
+    ) = OutboxEntry(
+        operationId = id,
+        entityType = entityType,
+        entityId = "entity-$id",
+        operationType = OutboxOperationType.UPSERT,
+        payload = """{"id":"entity-$id","userId":"$userId","title":"Test"}""",
+        createdAt = 1000L,
+        retryCount = retryCount,
+        lastAttemptAt = null,
+        status = status,
+        userId = userId
+    )
 
     // --- offline creation ---
     @Test

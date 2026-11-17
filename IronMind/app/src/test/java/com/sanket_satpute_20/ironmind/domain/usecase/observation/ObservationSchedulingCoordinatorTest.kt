@@ -71,6 +71,15 @@ class ObservationSchedulingCoordinatorTest {
     }
 
     @Test
+    fun `E2 SessionReconciled invokes reconciliation exactly once`() = runBlocking<Unit> {
+        coEvery { reconcileUseCase() } returns ObservationSchedulingReconciliationResult.Activated
+
+        coordinator.handle(ObservationSchedulingLifecycleEvent.SessionReconciled)
+
+        coVerify(exactly = 1) { reconcileUseCase() }
+    }
+
+    @Test
     fun `F Every supported event uses the SAME reconciliation boundary`() = runBlocking<Unit> {
         coEvery { reconcileUseCase() } returns ObservationSchedulingReconciliationResult.Activated
 
@@ -79,9 +88,10 @@ class ObservationSchedulingCoordinatorTest {
         coordinator.handle(ObservationSchedulingLifecycleEvent.AuthenticationUnavailable)
         coordinator.handle(ObservationSchedulingLifecycleEvent.ObservationConsentChanged)
         coordinator.handle(ObservationSchedulingLifecycleEvent.GlobalAutonomyPauseChanged)
+        coordinator.handle(ObservationSchedulingLifecycleEvent.SessionReconciled)
 
         // Ensure no direct scheduler/policy calls (validated by lack of dependencies in constructor)
-        coVerify(exactly = 5) { reconcileUseCase() }
+        coVerify(exactly = 6) { reconcileUseCase() }
     }
 
     @Test

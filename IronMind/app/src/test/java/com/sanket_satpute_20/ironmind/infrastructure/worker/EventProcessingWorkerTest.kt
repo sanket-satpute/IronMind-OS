@@ -3,20 +3,26 @@ package com.sanket_satpute_20.ironmind.infrastructure.worker
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import androidx.work.Data
 import androidx.work.ListenableWorker.Result
 import androidx.work.WorkerParameters
 import com.sanket_satpute_20.ironmind.data.local.IronMindDatabase
 import com.sanket_satpute_20.ironmind.data.local.Jdk25CompatibleRobolectricTestRunner
 import com.sanket_satpute_20.ironmind.data.local.dao.LearnerEventStatusDao
 import com.sanket_satpute_20.ironmind.data.local.entity.LearnerEventStatusEntity
+import com.sanket_satpute_20.ironmind.data.local.entity.toEntity
 import com.sanket_satpute_20.ironmind.domain.common.Clock
 import com.sanket_satpute_20.ironmind.domain.model.EntitySource
 import com.sanket_satpute_20.ironmind.domain.model.Event
 import com.sanket_satpute_20.ironmind.domain.model.EventType
+import com.sanket_satpute_20.ironmind.domain.session.SessionState
+import com.sanket_satpute_20.ironmind.domain.session.UserSessionProvider
 import com.sanket_satpute_20.ironmind.execution.background.DefaultEventProcessor
 import com.sanket_satpute_20.ironmind.execution.background.EventProcessingOutcome
 import com.sanket_satpute_20.ironmind.execution.background.EventProcessor
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeEventRepository
+import com.sanket_satpute_20.ironmind.testutil.FakeUserSessionProvider
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
@@ -42,6 +48,7 @@ class EventProcessingWorkerTest {
     private lateinit var eventRepo: FakeEventRepository
     private lateinit var clock: TestClock
     private lateinit var processor: TestEventProcessor
+    private lateinit var userSessionProvider: FakeUserSessionProvider
 
     class TestClock(var time: Long = 1000L) : Clock {
         override fun currentTimeMillis(): Long = time
@@ -65,6 +72,9 @@ class EventProcessingWorkerTest {
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         workerParams = mockk(relaxed = true)
+        every { workerParams.inputData } returns Data.Builder()
+            .putLong(UserSessionProvider.KEY_SESSION_GENERATION, 1L)
+            .build()
         db = Room.inMemoryDatabaseBuilder(context, IronMindDatabase::class.java)
             .allowMainThreadQueries()
             .build()
@@ -72,6 +82,7 @@ class EventProcessingWorkerTest {
         eventRepo = FakeEventRepository()
         clock = TestClock(1000L)
         processor = TestEventProcessor()
+        userSessionProvider = FakeUserSessionProvider(SessionState.Authenticated("user-123", true))
     }
 
     @After
@@ -94,7 +105,8 @@ class EventProcessingWorkerTest {
             logger = null,
             leaseDurationMs = 30_000L,
             batchSize = batchSize,
-            maxDrainIterations = maxDrainIterations
+            maxDrainIterations = maxDrainIterations,
+            userSessionProvider = userSessionProvider
         )
     }
 
@@ -106,12 +118,13 @@ class EventProcessingWorkerTest {
         maxAttempts: Int = 5,
         nextAttemptAt: Long = 1000L,
         leaseToken: String? = null,
-        leaseExpiresAt: Long? = null
+        leaseExpiresAt: Long? = null,
+        userId: String = "user-123"
     ) = runBlocking {
         dao.insert(
             LearnerEventStatusEntity(
                 eventId = id,
-                userId = "user-123",
+                userId = userId,
                 status = status,
                 claimCount = claimCount,
                 failureCount = failureCount,
@@ -130,12 +143,13 @@ class EventProcessingWorkerTest {
 
     private fun seedEvent(
         id: String,
-        type: EventType = EventType.INTERVENTION_OVERRIDDEN
+        type: EventType = EventType.INTERVENTION_OVERRIDDEN,
+        userId: String = "user-123"
     ) = runBlocking {
         eventRepo.saveEvent(
             Event(
                 id = id,
-                userId = "user-123",
+                userId = userId,
                 type = type,
                 entityType = "Intervention",
                 entityId = "entity-$id",
@@ -146,6 +160,48 @@ class EventProcessingWorkerTest {
                 causationId = "rec-$id"
             )
         )
+        db.ironMindDao().insertEvent(
+            Event(
+                id = id,
+                userId = userId,
+                type = type,
+                entityType = "Intervention",
+                entityId = "entity-$id",
+                occurredAt = 1000L,
+                recordedAt = 1000L,
+                source = EntitySource.SYSTEM,
+                metadata = "scope=INTERVENTION_CORRECTION",
+                causationId = "rec-$id"
+            ).toEntity()
+        )
+    }
+
+    @Test
+    fun `worker does not claim another users event status`() = runBlocking {
+        seedStatus("event-other-user", userId = "another-user")
+        seedEvent("event-other-user", userId = "another-user")
+
+        val result = createWorker().doWork()
+
+        assertEquals(Result.success(), result)
+        assertTrue(processor.processedEvents.isEmpty())
+        val untouched = dao.getEventStatus("event-other-user")
+        assertEquals("PENDING", untouched?.status)
+        assertEquals(0, untouched?.claimCount)
+    }
+
+    @Test
+    fun `worker excludes a queued event whose owner differs from active session`() = runBlocking {
+        seedStatus("event-owner-mismatch", userId = "user-123")
+        seedEvent("event-owner-mismatch", userId = "another-user")
+
+        val result = createWorker().doWork()
+
+        assertEquals(Result.success(), result)
+        assertTrue(processor.processedEvents.isEmpty())
+        val untouched = dao.getEventStatus("event-owner-mismatch")
+        assertEquals("PENDING", untouched?.status)
+        assertEquals(0, untouched?.claimCount)
     }
 
     @Test

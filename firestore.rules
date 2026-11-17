@@ -1,0 +1,44 @@
+rules_version = '2';
+
+/**
+ * IronMind Local Isolated Test Environment — Firestore Security Rules
+ *
+ * Safety Policies:
+ * 1. Deny-by-default: Any document path not explicitly matched and permitted is denied.
+ * 2. User ownership isolation: A client can only read, write, or delete documents inside
+ *    their own /users/{userId} path (request.auth.uid == userId).
+ * 3. Scope restriction: Only valid IronMind sync subcollections ('goals', 'commitments',
+ *    'reflections', 'memories') are permitted.
+ * 4. No allow-all: Permissive rules ('if true') are strictly forbidden.
+ */
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: Validates that the request comes from an authenticated user
+    function isAuthenticated() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    // Helper: Validates that the authenticated user is the owner of the resource
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // User-scoped domain documents (goals, plans, tasks, commitments, reflections, memories)
+    match /users/{userId} {
+      // User root document access (read/write only by owner)
+      allow read, write: if isOwner(userId);
+
+      // Subcollections synchronized by FirestoreSyncRepository
+      match /{subcollection}/{entityId} {
+        allow read, write: if isOwner(userId)
+          && subcollection in ['goals', 'plans', 'tasks', 'commitments', 'reflections', 'memories'];
+      }
+    }
+
+    // Global Deny-all fallback for any other collection or arbitrary path
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

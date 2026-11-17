@@ -29,6 +29,19 @@ class FakeTaskRepository : TaskRepository {
         return Result.Success(tasks.values.filter { it.goalId == goalId }.sortedBy { it.createdAt })
     }
 
+    override suspend fun deleteTask(userId: String, taskId: String): Result<Unit, Exception> {
+        if (shouldFail) return Result.Failure(Exception("Fake failure"))
+        val existing = tasks[taskId] ?: return Result.Failure(IllegalArgumentException("Task not found: $taskId"))
+        if (existing.userId != userId) return Result.Failure(IllegalStateException("Task $taskId does not belong to user $userId"))
+        tasks.remove(taskId)
+        return Result.Success(Unit)
+    }
+
+    override suspend fun getTasksForUser(userId: String): Result<List<Task>, Exception> {
+        if (shouldFail) return Result.Failure(Exception("Fake failure"))
+        return Result.Success(tasks.values.filter { it.userId == userId }.sortedByDescending { it.createdAt })
+    }
+
     fun clear() {
         tasks.clear()
     }

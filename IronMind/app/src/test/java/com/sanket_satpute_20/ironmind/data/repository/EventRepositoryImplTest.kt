@@ -44,11 +44,13 @@ class EventRepositoryImplTest {
         override fun insertPlan(plan: com.sanket_satpute_20.ironmind.data.local.entity.PlanEntity) {}
         override fun getPlan(id: String) = null
         override fun getPlansForGoal(goalId: String) = emptyList<com.sanket_satpute_20.ironmind.data.local.entity.PlanEntity>()
+        override fun getPlansForUser(userId: String) = emptyList<com.sanket_satpute_20.ironmind.data.local.entity.PlanEntity>()
         override fun getActiveCommitmentsForUser(userId: String, statuses: List<String>, limit: Int) = emptyList<com.sanket_satpute_20.ironmind.data.local.entity.CommitmentEntity>()
         override fun insertTask(task: com.sanket_satpute_20.ironmind.data.local.entity.TaskEntity) {}
         override fun getTask(id: String) = null
         override fun getTasksForPlan(planId: String) = emptyList<com.sanket_satpute_20.ironmind.data.local.entity.TaskEntity>()
         override fun getTasksForGoal(goalId: String) = emptyList<com.sanket_satpute_20.ironmind.data.local.entity.TaskEntity>()
+        override fun getTasksForUser(userId: String) = emptyList<com.sanket_satpute_20.ironmind.data.local.entity.TaskEntity>()
         override fun insertCommitment(commitment: com.sanket_satpute_20.ironmind.data.local.entity.CommitmentEntity) {}
         override fun getCommitment(id: String) = null
         override fun getCommitmentsForUser(userId: String) = emptyList<com.sanket_satpute_20.ironmind.data.local.entity.CommitmentEntity>()
@@ -60,10 +62,12 @@ class EventRepositoryImplTest {
         override fun insertOutcome(outcome: com.sanket_satpute_20.ironmind.data.local.entity.OutcomeEntity) {}
         override fun getOutcome(id: String) = null
         override fun getOutcomeForSource(sourceEntityId: String) = null
+        override fun getOutcomesForUser(userId: String) = emptyList<com.sanket_satpute_20.ironmind.data.local.entity.OutcomeEntity>()
         override fun insertReflection(reflection: com.sanket_satpute_20.ironmind.data.local.entity.ReflectionEntity) {}
         override fun getReflection(id: String) = null
         override fun getReflectionForUser(userId: String, id: String) = null
         override fun getReflectionsForDateRange(userId: String, startTime: Long, endTime: Long) = emptyList<com.sanket_satpute_20.ironmind.data.local.entity.ReflectionEntity>()
+        override fun getReflectionsForUser(userId: String) = emptyList<com.sanket_satpute_20.ironmind.data.local.entity.ReflectionEntity>()
         override fun insertProtectionRule(rule: com.sanket_satpute_20.ironmind.data.local.entity.ProtectionRuleEntity) {}
         override fun getProtectionRule(id: String) = null
         override fun getProtectionRulesForUser(userId: String) = emptyList<com.sanket_satpute_20.ironmind.data.local.entity.ProtectionRuleEntity>()
@@ -71,6 +75,7 @@ class EventRepositoryImplTest {
         override fun insertProtectionSession(session: com.sanket_satpute_20.ironmind.data.local.entity.ProtectionSessionEntity) {}
         override fun getProtectionSession(id: String) = null
         override fun getActiveProtectionSessionsForUser(userId: String) = emptyList<com.sanket_satpute_20.ironmind.data.local.entity.ProtectionSessionEntity>()
+        override fun getProtectionSessionsForUser(userId: String) = emptyList<com.sanket_satpute_20.ironmind.data.local.entity.ProtectionSessionEntity>()
         override fun getEventsForEntity(entityId: String) = emptyList<EventEntity>()
         override fun getEventsForUser(userId: String) = emptyList<EventEntity>()
         override fun getEventCount(): Flow<Int> = kotlinx.coroutines.flow.emptyFlow()
@@ -98,6 +103,7 @@ class EventRepositoryImplTest {
         override fun deleteProtectionSessionsForUser(userId: String) {}
         override fun deleteEventsForUser(userId: String) {}
         override fun deleteMemoriesForUser(userId: String) {}
+        override fun deleteOutcomesForUser(userId: String) {}
         override fun deleteForgottenMemoriesOlderThan(userId: String, thresholdTime: Long) {}
     
     override fun getReflectionsForDateRangeAsc(userId: String, startTime: Long, endTime: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.ReflectionEntity> = emptyList()
@@ -107,6 +113,14 @@ class EventRepositoryImplTest {
     override fun getEventsForDateRangeWithTypesAsc(userId: String, types: List<String>, startTime: Long, endTime: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.EventEntity> = emptyList()
     override fun getEventsForDateRangeWithTypesDesc(userId: String, types: List<String>, startTime: Long, endTime: Long, limit: Int): List<com.sanket_satpute_20.ironmind.data.local.entity.EventEntity> = emptyList()
     override fun getEventsByCausationId(userId: String, causationId: String): List<EventEntity> = emptyList()
+    override fun observeMemoriesForUser(userId: String): Flow<List<com.sanket_satpute_20.ironmind.data.local.entity.MemoryEntity>> = kotlinx.coroutines.flow.emptyFlow()
+    override fun deleteMemory(userId: String, id: String): Int = 0
+    override fun deleteGoal(userId: String, id: String): Int = 0
+    override fun deletePlan(userId: String, id: String): Int = 0
+    override fun deleteTask(userId: String, id: String): Int = 0
+    override fun deleteCommitment(userId: String, id: String): Int = 0
+    override fun deleteReflection(userId: String, id: String): Int = 0
+    override fun updateMemoryState(id: String, userId: String, confirmationState: String, status: String, updatedAt: Long): Int = 0
 }
 
     @Test

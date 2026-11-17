@@ -107,4 +107,23 @@ class UpdateCommitmentStatusUseCaseOutcomeTest {
         assertEquals(ResultStatus.PARTIAL, outcome?.resultStatus)
         assertEquals(15, outcome?.actualDurationMinutes)
     }
+
+    @Test
+    fun `transition to MISSED schedules intervention evaluation`() = runTest {
+        val fakeBgExecutor = com.sanket_satpute_20.ironmind.testutil.fake.FakeBackgroundExecutor()
+        val useCaseWithBg = UpdateCommitmentStatusUseCase(
+            repository = repository,
+            outcomeRepository = outcomeRepository,
+            reminderScheduler = reminderScheduler,
+            clock = clock,
+            idGenerator = idGenerator,
+            eventRepository = eventRepository,
+            backgroundExecutor = fakeBgExecutor
+        )
+
+        val result = useCaseWithBg("c1", CommitmentStatus.MISSED)
+        assertTrue(result is Result.Success)
+        assertTrue(fakeBgExecutor.scheduleInterventionEvaluationCalled)
+        assertEquals("commitment_missed", fakeBgExecutor.lastInterventionTrigger)
+    }
 }

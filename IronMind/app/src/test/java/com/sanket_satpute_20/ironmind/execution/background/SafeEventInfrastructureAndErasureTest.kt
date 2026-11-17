@@ -2,6 +2,7 @@ package com.sanket_satpute_20.ironmind.execution.background
 
 import android.content.Context
 import androidx.room.Room
+import androidx.sqlite.db.SimpleSQLiteQuery
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.WorkerParameters
 import com.sanket_satpute_20.ironmind.data.local.IronMindDatabase
@@ -20,6 +21,8 @@ import com.sanket_satpute_20.ironmind.domain.common.IdGenerator
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.EntitySource
 import com.sanket_satpute_20.ironmind.domain.model.Event
+import com.sanket_satpute_20.ironmind.domain.session.SessionState
+import com.sanket_satpute_20.ironmind.testutil.FakeUserSessionProvider
 import com.sanket_satpute_20.ironmind.domain.model.EventType
 import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendation
 import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionRecommendationStatus
@@ -77,7 +80,11 @@ class SafeEventInfrastructureAndErasureTest {
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        workerParams = mockk(relaxed = true)
+        workerParams = mockk(relaxed = true) {
+            io.mockk.every { inputData } returns androidx.work.Data.Builder()
+                .putLong(com.sanket_satpute_20.ironmind.domain.session.UserSessionProvider.KEY_SESSION_GENERATION, 1L)
+                .build()
+        }
         db = Room.inMemoryDatabaseBuilder(context, IronMindDatabase::class.java)
             .allowMainThreadQueries()
             .build()
@@ -176,7 +183,15 @@ class SafeEventInfrastructureAndErasureTest {
         clock = testClock,
         logger = null,
         database = db,
-        ironMindDao = ironMindDao
+        ironMindDao = ironMindDao,
+        userSessionProvider = FakeUserSessionProvider(
+            SessionState.Authenticated(
+                userId = db.query(SimpleSQLiteQuery("SELECT userId FROM learner_event_status LIMIT 1")).use {
+                    if (it.moveToFirst()) it.getString(0) else SessionState.DEFAULT_LEGACY_USER_ID
+                },
+                isAnonymous = true
+            )
+        )
     )
 
     @Test

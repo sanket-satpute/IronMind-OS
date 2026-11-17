@@ -122,6 +122,8 @@ class FakeTaskRepository : TaskRepository {
     override suspend fun getTask(id: String): Result<Task?, Exception> = Result.Success(tasks.find { it.id == id })
     override suspend fun getTasksForPlan(planId: String): Result<List<Task>, Exception> = Result.Success(tasks.filter { it.planId == planId })
     override suspend fun getTasksForGoal(goalId: String): Result<List<Task>, Exception> = Result.Success(tasks.filter { it.goalId == goalId })
+    override suspend fun deleteTask(userId: String, taskId: String): Result<Unit, Exception> = Result.Success(Unit)
+    override suspend fun getTasksForUser(userId: String): Result<List<Task>, Exception> = Result.Success(tasks.filter { it.userId == userId })
 }
 
 class FakeInterventionExecutionPipeline : InterventionExecutionPipeline {

@@ -6,15 +6,22 @@ import com.sanket_satpute_20.ironmind.domain.model.Goal
 import com.sanket_satpute_20.ironmind.domain.model.GoalStatus
 import com.sanket_satpute_20.ironmind.domain.usecase.goal.CreateGoalUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.goal.GetGoalsUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.goal.GetGoalProgressUseCase
+import com.sanket_satpute_20.ironmind.domain.model.Task
+import com.sanket_satpute_20.ironmind.domain.model.TaskStatus
+import com.sanket_satpute_20.ironmind.domain.model.EntitySource
 import com.sanket_satpute_20.ironmind.testutil.TestDispatcherRule
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeIdGenerator
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeEventRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakePlanRepository
+import com.sanket_satpute_20.ironmind.testutil.fake.FakeTaskRepository
 import com.sanket_satpute_20.ironmind.domain.repository.GoalRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -57,7 +64,10 @@ class GoalsViewModelTest {
     val dispatcherRule = TestDispatcherRule()
 
     private lateinit var goalRepository: FakeGoalRepository
+    private lateinit var planRepository: FakePlanRepository
+    private lateinit var taskRepository: FakeTaskRepository
     private lateinit var getGoalsUseCase: GetGoalsUseCase
+    private lateinit var getGoalProgressUseCase: GetGoalProgressUseCase
     private lateinit var createGoalUseCase: CreateGoalUseCase
     private lateinit var logger: IronLogger
     private lateinit var clock: FakeClock
@@ -69,7 +79,10 @@ class GoalsViewModelTest {
     @Before
     fun setup() {
         goalRepository = FakeGoalRepository()
+        planRepository = FakePlanRepository()
+        taskRepository = FakeTaskRepository()
         getGoalsUseCase = GetGoalsUseCase(goalRepository)
+        getGoalProgressUseCase = GetGoalProgressUseCase(planRepository, taskRepository)
         clock = FakeClock()
         idGenerator = FakeIdGenerator()
         eventRepository = FakeEventRepository()
@@ -156,5 +169,67 @@ class GoalsViewModelTest {
 
         val saveError = viewModel.saveError.value
         assertEquals("Simulated save failure", saveError)
+    }
+
+    @Test
+    fun `loadGoals populates progressMap for goals`() = runTest {
+        val goal1 = Goal(
+            id = "g1",
+            userId = "user-1",
+            title = "Goal 1",
+            description = "Desc",
+            why = "Why",
+            importance = 5,
+            status = GoalStatus.ACTIVE,
+            createdAt = 1000L,
+            updatedAt = 1000L
+        )
+        goalRepository.saveGoal(goal1)
+
+        taskRepository.saveTask(
+            Task(
+                id = "t1",
+                userId = "user-1",
+                goalId = "g1",
+                title = "Task 1",
+                description = "Desc",
+                status = TaskStatus.COMPLETED,
+                priority = 1,
+                createdAt = 1000L,
+                updatedAt = 1000L,
+                source = EntitySource.USER
+            )
+        )
+        taskRepository.saveTask(
+            Task(
+                id = "t2",
+                userId = "user-1",
+                goalId = "g1",
+                title = "Task 2",
+                description = "Desc",
+                status = TaskStatus.PENDING,
+                priority = 1,
+                createdAt = 1000L,
+                updatedAt = 1000L,
+                source = EntitySource.USER
+            )
+        )
+
+        viewModel = GoalsViewModel(
+            getGoalsUseCase = getGoalsUseCase,
+            createGoalUseCase = createGoalUseCase,
+            logger = logger,
+            getGoalProgressUseCase = getGoalProgressUseCase
+        )
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as GoalsUiState.Success
+        assertEquals(1, state.goals.size)
+        val progress = state.progressMap["g1"]
+        assertNotNull(progress)
+        assertEquals(2, progress!!.totalTasks)
+        assertEquals(1, progress.completedTasks)
+        assertEquals(1, progress.pendingTasks)
+        assertEquals(50, progress.percentage)
     }
 }

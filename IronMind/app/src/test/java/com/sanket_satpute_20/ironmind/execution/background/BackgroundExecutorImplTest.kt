@@ -18,12 +18,16 @@ class BackgroundExecutorImplTest {
     private lateinit var context: Context
     private lateinit var workManager: WorkManager
     private lateinit var backgroundExecutor: BackgroundExecutorImpl
+    private lateinit var sessionProvider: com.sanket_satpute_20.ironmind.domain.session.UserSessionProvider
 
     @Before
     fun setup() {
         context = mockk(relaxed = true)
         workManager = mockk(relaxed = true)
-        backgroundExecutor = BackgroundExecutorImpl(context, workManager)
+        sessionProvider = mockk {
+            every { getSessionGeneration() } returns 1L
+        }
+        backgroundExecutor = BackgroundExecutorImpl(context, workManager, sessionProvider = { sessionProvider })
     }
 
     @Test
@@ -57,10 +61,11 @@ class BackgroundExecutorImplTest {
         val capturedRequest = workRequestSlot.captured
         assertEquals(ReflectionProcessingWorker::class.java.name, capturedRequest.workSpec.workerClassName)
 
-        // B. InputData contains exactly reflectionId
+        // B. InputData contains reflectionId and session generation
         val inputData = capturedRequest.workSpec.input
         assertEquals("test-reflection-123", inputData.getString(ReflectionProcessingWorker.KEY_REFLECTION_ID))
-        assertEquals(1, inputData.keyValueMap.size)
+        assertEquals(1L, inputData.getLong(com.sanket_satpute_20.ironmind.domain.session.UserSessionProvider.KEY_SESSION_GENERATION, -1L))
+        assertEquals(2, inputData.keyValueMap.size)
         // Ensure no userId, ZoneId, or extra input keys
         assertEquals(false, inputData.keyValueMap.containsKey("userId"))
         assertEquals(false, inputData.keyValueMap.containsKey("zoneId"))

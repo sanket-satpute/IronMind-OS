@@ -60,7 +60,7 @@ class UserCorrectionTest {
         createCommitmentUseCase = CreateCommitmentUseCase(commitmentRepository, reminderScheduler, idGenerator, clock, eventRepository)
         editCommitmentUseCase = EditCommitmentUseCase(commitmentRepository, reminderScheduler, clock, idGenerator, eventRepository)
 
-        memoryRepository = com.sanket_satpute_20.ironmind.testutil.fake.FakeMemoryRepository()
+        memoryRepository = com.sanket_satpute_20.ironmind.testutil.fake.FakeMemoryRepository(eventRepository)
         proposeMemoryUseCase = com.sanket_satpute_20.ironmind.domain.usecase.memory.ProposeMemoryUseCase(memoryRepository, eventRepository, idGenerator, clock)
         correctMemoryUseCase = com.sanket_satpute_20.ironmind.domain.usecase.memory.CorrectMemoryUseCase(memoryRepository, eventRepository, idGenerator, clock)
     }
