@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.domain.provider
+﻿package com.sanket_satpute_20.ironmind.domain.provider
 
 data class DiscoveredApp(
     val packageName: String,

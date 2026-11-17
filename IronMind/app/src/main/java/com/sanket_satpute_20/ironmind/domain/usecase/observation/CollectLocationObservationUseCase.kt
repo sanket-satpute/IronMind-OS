@@ -80,7 +80,7 @@ class CollectLocationObservationUseCase(
             } else {
                 Result.Failure((insertResult as Result.Failure).error)
             }
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             println("IronMindLifecycle [LocationObservation] [COLLECT_FAILED] userId=$userId error=${e.message}")
             Result.Failure(e)
         }

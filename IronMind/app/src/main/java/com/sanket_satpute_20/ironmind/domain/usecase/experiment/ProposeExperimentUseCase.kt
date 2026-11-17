@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.domain.usecase.experiment
+﻿package com.sanket_satpute_20.ironmind.domain.usecase.experiment
 
 import com.sanket_satpute_20.ironmind.domain.ai.AIOutput
 import com.sanket_satpute_20.ironmind.domain.ai.AIRequest
@@ -18,7 +18,7 @@ import com.sanket_satpute_20.ironmind.domain.common.IdGenerator
 
 /**
  * Sprint V4.10: Experimental Learning.
- * 
+ *
  * Objective: Allow controlled experimentation where useful.
  * AI proposes an experiment (e.g. Try shorter commitment vs larger planned block)
  * which can then be presented to the user (per EXPERIMENTATION autonomy capability).
@@ -34,7 +34,7 @@ class ProposeExperimentUseCase(
     ): Result<ExperimentRecord?, Exception> = withContext(Dispatchers.IO) {
         try {
             val requestInput = """
-                Based on the user's recent behavior, propose a bounded, explainable, and non-manipulative 
+                Based on the user's recent behavior, propose a bounded, explainable, and non-manipulative
                 experiment to improve their outcomes.
                 Example: Try shorter commitments (15m vs 30m) to see if completion rates improve.
                 The experiment must be user-respectful and testable.
@@ -53,7 +53,7 @@ class ProposeExperimentUseCase(
             }
 
             val aiOutput = (aiResult as Result.Success).data
-            
+
             if (!aiOutput.isValid() || aiOutput !is AIOutput.ExperimentProposal) {
                 return@withContext Result.Success(null)
             }
@@ -76,7 +76,7 @@ class ProposeExperimentUseCase(
 
             Result.Success(experimentRecord)
 
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }

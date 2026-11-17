@@ -14,8 +14,17 @@ interface BarrierDao {
     @Query("SELECT * FROM barrier_hypotheses WHERE userId = :userId")
     suspend fun getBarriersByUserId(userId: String): List<BarrierHypothesisEntity>
 
+    @Query("SELECT * FROM barrier_hypotheses WHERE userId = :userId ORDER BY lastObservedAt DESC, id ASC")
+    suspend fun getAllBarriersForUser(userId: String): List<BarrierHypothesisEntity>
+
+    @Query("SELECT * FROM barrier_hypotheses WHERE userId = :userId ORDER BY lastObservedAt DESC")
+    fun observeBarriersForUser(userId: String): kotlinx.coroutines.flow.Flow<List<BarrierHypothesisEntity>>
+
     @Query("SELECT * FROM barrier_hypotheses WHERE userId = :userId AND confirmationState NOT IN (:excludedStates) ORDER BY lastObservedAt DESC LIMIT :limit")
     suspend fun getActiveBarriersForUser(userId: String, excludedStates: List<String>, limit: Int): List<BarrierHypothesisEntity>
+
+    @Query("UPDATE barrier_hypotheses SET confirmationState = :confirmationState, status = :status, lastObservedAt = :now WHERE id = :id AND userId = :userId")
+    suspend fun updateBarrierState(id: String, userId: String, confirmationState: String, status: String, now: Long): Int
 
     @Query("DELETE FROM barrier_hypotheses WHERE userId = :userId")
     suspend fun deleteBarriersForUser(userId: String): Int

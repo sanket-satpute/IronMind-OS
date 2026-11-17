@@ -65,7 +65,7 @@ class CollectActivityObservationUseCase(
             } else {
                 return Result.Failure((insertResult as Result.Failure).error)
             }
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             println("IronMindLifecycle [ActivityObservation] [COLLECT_FAILED]")
             Result.Failure(e)
         }

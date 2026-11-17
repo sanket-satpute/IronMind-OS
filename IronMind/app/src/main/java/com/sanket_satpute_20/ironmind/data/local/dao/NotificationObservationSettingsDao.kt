@@ -13,4 +13,7 @@ interface NotificationObservationSettingsDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertSettings(settings: NotificationObservationSettingsEntity)
+
+    @Query("DELETE FROM notification_observation_settings WHERE userId = :userId")
+    suspend fun deleteSettingsForUser(userId: String)
 }

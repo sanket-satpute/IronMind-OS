@@ -6,4 +6,5 @@ interface DataManagementRepository {
     suspend fun deleteAllUserData(userId: String): Result<Unit, Exception>
     suspend fun cleanupExpiredPatterns(userId: String, thresholdTime: Long): Result<Unit, Exception>
     suspend fun cleanupForgottenMemories(userId: String, thresholdTime: Long): Result<Unit, Exception>
+    fun cancelAllUserWorkers() {}
 }

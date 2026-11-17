@@ -1,7 +1,10 @@
-package com.sanket_satpute_20.ironmind.data.ai
+﻿package com.sanket_satpute_20.ironmind.data.ai
 
-import com.google.ai.client.generativeai.GenerativeModel
-import com.google.ai.client.generativeai.type.generationConfig
+import com.google.firebase.Firebase
+import com.google.firebase.ai.GenerativeModel
+import com.google.firebase.ai.ai
+import com.google.firebase.ai.type.GenerativeBackend
+import com.google.firebase.ai.type.generationConfig
 import com.sanket_satpute_20.ironmind.domain.ai.AIOutput
 import com.sanket_satpute_20.ironmind.domain.ai.AIOutputType
 import com.sanket_satpute_20.ironmind.domain.ai.AIRequest
@@ -13,6 +16,9 @@ import com.sanket_satpute_20.ironmind.domain.ai.IronMindAI
 import com.sanket_satpute_20.ironmind.domain.ai.TaskCandidate
 import com.sanket_satpute_20.ironmind.domain.ai.isValid
 import com.sanket_satpute_20.ironmind.domain.common.Result
+import com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState
+import com.sanket_satpute_20.ironmind.domain.model.MemoryStatus
+import com.sanket_satpute_20.ironmind.domain.model.pattern.PatternStatus
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 import org.json.JSONException
@@ -20,41 +26,69 @@ import org.json.JSONObject
 import java.io.IOException
 
 /**
- * Concrete implementation of IronMindAI using Google Gemini.
+ * Concrete implementation of IronMindAI using Firebase AI Logic (Google Gemini Developer API backend).
  *
  * Supports:
+ * - Firebase AI Logic using gemini-3.8-flash (active model)
+ * - Gemini Developer API backend via GenerativeBackend.googleAI()
+ * - Zero developer API keys embedded in client code or assets
+ * - App Check backend protection
  * - Structured JSON generation
- * - Fallbacks, retries, timeouts
+ * - Fallbacks, bounded retries, 15-second timeouts
+ * - Safe failure handling if configuration is absent
  * - Validation mapping
  */
 class GeminiIronMindAI(
-    apiKey: String,
-    private val modelName: String = "gemini-1.5-flash",
+    private val modelName: String = DEFAULT_MODEL_NAME,
     private val timeoutMs: Long = 15000L,
-    private val maxRetries: Int = 2
+    private val maxRetries: Int = 2,
+    private val contentGenerator: (suspend (String) -> String)? = null
 ) : IronMindAI {
+
+    // Secondary constructor for backward compatibility (apiKey unused; handled by Firebase & App Check)
+    constructor(
+        apiKey: String,
+        modelName: String = DEFAULT_MODEL_NAME,
+        timeoutMs: Long = 15000L,
+        maxRetries: Int = 2
+    ) : this(
+        modelName = modelName,
+        timeoutMs = timeoutMs,
+        maxRetries = maxRetries,
+        contentGenerator = null
+    )
 
     // model/version tracking (Sprint V2.5 requirement)
     private val activeModelVersion = modelName
     // prompt/version tracking (Sprint V2.5 requirement)
     private val promptVersion = 1
 
-    private val generativeModel = GenerativeModel(
-        modelName = activeModelVersion,
-        apiKey = apiKey,
-        generationConfig = generationConfig {
-            responseMimeType = "application/json"
-            temperature = 0.2f // Keep reasoning deterministic
-        }
-    )
+    private val generativeModel: GenerativeModel by lazy {
+        Firebase.ai(backend = GenerativeBackend.googleAI()).generativeModel(
+            modelName = activeModelVersion,
+            generationConfig = generationConfig {
+                responseMimeType = "application/json"
+                temperature = 0.2f // Keep reasoning deterministic
+            }
+        )
+    }
 
     override suspend fun process(request: AIRequest): Result<AIOutput, Exception> {
         val prompt = buildPrompt(request)
 
         return executeWithRetry {
             withTimeout(timeoutMs) {
-                val response = generativeModel.generateContent(prompt)
-                val jsonText = response.text ?: throw IOException("Empty response from Gemini")
+                val jsonText = if (contentGenerator != null) {
+                    contentGenerator.invoke(prompt)
+                } else {
+                    val model = try {
+                        generativeModel
+                    } catch (e: Exception) {
+                        throw IOException("Firebase AI Logic is uninitialized or unavailable: ${e.message}", e)
+                    }
+                    val response = model.generateContent(prompt)
+                    response.text ?: throw IOException("Empty response from Gemini")
+                }
                 parseAndValidateOutput(jsonText, request.requestType)
             }
         }
@@ -66,9 +100,12 @@ class GeminiIronMindAI(
 
         while (currentAttempt <= maxRetries) {
             try {
-                return Result.Success(block())
+                val res = block()
+                println("GeminiIronMindAI [SUCCESS]: response received successfully")
+                return Result.Success(res)
             } catch (e: Exception) {
                 lastException = e
+                println("GeminiIronMindAI [ERROR] attempt=$currentAttempt: ${e.javaClass.name}: ${e.message}")
                 currentAttempt++
                 if (currentAttempt <= maxRetries) {
                     delay(1000L * currentAttempt) // Exponential backoff
@@ -80,7 +117,7 @@ class GeminiIronMindAI(
         return Result.Failure(lastException ?: Exception("Unknown AI failure"))
     }
 
-    private fun buildPrompt(request: AIRequest): String {
+    internal fun buildPrompt(request: AIRequest): String {
         val typeSpecificInstructions = when (request.requestType) {
             AIRequestType.PLAN_GENERATION -> """
                 You are proposing a practical breakdown for a user goal.
@@ -126,6 +163,36 @@ class GeminiIronMindAI(
             else -> "Match the output type to the request type. Return relevant fields for that type."
         }
 
+        val memoryContext = request.contextSnapshot?.activeMemories
+            ?.filter { memory ->
+                memory.userId == request.userId &&
+                memory.status !in setOf(MemoryStatus.EXPIRED, MemoryStatus.DELETED, MemoryStatus.INACTIVE) &&
+                memory.confirmationState != MemoryConfirmationState.USER_REJECTED
+            }
+            ?.takeIf { it.isNotEmpty() }
+            ?.joinToString("\n") { memory ->
+                val statusLabel = when (memory.confirmationState) {
+                    MemoryConfirmationState.USER_CONFIRMED -> "CONFIRMED FACT"
+                    MemoryConfirmationState.SYSTEM_CONFIRMED -> "[System Confirmed]"
+                    MemoryConfirmationState.UNCONFIRMED -> "UNCONFIRMED HYPOTHESIS"
+                    MemoryConfirmationState.USER_REJECTED -> "REJECTED"
+                }
+                "- MEMORY [${memory.id}]: \"${memory.content}\" ($statusLabel, Confidence: ${memory.confidence})"
+            }
+
+        val patternContext = request.contextSnapshot?.recentPatterns
+            ?.filter { it.confirmationState != MemoryConfirmationState.USER_REJECTED && it.status == PatternStatus.ACTIVE }
+            ?.takeIf { it.isNotEmpty() }
+            ?.joinToString("\n") { pattern ->
+                val patternLabel = when (pattern.confirmationState) {
+                    MemoryConfirmationState.USER_CONFIRMED -> "CONFIRMED"
+                    MemoryConfirmationState.SYSTEM_CONFIRMED -> "[System Confirmed]"
+                    MemoryConfirmationState.UNCONFIRMED -> "UNCONFIRMED HYPOTHESIS"
+                    MemoryConfirmationState.USER_REJECTED -> "REJECTED"
+                }
+                "- PATTERN [${pattern.id}]: ${pattern.type} ($patternLabel) - ${pattern.description}"
+            }
+
         return """
             [SYSTEM INSTRUCTION]
             You are the IronMind AI Reasoning Layer (Prompt Version: $promptVersion).
@@ -135,6 +202,8 @@ class GeminiIronMindAI(
             [CONTEXT]
             User ID: ${request.userId}
             Context Elements: ${request.contextSnapshot?.let { "Included" } ?: "None"}
+            ${memoryContext?.let { "Active Memories:\n$it" } ?: "Active Memories: None"}
+            ${patternContext?.let { "Recent Patterns:\n$it" } ?: "Recent Patterns: None"}
 
             [USER INPUT]
             ${request.input}
@@ -157,6 +226,8 @@ class GeminiIronMindAI(
     }
 
     companion object {
+        const val DEFAULT_MODEL_NAME = "gemini-3.8-flash"
+
         fun parseAndValidateOutput(jsonText: String, requestType: AIRequestType): AIOutput {
             try {
                 // Strip markdown formatting if the model accidentally returns it despite responseMimeType
@@ -217,14 +288,14 @@ class GeminiIronMindAI(
                         } catch (e: IllegalArgumentException) {
                             InterventionType.REMIND // Safe fallback
                         }
-                        
+
                         val objectiveStr = jsonObject.optString("objective", "")
                         val objective = try {
                             com.sanket_satpute_20.ironmind.domain.ai.InterventionObjective.valueOf(objectiveStr)
                         } catch (e: IllegalArgumentException) {
                             null // Will cause isValid() to fail
                         }
-                        
+
                         AIOutput.InterventionRecommendation(
                             interventionType = interventionType,
                             objective = objective,

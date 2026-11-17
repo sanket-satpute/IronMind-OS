@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.domain.usecase.digital
+﻿package com.sanket_satpute_20.ironmind.domain.usecase.digital
 
 import com.sanket_satpute_20.ironmind.domain.provider.DiscoveredApp
 import com.sanket_satpute_20.ironmind.domain.provider.InstalledAppDiscoveryProvider

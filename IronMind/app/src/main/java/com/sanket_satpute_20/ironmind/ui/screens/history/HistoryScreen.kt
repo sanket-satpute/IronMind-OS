@@ -20,8 +20,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -42,13 +42,23 @@ import java.util.Locale
 @Composable
 fun HistoryScreen(
     viewModel: HistoryViewModel = viewModel(factory = HistoryViewModel.Factory),
-    intelligenceViewModel: IntelligenceHistoryViewModel = viewModel(factory = IntelligenceHistoryViewModel.Factory)
+    intelligenceViewModel: IntelligenceHistoryViewModel = viewModel(factory = IntelligenceHistoryViewModel.Factory),
+    correctionViewModel: CorrectionReviewViewModel = viewModel(factory = CorrectionReviewViewModel.Factory),
+    patternViewModel: PatternReviewViewModel = viewModel(factory = PatternReviewViewModel.Factory),
+    barrierViewModel: BarrierReviewViewModel = viewModel(factory = BarrierReviewViewModel.Factory),
+    memoryViewModel: MemoryManagementViewModel = viewModel(factory = MemoryManagementViewModel.Factory),
+    insightViewModel: InsightReviewViewModel = viewModel(factory = InsightReviewViewModel.Factory)
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val intelligenceUiState by intelligenceViewModel.uiState.collectAsState()
+    val correctionUiState by correctionViewModel.uiState.collectAsState()
+    val patternUiState by patternViewModel.uiState.collectAsState()
+    val barrierUiState by barrierViewModel.uiState.collectAsState()
+    val memoryUiState by memoryViewModel.uiState.collectAsState()
+    val insightUiState by insightViewModel.uiState.collectAsState()
 
     var selectedTabIndex by remember { mutableStateOf(0) }
-    val tabs = listOf("Timeline", "Intelligence")
+    val tabs = listOf("Timeline", "Intelligence", "Corrections", "Patterns", "Barriers", "Memories", "Insights")
 
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
@@ -57,7 +67,10 @@ fun HistoryScreen(
             modifier = Modifier.padding(16.dp)
         )
 
-        TabRow(selectedTabIndex = selectedTabIndex) {
+        ScrollableTabRow(
+            selectedTabIndex = selectedTabIndex,
+            edgePadding = 16.dp
+        ) {
             tabs.forEachIndexed { index, title ->
                 Tab(
                     selected = selectedTabIndex == index,
@@ -67,38 +80,88 @@ fun HistoryScreen(
             }
         }
 
-        if (selectedTabIndex == 0) {
-            when (val state = uiState) {
-                is HistoryUiState.Loading -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
-                }
-                is HistoryUiState.Error -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(text = state.message, color = MaterialTheme.colorScheme.error)
-                    }
-                }
-                is HistoryUiState.Success -> {
-                    if (state.timelineItems.isEmpty()) {
+        when (selectedTabIndex) {
+            0 -> {
+                when (val state = uiState) {
+                    is HistoryUiState.Loading -> {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(text = "No history available.")
+                            CircularProgressIndicator()
                         }
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 16.dp)
-                        ) {
-                            items(state.timelineItems) { item ->
-                                TimelineItemCard(item = item)
+                    }
+                    is HistoryUiState.Error -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(text = state.message, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    is HistoryUiState.Success -> {
+                        if (state.timelineItems.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text(text = "No history available.")
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 16.dp)
+                            ) {
+                                items(state.timelineItems) { item ->
+                                    TimelineItemCard(item = item)
+                                }
                             }
                         }
                     }
                 }
             }
-        } else {
-            IntelligenceHistoryContent(uiState = intelligenceUiState)
+            1 -> {
+                IntelligenceHistoryContent(uiState = intelligenceUiState)
+            }
+            2 -> {
+                CorrectionReviewContent(
+                    uiState = correctionUiState,
+                    onApprove = { correctionViewModel.approve(it) },
+                    onRefute = { correctionViewModel.refute(it) },
+                    onDismiss = { correctionViewModel.dismiss(it) }
+                )
+            }
+            3 -> {
+                PatternReviewContent(
+                    uiState = patternUiState,
+                    onConfirm = { patternViewModel.confirm(it) },
+                    onRefute = { patternViewModel.refute(it) },
+                    onDismiss = { patternViewModel.dismiss(it) }
+                )
+            }
+            4 -> {
+                BarrierReviewContent(
+                    uiState = barrierUiState,
+                    onConfirm = { barrierViewModel.confirm(it) },
+                    onRefute = { barrierViewModel.refute(it) },
+                    onDismiss = { barrierViewModel.dismiss(it) }
+                )
+            }
+            5 -> {
+                MemoryManagementContent(
+                    uiState = memoryUiState,
+                    onConfirm = { memoryViewModel.confirm(it) },
+                    onCorrect = { id, content -> memoryViewModel.correct(id, content) },
+                    onReject = { memoryViewModel.reject(it) },
+                    onDelete = { memoryViewModel.delete(it) }
+                )
+            }
+            6 -> {
+                InsightReviewContent(
+                    uiState = insightUiState,
+                    onMarkUseful = { insightViewModel.markUseful(it) },
+                    onDismiss = { insightViewModel.dismiss(it) },
+                    onReviewLater = { insightViewModel.reviewLater(it) },
+                    onFeedback = { id, text -> insightViewModel.provideFeedback(id, text) },
+                    onAcceptRecommendation = { insightViewModel.acceptRecommendation(it) },
+                    onRejectRecommendation = { insightViewModel.rejectRecommendation(it) },
+                    onAnalyzeNow = { insightViewModel.runIntelligenceOrchestration() },
+                    onConfirmFact = { insightViewModel.confirmFactualClaim(it) },
+                    onRefuteFact = { id, text -> insightViewModel.refuteFactualClaim(id, text) }
+                )
+            }
         }
     }
 }

@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.domain.usecase.observation
+﻿package com.sanket_satpute_20.ironmind.domain.usecase.observation
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -9,6 +9,7 @@ sealed interface ObservationSchedulingLifecycleEvent {
     object AuthenticationUnavailable : ObservationSchedulingLifecycleEvent
     object ObservationConsentChanged : ObservationSchedulingLifecycleEvent
     object GlobalAutonomyPauseChanged : ObservationSchedulingLifecycleEvent
+    object SessionReconciled : ObservationSchedulingLifecycleEvent
 }
 
 class ObservationSchedulingCoordinator(
@@ -26,6 +27,7 @@ class ObservationSchedulingCoordinator(
                 ObservationSchedulingLifecycleEvent.AuthenticationUnavailable -> "AUTHENTICATION_UNAVAILABLE"
                 ObservationSchedulingLifecycleEvent.ObservationConsentChanged -> "OBSERVATION_CONSENT_CHANGED"
                 ObservationSchedulingLifecycleEvent.GlobalAutonomyPauseChanged -> "GLOBAL_AUTONOMY_PAUSE_CHANGED"
+                ObservationSchedulingLifecycleEvent.SessionReconciled -> "SESSION_RECONCILED"
             }
 
             println("IronMindLifecycle [ObservationSchedulingCoordinator] [RECONCILE] event=$eventName")

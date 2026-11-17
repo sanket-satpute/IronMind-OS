@@ -12,8 +12,11 @@ interface PatternDao {
     @Query("SELECT * FROM patterns WHERE userId = :userId AND fingerprint = :fingerprint")
     fun getPatternByFingerprint(userId: String, fingerprint: String): PatternEntity?
 
-    @Query("SELECT * FROM patterns WHERE userId = :userId ORDER BY lastObservedAt DESC")
+    @Query("SELECT * FROM patterns WHERE userId = :userId ORDER BY lastObservedAt DESC, id ASC")
     fun getPatternsForUser(userId: String): List<PatternEntity>
+
+    @Query("SELECT * FROM patterns WHERE userId = :userId AND status != 'DELETED' ORDER BY lastObservedAt DESC")
+    fun observePatternsForUser(userId: String): kotlinx.coroutines.flow.Flow<List<PatternEntity>>
 
     @Query("SELECT * FROM patterns WHERE userId = :userId AND type = :type ORDER BY lastObservedAt DESC")
     fun getPatternsByType(userId: String, type: String): List<PatternEntity>
@@ -32,6 +35,9 @@ interface PatternDao {
 
     @Query("UPDATE patterns SET confidence = :confidence, lastObservedAt = :lastObservedAt, updatedAt = :updatedAt WHERE id = :id")
     fun updatePatternConfidence(id: String, confidence: Float, lastObservedAt: Long, updatedAt: Long)
+
+    @Query("UPDATE patterns SET confirmationState = :confirmationState, status = :status, updatedAt = :updatedAt WHERE id = :id AND userId = :userId")
+    fun updatePatternState(id: String, userId: String, confirmationState: String, status: String, updatedAt: Long): Int
 
 
     @Query("SELECT COUNT(*) FROM patterns")

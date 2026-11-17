@@ -33,7 +33,7 @@ class ActivityObservationSettingsRepositoryImpl(
                     )
                 )
             }
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -48,7 +48,7 @@ class ActivityObservationSettingsRepositoryImpl(
                 )
             )
             Result.Success(Unit)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }

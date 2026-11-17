@@ -13,4 +13,7 @@ interface LocationObservationSettingsDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdate(settings: LocationObservationSettingsEntity)
+
+    @Query("DELETE FROM location_observation_settings WHERE userId = :userId")
+    suspend fun deleteSettingsForUser(userId: String)
 }

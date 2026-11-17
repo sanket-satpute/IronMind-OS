@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.domain.model.digital
+﻿package com.sanket_satpute_20.ironmind.domain.model.digital
 
 import com.sanket_satpute_20.ironmind.domain.model.ProtectionRule
 import com.sanket_satpute_20.ironmind.domain.model.ProtectionTriggerType

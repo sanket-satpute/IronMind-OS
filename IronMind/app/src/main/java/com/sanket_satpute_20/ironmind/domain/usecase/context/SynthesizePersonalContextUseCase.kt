@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.domain.usecase.context
+﻿package com.sanket_satpute_20.ironmind.domain.usecase.context
 
 import com.sanket_satpute_20.ironmind.domain.ai.AIRequest
 import com.sanket_satpute_20.ironmind.domain.ai.AIRequestType
@@ -32,14 +32,14 @@ class SynthesizePersonalContextUseCase(
                 requestType = AIRequestType.CONTEXT_SYNTHESIS,
                 contextSnapshot = snapshot
             )
-            
+
             val aiResult = ironMindAI.process(request)
             if (aiResult is Result.Failure) {
                 return@withContext Result.Failure(aiResult.error)
             }
-            
+
             val aiOutput = (aiResult as Result.Success).data
-            
+
             if (!aiOutput.isValid()) {
                 return@withContext Result.Failure(IllegalStateException("Invalid AI synthesis output"))
             }
@@ -62,7 +62,7 @@ class SynthesizePersonalContextUseCase(
             println("IronMindLifecycle [Context] [SYNTHESIZED] userId=\$userId timestamp=\${personalContext.timestamp}")
 
             Result.Success(personalContext)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }

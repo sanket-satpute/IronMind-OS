@@ -9,7 +9,16 @@ data class OutboxEntry(
     val createdAt: Long,
     val retryCount: Int,
     val lastAttemptAt: Long?,
-    val status: SyncStatus
+    val status: SyncStatus,
+    val userId: String? = null,
+    val baseVersion: Long? = null,
+    val leaseToken: String? = null,
+    val leaseExpiresAt: Long? = null,
+    val baseServerVersion: Long? = null,
+    val uploadedLocalRevision: Long = 1L,
+    val chainedFrom: String? = null,
+    val legacyBaseHash: String? = null,
+    val leaseGeneration: Long? = null
 )
 
 enum class OutboxOperationType {

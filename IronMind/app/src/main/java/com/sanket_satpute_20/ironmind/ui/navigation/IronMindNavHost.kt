@@ -37,6 +37,9 @@ fun IronMindNavHost(
                 },
                 onNavigateToReflection = {
                     appState.navController.navigate(Route.NightReflection.path)
+                },
+                onNavigateToPlan = { planId ->
+                    appState.navController.navigate(Route.PlanDetail(planId).path)
                 }
             )
         }

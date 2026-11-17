@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.domain.usecase.reflection
+﻿package com.sanket_satpute_20.ironmind.domain.usecase.reflection
 
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.Reflection
@@ -54,13 +54,13 @@ class SaveReflectionUseCase(
             )
             eventRepository.saveEvent(event)
             println("IronMindLifecycle [Reflection] [SAVED] reflectionId=${reflection.id}")
-            
+
             try {
                 backgroundExecutor.scheduleReflectionProcessing(reflection.id)
-            } catch (e: Exception) {
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
                 println("IronMindLifecycle [Reflection] [reflection_processing_schedule_failed] reflectionId=${reflection.id}")
             }
-            
+
             Result.Success(reflection)
         } else {
             Result.Failure((result as Result.Failure).error)

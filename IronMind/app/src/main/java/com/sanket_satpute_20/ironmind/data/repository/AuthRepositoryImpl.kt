@@ -53,16 +53,70 @@ class AuthRepositoryImpl(
             } else {
                 Result.Failure(Exception("Sign in succeeded but user is null"))
             }
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
+    }
+
+    override suspend fun signInWithEmailAndPassword(email: String, password: String): Result<AuthUser, Exception> {
+        return try {
+            val result = firebaseAuth.signInWithEmailAndPassword(email, password).await()
+            val user = result.user
+            if (user != null) {
+                Result.Success(
+                    AuthUser(
+                        id = user.uid,
+                        isAnonymous = user.isAnonymous,
+                        email = user.email,
+                        displayName = user.displayName
+                    )
+                )
+            } else {
+                Result.Failure(Exception("Sign in succeeded but user is null"))
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
+
+    override suspend fun createUserWithEmailAndPassword(email: String, password: String): Result<AuthUser, Exception> {
+        return try {
+            val result = firebaseAuth.createUserWithEmailAndPassword(email, password).await()
+            val user = result.user
+            if (user != null) {
+                Result.Success(
+                    AuthUser(
+                        id = user.uid,
+                        isAnonymous = user.isAnonymous,
+                        email = user.email,
+                        displayName = user.displayName
+                    )
+                )
+            } else {
+                Result.Failure(Exception("User creation succeeded but user is null"))
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
+            Result.Failure(e)
+        }
+    }
+
+    override suspend fun signInOrCreateWithEmailAndPassword(email: String, password: String): Result<AuthUser, Exception> {
+        val signInResult = signInWithEmailAndPassword(email, password)
+        if (signInResult is Result.Success) {
+            return signInResult
+        }
+        val createResult = createUserWithEmailAndPassword(email, password)
+        if (createResult is Result.Success) {
+            return createResult
+        }
+        return signInResult
     }
 
     override suspend fun signOut(): Result<Unit, Exception> {
         return try {
             firebaseAuth.signOut()
             Result.Success(Unit)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }

@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.domain.usecase.ai
+﻿package com.sanket_satpute_20.ironmind.domain.usecase.ai
 
 import com.sanket_satpute_20.ironmind.domain.common.Clock
 import com.sanket_satpute_20.ironmind.domain.common.IdGenerator
@@ -107,7 +107,7 @@ class HandleInterventionResultUseCase(
             if (backgroundExecutor != null) {
                 try {
                     backgroundExecutor.scheduleEventProcessing()
-                } catch (e: Exception) {
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
                     // Primary intervention flow must not depend on background event processing
                     println("IronMindLifecycle [EventStatus] [SCHEDULE_FAILED] eventId=${event.id}")
                 }
@@ -118,7 +118,7 @@ class HandleInterventionResultUseCase(
         if (statusResult is Result.Failure) {
             return statusResult
         }
-        
+
         return Result.Success(Unit)
     }
 }

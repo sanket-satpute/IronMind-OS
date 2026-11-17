@@ -3,6 +3,7 @@ package com.sanket_satpute_20.ironmind.domain.model.intervention
 import com.sanket_satpute_20.ironmind.domain.ai.BarrierCategory
 import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
 import com.sanket_satpute_20.ironmind.domain.model.GoalStatus
+import com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState
 import com.sanket_satpute_20.ironmind.domain.model.barrier.BarrierConfirmationState
 import com.sanket_satpute_20.ironmind.domain.model.observation.ObservationType
 import com.sanket_satpute_20.ironmind.domain.model.pattern.PatternType
@@ -46,7 +47,8 @@ data class ContextObservation(
 data class ContextPattern(
     val id: String,
     val type: PatternType,
-    val description: String
+    val description: String,
+    val confirmationState: MemoryConfirmationState = MemoryConfirmationState.UNCONFIRMED
 )
 
 data class ContextBarrier(

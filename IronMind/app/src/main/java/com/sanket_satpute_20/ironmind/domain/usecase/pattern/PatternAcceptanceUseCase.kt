@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.domain.usecase.pattern
+﻿package com.sanket_satpute_20.ironmind.domain.usecase.pattern
 
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.engine.PatternAcceptanceEvaluator
@@ -28,7 +28,7 @@ class PatternAcceptanceUseCase(
         zoneId: ZoneId
     ): Result<PatternAcceptanceResult, Exception> {
         val mutex = userMutexes.getOrPut(userId) { Mutex() }
-        
+
         return mutex.withLock {
             try {
                 // Identity fingerprint canonicalization
@@ -75,9 +75,9 @@ class PatternAcceptanceUseCase(
 
                 // Log Result
                 println("IronMindLifecycle [PatternAcceptance] [EVALUATED] result=${result.javaClass.simpleName} type=${candidate.type.name}")
-                
+
                 Result.Success(result)
-            } catch (e: Exception) {
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
                 Result.Failure(e)
             }
         }

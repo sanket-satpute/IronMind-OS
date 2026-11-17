@@ -13,4 +13,7 @@ interface AppUsageObservationSettingsDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertSettings(entity: AppUsageObservationSettingsEntity)
+
+    @Query("DELETE FROM app_usage_observation_settings WHERE userId = :userId")
+    suspend fun deleteSettingsForUser(userId: String)
 }

@@ -21,7 +21,7 @@ class DecisionRecordRepositoryImpl(
         try {
             dao.insert(decision.toEntity())
             Result.Success(Unit)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -55,16 +55,16 @@ fun DecisionRecord.toEntity(): DecisionRecordEntity = DecisionRecordEntity(
 fun DecisionRecordEntity.toDomain(): DecisionRecord = DecisionRecord(
     id = id,
     timestamp = timestamp,
-    capability = try { AutonomyCapability.valueOf(capability) } catch (e: Exception) { AutonomyCapability.PLANNING },
+    capability = try { AutonomyCapability.valueOf(capability) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { AutonomyCapability.PLANNING },
     action = action,
     trigger = trigger,
     source = source,
     contextSummary = contextSummary,
     policy = policy,
-    autonomyLevel = try { AutonomyLevel.valueOf(autonomyLevel) } catch (e: Exception) { AutonomyLevel.OFF },
+    autonomyLevel = try { AutonomyLevel.valueOf(autonomyLevel) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { AutonomyLevel.OFF },
     reasoning = reasoning,
     confidence = confidence,
-    result = try { DecisionResult.valueOf(result) } catch (e: Exception) { DecisionResult.STAY_SILENT },
+    result = try { DecisionResult.valueOf(result) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { DecisionResult.STAY_SILENT },
     failureReason = failureReason,
     userResponse = userResponse
 )

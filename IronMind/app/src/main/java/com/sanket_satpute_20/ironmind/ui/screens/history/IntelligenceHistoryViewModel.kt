@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.ui.screens.history
+﻿package com.sanket_satpute_20.ironmind.ui.screens.history
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -9,7 +9,12 @@ import com.sanket_satpute_20.ironmind.IronMindApplication
 import com.sanket_satpute_20.ironmind.domain.common.Clock
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.intervention.IntelligenceHistoryItem
+import com.sanket_satpute_20.ironmind.domain.session.SessionState
+import com.sanket_satpute_20.ironmind.domain.session.UserSessionProvider
+import com.sanket_satpute_20.ironmind.domain.session.runWithSession
+import kotlinx.coroutines.CancellationException
 import com.sanket_satpute_20.ironmind.domain.usecase.ai.GetIntelligenceHistoryUseCase
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,42 +28,100 @@ sealed interface IntelligenceHistoryUiState {
 
 class IntelligenceHistoryViewModel(
     private val getIntelligenceHistoryUseCase: GetIntelligenceHistoryUseCase,
-    private val clock: Clock
+    private val clock: Clock,
+    private val userSessionProvider: UserSessionProvider? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<IntelligenceHistoryUiState>(IntelligenceHistoryUiState.Loading)
     val uiState: StateFlow<IntelligenceHistoryUiState> = _uiState.asStateFlow()
 
-    // Using a hardcoded user ID for V0.5 as session management doesn't exist yet
-    private val currentUserId = "user-1"
+    private val defaultUserId: String
+        get() = userSessionProvider?.getActiveUserId() ?: SessionState.DEFAULT_LEGACY_USER_ID
+
+    private var loadJob: Job? = null
+    private var loadGeneration = 0L
 
     init {
-        loadIntelligenceHistory()
+        observeSession()
     }
 
-    fun loadIntelligenceHistory() {
+    private fun observeSession() {
+        if (userSessionProvider == null) {
+            loadIntelligenceHistory(SessionState.DEFAULT_LEGACY_USER_ID)
+            return
+        }
+
         viewModelScope.launch {
-            _uiState.value = IntelligenceHistoryUiState.Loading
-
-            val now = clock.currentTimeMillis()
-            val startTime = now - HISTORY_WINDOW_MS
-            val endTime = now
-
-            when (val result = getIntelligenceHistoryUseCase(
-                userId = currentUserId,
-                startTime = startTime,
-                endTime = endTime,
-                limit = HISTORY_LIMIT
-            )) {
-                is Result.Success -> {
-                    _uiState.value = IntelligenceHistoryUiState.Success(result.data)
+            userSessionProvider.sessionState.collect { state ->
+                when (state) {
+                    is SessionState.Initializing -> {
+                        loadGeneration++
+                        loadJob?.cancel()
+                        _uiState.value = IntelligenceHistoryUiState.Loading
+                    }
+                    is SessionState.ReconciliationFailed -> {
+                        loadGeneration++
+                        loadJob?.cancel()
+                        _uiState.value = IntelligenceHistoryUiState.Error(
+                            "Session reconciliation failed: ${state.error.message ?: "Unknown error"}"
+                        )
+                    }
+                    is SessionState.OfflineFallback,
+                    is SessionState.Authenticated -> {
+                        loadIntelligenceHistory(state.currentUserId)
+                    }
                 }
-                is Result.Failure -> {
+            }
+        }
+    }
+
+    fun loadIntelligenceHistory(userId: String = defaultUserId) {
+        loadJob?.cancel()
+        val generation = ++loadGeneration
+        loadJob = viewModelScope.launch {
+            _uiState.value = IntelligenceHistoryUiState.Loading
+            try {
+                userSessionProvider.runWithSession { activeUid ->
+                    if (activeUid != userId || !isCurrentLoad(userId, generation)) return@runWithSession
+                    val now = clock.currentTimeMillis()
+                    val startTime = now - HISTORY_WINDOW_MS
+                    val endTime = now
+
+                    when (val result = getIntelligenceHistoryUseCase(
+                        userId = activeUid,
+                        startTime = startTime,
+                        endTime = endTime,
+                        limit = HISTORY_LIMIT
+                    )) {
+                        is Result.Success -> if (isCurrentLoad(userId, generation)) {
+                            _uiState.value = IntelligenceHistoryUiState.Success(result.data)
+                        }
+                        is Result.Failure -> if (isCurrentLoad(userId, generation)) {
+                            _uiState.value = IntelligenceHistoryUiState.Error(
+                                result.error.message ?: "Failed to load intelligence history"
+                            )
+                        }
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (isCurrentLoad(userId, generation)) {
                     _uiState.value = IntelligenceHistoryUiState.Error(
-                        result.error.message ?: "Failed to load intelligence history"
+                        e.message ?: "Failed to load intelligence history"
                     )
                 }
             }
+        }
+    }
+
+    private fun isCurrentLoad(userId: String, generation: Long): Boolean {
+        if (generation != loadGeneration) return false
+        val state = userSessionProvider?.sessionState?.value
+            ?: return userId == SessionState.DEFAULT_LEGACY_USER_ID
+        return when (state) {
+            is SessionState.Authenticated, is SessionState.OfflineFallback -> state.currentUserId == userId
+            is SessionState.Initializing, is SessionState.ReconciliationFailed -> false
         }
     }
 
@@ -75,7 +138,8 @@ class IntelligenceHistoryViewModel(
                 val container = application.container
                 IntelligenceHistoryViewModel(
                     getIntelligenceHistoryUseCase = container.getIntelligenceHistoryUseCase,
-                    clock = container.clock
+                    clock = container.clock,
+                    userSessionProvider = container.userSessionProvider
                 )
             }
         }

@@ -7,4 +7,5 @@ interface PlanRepository : Repository {
     suspend fun savePlan(plan: Plan): Result<Unit, Exception>
     suspend fun getPlan(id: String): Result<Plan?, Exception>
     suspend fun getPlansForGoal(goalId: String): Result<List<Plan>, Exception>
+    suspend fun getPlansForUser(userId: String): Result<List<Plan>, Exception> = Result.Success(emptyList())
 }

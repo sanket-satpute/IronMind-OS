@@ -12,5 +12,8 @@ data class ReflectionEntity(
     val content: String,
     val sentiment: String?,
     val createdAt: Long,
-    val schemaVersion: Int
+    val schemaVersion: Int,
+    val localRevision: Long = 1L,
+    val serverVersion: Long? = null,
+    val legacyBaseHash: String? = null
 )

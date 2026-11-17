@@ -9,4 +9,10 @@ interface BackgroundExecutor {
     fun scheduleReflectionProcessing(reflectionId: String)
     fun scheduleEventProcessing()
     fun scheduleEventReconciliation()
+    fun scheduleSync()
+    fun scheduleObservationReconciliation()
+    fun scheduleInterventionEvaluation(trigger: String = "scheduled")
+    fun schedulePeriodicInterventionEvaluation()
+    fun scheduleInterventionCandidate(candidate: com.sanket_satpute_20.ironmind.domain.ai.AIOutput.InterventionRecommendation, userId: String)
+    fun schedulePatternMaintenance()
 }

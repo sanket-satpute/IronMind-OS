@@ -19,7 +19,7 @@ class ObservationRepositoryImpl(
             observationDao.insertObservation(observation.toEntity())
             println("IronMindLifecycle [Observation] [RECORDED] id=${observation.id} type=${observation.type} source=${observation.source}")
             Result.Success(Unit)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -28,7 +28,7 @@ class ObservationRepositoryImpl(
         try {
             val observations = observationDao.getObservations(userId, limit, offset).map { it.toDomain() }
             Result.Success(observations)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -42,7 +42,7 @@ class ObservationRepositoryImpl(
         try {
             val observations = observationDao.getObservationsByType(userId, type.name, limit, offset).map { it.toDomain() }
             Result.Success(observations)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -55,7 +55,7 @@ class ObservationRepositoryImpl(
             } else {
                 Result.Failure(Exception("Observation not found for id: $id"))
             }
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -68,7 +68,7 @@ class ObservationRepositoryImpl(
             } else {
                 Result.Failure(Exception("Observation not found for id: $id and userId: $userId"))
             }
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -77,7 +77,7 @@ class ObservationRepositoryImpl(
         try {
             observationDao.deleteObservation(id)
             Result.Success(Unit)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -91,7 +91,7 @@ class ObservationRepositoryImpl(
         try {
             val observations = observationDao.getObservationsForTimeWindow(userId, type.name, startTimeMs, endTimeMs).map { it.toDomain() }
             Result.Success(observations)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -122,7 +122,7 @@ class ObservationRepositoryImpl(
                 }
             }
             Result.Success(entities.map { it.toDomain() })
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }

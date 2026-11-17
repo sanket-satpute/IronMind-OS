@@ -1,5 +1,6 @@
-package com.sanket_satpute_20.ironmind.domain.model.pattern
+﻿package com.sanket_satpute_20.ironmind.domain.model.pattern
 
+import com.sanket_satpute_20.ironmind.domain.common.IntelligenceMetadataCodec
 import com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState
 
 data class Pattern(
@@ -20,3 +21,9 @@ data class Pattern(
     val createdAt: Long,
     val updatedAt: Long
 )
+
+val Pattern.lifecycleState: PatternLifecycleState
+    get() = IntelligenceMetadataCodec.decodePatternConditions(conditions, status).lifecycleState
+
+val Pattern.category: PatternCategory?
+    get() = IntelligenceMetadataCodec.decodePatternConditions(conditions, status).category

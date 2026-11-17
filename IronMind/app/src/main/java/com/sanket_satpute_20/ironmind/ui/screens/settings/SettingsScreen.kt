@@ -11,6 +11,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+
 @Composable
 fun SettingsScreen(
     modifier: Modifier = Modifier,
@@ -18,6 +21,7 @@ fun SettingsScreen(
     onNavigateToDevControlCenter: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     SettingsScreenContent(
         modifier = modifier,
@@ -28,6 +32,18 @@ fun SettingsScreen(
         onCalendarObservationToggle = { isEnabled -> viewModel.setCalendarObservationEnabled(isEnabled) },
         onLocationObservationToggle = { isEnabled -> viewModel.setLocationObservationEnabled(isEnabled) },
         onActivityObservationToggle = { isEnabled -> viewModel.setActivityObservationEnabled(isEnabled) },
+        onExportDataClick = { viewModel.exportUserData() },
+        onShareExportClick = {
+            val shareIntent = viewModel.getShareIntent(context)
+            if (shareIntent != null) {
+                context.startActivity(shareIntent)
+            }
+        },
+        onDismissExportMessage = { viewModel.dismissExportMessages() },
+        onEraseLocalDataClick = { viewModel.requestErasureConfirmation() },
+        onConfirmErasure = { viewModel.eraseLocalData() },
+        onDismissErasureConfirmation = { viewModel.dismissErasureConfirmation() },
+        onDismissErasureMessage = { viewModel.dismissErasureMessages() },
         onNavigateToDevControlCenter = onNavigateToDevControlCenter
     )
 }
@@ -42,12 +58,72 @@ fun SettingsScreenContent(
     onCalendarObservationToggle: (Boolean) -> Unit = {},
     onLocationObservationToggle: (Boolean) -> Unit = {},
     onActivityObservationToggle: (Boolean) -> Unit = {},
+    onExportDataClick: () -> Unit = {},
+    onShareExportClick: () -> Unit = {},
+    onDismissExportMessage: () -> Unit = {},
+    onEraseLocalDataClick: () -> Unit = {},
+    onConfirmErasure: () -> Unit = {},
+    onDismissErasureConfirmation: () -> Unit = {},
+    onDismissErasureMessage: () -> Unit = {},
     onNavigateToDevControlCenter: () -> Unit = {}
 ) {
+    if (uiState.isErasureConfirmationVisible) {
+        AlertDialog(
+            onDismissRequest = onDismissErasureConfirmation,
+            title = {
+                Text(
+                    text = "Erase Local IronMind Data?",
+                    style = MaterialTheme.typography.titleLarge
+                )
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to permanently delete all local data on this device?\n\n" +
+                            "• This will erase your local goals, plans, tasks, reflections, memories, observations, and protection settings.\n" +
+                            "• All scheduled local background work will be cancelled immediately.\n\n" +
+                            "IMPORTANT: This action only erases local data stored on this device. " +
+                            "It does NOT delete remote Firestore data or delete your Firebase Authentication account.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = onConfirmErasure,
+                    enabled = !uiState.isErasingData,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
+                ) {
+                    if (uiState.isErasingData) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onError
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Erasing...")
+                    } else {
+                        Text("Erase Local Data")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = onDismissErasureConfirmation,
+                    enabled = !uiState.isErasingData
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
@@ -360,6 +436,245 @@ fun SettingsScreenContent(
             }
         }
 
+        // ── User Data Export ────────────────────────────────────────────────
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "📥 Export My Data",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                Text(
+                    text = "Generate a complete, private JSON archive of all your personal data " +
+                            "stored on this device. The export is created locally and can be shared " +
+                            "via the standard Android share sheet.",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+
+                // Export Success Banner
+                uiState.exportSuccessMetadata?.let { metadata ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "✓ Export Ready",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                TextButton(onClick = onDismissExportMessage) {
+                                    Text("Dismiss", color = MaterialTheme.colorScheme.onSecondaryContainer)
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "File: ${metadata.fileName}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            Text(
+                                text = "Size: ${formatFileSize(metadata.sizeBytes)} • Records: ${metadata.recordCount}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = onShareExportClick,
+                                enabled = !uiState.isExporting && !uiState.isErasingData,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            ) {
+                                Text("Share Export")
+                            }
+                        }
+                    }
+                }
+
+                // Export Error Banner
+                uiState.exportErrorMessage?.let { errorMsg ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "⚠ $errorMsg",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = onDismissExportMessage) {
+                                Text("Dismiss", color = MaterialTheme.colorScheme.onErrorContainer)
+                            }
+                        }
+                    }
+                }
+
+                Button(
+                    onClick = onExportDataClick,
+                    enabled = !uiState.isExporting && !uiState.isErasingData,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                ) {
+                    if (uiState.isExporting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Exporting Data...")
+                    } else {
+                        Text("Export My Data")
+                    }
+                }
+            }
+        }
+
+        // ── Local Data Management (Erasure) ──────────────────────────────────
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "🗑 Local Data Management",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                Text(
+                    text = "Permanently erase all locally stored data from this device, including goals, " +
+                            "plans, tasks, reflections, observations, patterns, and protection rules. " +
+                            "In-flight background work will be cancelled.",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                Text(
+                    text = "Notice: This action only erases data stored on this device. It does NOT delete " +
+                            "remote Firestore data or delete your Firebase Authentication account.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+
+                // Success Feedback Banner
+                uiState.erasureSuccessMessage?.let { successMsg ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "✓ $successMsg",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = onDismissErasureMessage) {
+                                Text("Dismiss", color = MaterialTheme.colorScheme.onSecondaryContainer)
+                            }
+                        }
+                    }
+                }
+
+                // Error Feedback Banner
+                uiState.erasureErrorMessage?.let { errorMsg ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "⚠ $errorMsg",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = onDismissErasureMessage) {
+                                Text("Dismiss", color = MaterialTheme.colorScheme.onErrorContainer)
+                            }
+                        }
+                    }
+                }
+
+                Button(
+                    onClick = onEraseLocalDataClick,
+                    enabled = !uiState.isErasingData,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
+                ) {
+                    if (uiState.isErasingData) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onError
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Erasing Local Data...")
+                    } else {
+                        Text("Erase Local IronMind Data")
+                    }
+                }
+            }
+        }
+
         // ── Development Control Center ─────────────────────────────────────────
         val context = androidx.compose.ui.platform.LocalContext.current
         val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
@@ -372,5 +687,13 @@ fun SettingsScreenContent(
                 Text("🛠 Development Control Center")
             }
         }
+    }
+}
+
+private fun formatFileSize(bytes: Long): String {
+    return when {
+        bytes < 1024 -> "$bytes B"
+        bytes < 1024 * 1024 -> String.format(java.util.Locale.US, "%.1f KB", bytes / 1024.0)
+        else -> String.format(java.util.Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0))
     }
 }

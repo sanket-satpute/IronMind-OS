@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.data.repository
+﻿package com.sanket_satpute_20.ironmind.data.repository
 
 import com.sanket_satpute_20.ironmind.data.local.dao.IronMindDao
 import com.sanket_satpute_20.ironmind.data.local.entity.UserProfileEntity
@@ -11,7 +11,7 @@ import kotlinx.coroutines.withContext
 class UserProfileRepositoryImpl(
     private val dao: IronMindDao
 ) : UserProfileRepository {
-    
+
     override suspend fun saveProfile(profile: UserProfile): Result<Unit, Exception> {
         return try {
             withContext(Dispatchers.IO) {
@@ -29,7 +29,7 @@ class UserProfileRepositoryImpl(
                 )
             }
             Result.Success(Unit)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -51,7 +51,7 @@ class UserProfileRepositoryImpl(
                 )
             }
             Result.Success(profile)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -73,7 +73,7 @@ class UserProfileRepositoryImpl(
                 )
             }
             Result.Success(profile)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }

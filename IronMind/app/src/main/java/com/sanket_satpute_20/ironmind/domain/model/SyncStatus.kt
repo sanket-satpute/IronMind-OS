@@ -6,5 +6,6 @@ enum class SyncStatus {
     SYNCING,
     SYNCED,
     FAILED,
-    CONFLICT
+    CONFLICT,
+    DEAD_LETTER
 }

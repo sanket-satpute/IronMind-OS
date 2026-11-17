@@ -24,7 +24,7 @@ class AppUsageObservationSettingsRepositoryImpl(
                         isEnabled = entity?.isEnabled ?: false
                     )
                 )
-            } catch (e: Exception) {
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
                 Result.Failure(e)
             }
         }
@@ -40,7 +40,7 @@ class AppUsageObservationSettingsRepositoryImpl(
                     )
                 )
                 Result.Success(Unit)
-            } catch (e: Exception) {
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
                 Result.Failure(e)
             }
         }

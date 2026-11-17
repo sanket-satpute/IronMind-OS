@@ -24,10 +24,26 @@ class ConfirmMemoryUseCase(
         userId: String,
         memoryId: String
     ): Result<Memory, Exception> {
+        if (userId.isBlank()) {
+            return Result.Failure(IllegalArgumentException("userId must not be blank"))
+        }
+        if (memoryId.isBlank()) {
+            return Result.Failure(IllegalArgumentException("memoryId must not be blank"))
+        }
+
         val fetchResult = memoryRepository.getMemoryById(memoryId)
         if (fetchResult is Result.Failure) return Result.Failure(fetchResult.error)
         val existing = (fetchResult as Result.Success).data
             ?: return Result.Failure(IllegalArgumentException("Memory not found: $memoryId"))
+
+        if (existing.userId != userId) {
+            return Result.Failure(IllegalStateException("Memory $memoryId does not belong to user $userId"))
+        }
+
+        // Idempotency: if already confirmed, succeed without duplicate event
+        if (existing.confirmationState == MemoryConfirmationState.USER_CONFIRMED) {
+            return Result.Success(existing)
+        }
 
         val now = clock.currentTimeMillis()
         val updated = existing.copy(
@@ -35,23 +51,27 @@ class ConfirmMemoryUseCase(
             lastObservedAt = now,
             updatedAt = now
         )
-        val saveResult = memoryRepository.saveMemory(updated)
-        return if (saveResult is Result.Success) {
-            val event = Event(
-                id = idGenerator.generateId(),
-                userId = userId,
-                type = EventType.MEMORY_UPDATED,
-                entityType = "MEMORY",
-                entityId = memoryId,
-                occurredAt = now,
-                recordedAt = now,
-                source = EntitySource.USER
-            )
-            eventRepository.saveEvent(event)
-            println("IronMindLifecycle Memory [CONFIRM] memoryId=$memoryId")
-            Result.Success(updated)
-        } else {
-            Result.Failure((saveResult as Result.Failure).error)
+
+        val event = Event(
+            id = idGenerator.generateId(),
+            userId = userId,
+            type = EventType.MEMORY_UPDATED,
+            entityType = "MEMORY",
+            entityId = memoryId,
+            occurredAt = now,
+            recordedAt = now,
+            source = EntitySource.USER,
+            previousState = existing.confirmationState.name,
+            newState = MemoryConfirmationState.USER_CONFIRMED.name
+        )
+
+        val saveResult = memoryRepository.saveMemoryWithEvent(updated, event)
+        return when (saveResult) {
+            is Result.Success -> {
+                println("IronMindLifecycle Memory [CONFIRM] memoryId=$memoryId")
+                Result.Success(updated)
+            }
+            is Result.Failure -> Result.Failure(saveResult.error)
         }
     }
 }

@@ -49,7 +49,7 @@ class EvaluatePatternCandidatesUseCase(
             )
 
             return Result.Success(Unit)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             logger.logLifecycle(
                 component = "EvaluatePatternCandidatesUseCase",
                 event = "batch_failed",

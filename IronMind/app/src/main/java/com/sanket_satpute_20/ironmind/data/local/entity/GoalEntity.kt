@@ -18,5 +18,8 @@ data class GoalEntity(
     val completedAt: Long?,
     val createdAt: Long,
     val updatedAt: Long,
-    val schemaVersion: Int
+    val schemaVersion: Int,
+    val localRevision: Long = 1L,
+    val serverVersion: Long? = null,
+    val legacyBaseHash: String? = null
 )

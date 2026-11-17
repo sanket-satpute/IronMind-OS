@@ -8,7 +8,7 @@ import com.sanket_satpute_20.ironmind.data.local.entity.AutonomySettingsEntity
 
 @Dao
 interface AutonomySettingsDao {
-    @Query("SELECT * FROM autonomy_settings WHERE userId = :userId")
+    @Query("SELECT * FROM autonomy_settings WHERE userId = :userId ORDER BY capability ASC")
     fun getSettingsForUser(userId: String): List<AutonomySettingsEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

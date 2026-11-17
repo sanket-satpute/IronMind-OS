@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.data.repository
+﻿package com.sanket_satpute_20.ironmind.data.repository
 
 import androidx.room.withTransaction
 import com.sanket_satpute_20.ironmind.data.local.IronMindDatabase
@@ -53,7 +53,7 @@ class EventRepositoryImpl(
                     sDao.insert(status)
                 }
                 Result.Success(event)
-            } catch (e: Exception) {
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
                 logger?.logLifecycle(
                     "Event",
                     "PERSIST_WITH_STATUS_FAILURE",
@@ -74,7 +74,7 @@ class EventRepositoryImpl(
             if (saveResult is Result.Success && learnerEventStatusDao != null) {
                 try {
                     learnerEventStatusDao.insert(status)
-                } catch (e: Exception) {
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
                     return@withContext Result.Failure(e)
                 }
             }
@@ -86,7 +86,7 @@ class EventRepositoryImpl(
         try {
             dao.insertEvent(event.toEntity())
             Result.Success(event)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             logger?.logLifecycle(
                 "Event",
                 "PERSIST_FAILURE",
@@ -103,7 +103,7 @@ class EventRepositoryImpl(
         try {
             val events = dao.getEventsForEntity(entityId).map { it.toDomainModel() }
             Result.Success(events)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -112,7 +112,7 @@ class EventRepositoryImpl(
         try {
             val events = dao.getEventsForUser(userId).map { it.toDomainModel() }
             Result.Success(events)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -121,7 +121,7 @@ class EventRepositoryImpl(
         try {
             val event = dao.getEvent(id)?.toDomainModel()
             Result.Success(event)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -130,7 +130,7 @@ class EventRepositoryImpl(
         try {
             val event = dao.getEventForUser(userId, id)?.toDomainModel()
             Result.Success(event)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -139,7 +139,7 @@ class EventRepositoryImpl(
         try {
             val events = dao.getEventsForDateRange(userId, startTime, endTime).map { it.toDomainModel() }
             Result.Success(events)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -168,7 +168,7 @@ class EventRepositoryImpl(
                 }
             }
             Result.Success(entities.map { it.toDomainModel() })
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -177,7 +177,7 @@ class EventRepositoryImpl(
         try {
             val events = dao.searchEvents(userId, query).map { it.toDomainModel() }
             Result.Success(events)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -186,7 +186,7 @@ class EventRepositoryImpl(
         try {
             val events = dao.getEventsByCausationId(userId, causationId).map { it.toDomainModel() }
             Result.Success(events)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }

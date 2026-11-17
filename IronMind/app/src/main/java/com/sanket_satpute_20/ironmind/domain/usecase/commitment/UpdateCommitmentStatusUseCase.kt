@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.domain.usecase.commitment
+﻿package com.sanket_satpute_20.ironmind.domain.usecase.commitment
 
 import com.sanket_satpute_20.ironmind.domain.common.Clock
 import com.sanket_satpute_20.ironmind.domain.common.IdGenerator
@@ -14,6 +14,8 @@ import com.sanket_satpute_20.ironmind.domain.repository.EventRepository
 import com.sanket_satpute_20.ironmind.domain.model.Event
 import com.sanket_satpute_20.ironmind.domain.model.EventType
 import com.sanket_satpute_20.ironmind.domain.model.EntitySource
+import com.sanket_satpute_20.ironmind.domain.model.TaskStatus
+import com.sanket_satpute_20.ironmind.domain.repository.TaskRepository
 
 class UpdateCommitmentStatusUseCase(
     private val repository: CommitmentRepository,
@@ -21,7 +23,9 @@ class UpdateCommitmentStatusUseCase(
     private val reminderScheduler: ReminderScheduler,
     private val clock: Clock,
     private val idGenerator: IdGenerator,
-    private val eventRepository: EventRepository
+    private val eventRepository: EventRepository,
+    private val taskRepository: TaskRepository? = null,
+    private val backgroundExecutor: com.sanket_satpute_20.ironmind.execution.background.BackgroundExecutor? = null
 ) {
     suspend operator fun invoke(
         commitmentId: String,
@@ -32,7 +36,7 @@ class UpdateCommitmentStatusUseCase(
         val existingResult = repository.getCommitment(commitmentId)
         if (existingResult is Result.Failure) return Result.Failure(existingResult.error)
 
-        val commitment = (existingResult as Result.Success).data 
+        val commitment = (existingResult as Result.Success).data
             ?: return Result.Failure(IllegalArgumentException("Commitment not found"))
 
         val currentStatus = commitment.status
@@ -66,14 +70,14 @@ class UpdateCommitmentStatusUseCase(
         }
 
         val now = clock.currentTimeMillis()
-        
+
         var committedAt = commitment.committedAt
         var startedAt = commitment.startedAt
         var completedAt = commitment.completedAt
         var postponedAt = commitment.postponedAt
         var missedAt = commitment.missedAt
         var recoveredAt = commitment.recoveredAt
-        
+
         when (newStatus) {
             CommitmentStatus.COMMITTED -> {
                 committedAt = now
@@ -136,15 +140,15 @@ class UpdateCommitmentStatusUseCase(
 
                 // Cancel reminder if transitioning to a state where it is no longer needed
                 if (newStatus in listOf(
-                        CommitmentStatus.COMPLETED, 
-                        CommitmentStatus.MISSED, 
-                        CommitmentStatus.POSTPONED, 
+                        CommitmentStatus.COMPLETED,
+                        CommitmentStatus.MISSED,
+                        CommitmentStatus.POSTPONED,
                         CommitmentStatus.ABANDONED,
                         CommitmentStatus.STARTED
                     )) {
                     reminderScheduler.cancelReminder(commitment.id)
                 }
-                
+
                 val eventType = when (newStatus) {
                     CommitmentStatus.COMMITTED -> EventType.COMMITMENT_COMMITTED
                     CommitmentStatus.STARTED -> EventType.COMMITMENT_STARTED
@@ -185,6 +189,44 @@ class UpdateCommitmentStatusUseCase(
                     )
                     eventRepository.saveEvent(outcomeEvent)
                     println("IronMindLifecycle [Outcome] [RECORDED] commitmentId=${commitment.id}")
+                }
+
+                if (newStatus == CommitmentStatus.COMPLETED && commitment.taskId != null && taskRepository != null) {
+                    val taskResult = taskRepository.getTask(commitment.taskId)
+                    when (taskResult) {
+                        is Result.Failure -> return Result.Failure(taskResult.error)
+                        is Result.Success -> {
+                            val task = taskResult.data
+                            if (task != null) {
+                                if (task.userId == commitment.userId) {
+                                    if (task.status != TaskStatus.COMPLETED) {
+                                        val updatedTask = task.copy(
+                                            status = TaskStatus.COMPLETED,
+                                            completedAt = task.completedAt ?: now,
+                                            updatedAt = now
+                                        )
+                                        val taskSaveResult = taskRepository.saveTask(updatedTask)
+                                        if (taskSaveResult is Result.Failure) {
+                                            return Result.Failure(taskSaveResult.error)
+                                        }
+                                        println("IronMindLifecycle [Task] [COMPLETED_FROM_COMMITMENT] taskId=${task.id} commitmentId=${commitment.id}")
+                                    }
+                                } else {
+                                    println("IronMindLifecycle [CommitmentTaskSync] [SKIPPED_OWNERSHIP_MISMATCH] taskId=${task.id} taskUserId=${task.userId} commitmentUserId=${commitment.userId}")
+                                }
+                            } else {
+                                println("IronMindLifecycle [CommitmentTaskSync] [SKIPPED_TASK_NOT_FOUND] taskId=${commitment.taskId}")
+                            }
+                        }
+                    }
+                }
+
+                if (newStatus == CommitmentStatus.MISSED || newStatus == CommitmentStatus.ABANDONED) {
+                    try {
+                        backgroundExecutor?.scheduleInterventionEvaluation("commitment_${newStatus.name.lowercase()}")
+                    } catch (_: Exception) {
+                        println("IronMindLifecycle [CommitmentStatus] [INTERVENTION_SCHEDULE_FAILED] commitmentId=${commitment.id}")
+                    }
                 }
 
                 Result.Success(updatedCommitment)

@@ -21,6 +21,9 @@ interface InterventionDao {
     @Query("SELECT * FROM intervention_records WHERE userId = :userId AND type = :type ORDER BY createdAt DESC")
     fun getInterventionsByType(userId: String, type: String): List<InterventionRecordEntity>
 
+    @Query("SELECT * FROM intervention_records WHERE userId = :userId ORDER BY createdAt DESC, id ASC")
+    fun getInterventionsForUser(userId: String): List<InterventionRecordEntity>
+
     @Query("SELECT COUNT(*) FROM intervention_records")
     fun getInterventionCount(): kotlinx.coroutines.flow.Flow<Int>
 

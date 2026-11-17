@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.domain.usecase.intervention
+﻿package com.sanket_satpute_20.ironmind.domain.usecase.intervention
 
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
@@ -26,14 +26,14 @@ class AssembleRecommendationContextUseCase(
         const val MAX_BARRIERS = 10
         const val MAX_REFLECTIONS = 10
         const val MAX_CORRECTIONS = 10
-        
+
         val ACTIVE_COMMITMENT_STATUSES = listOf(
             CommitmentStatus.PLANNED,
             CommitmentStatus.COMMITTED,
             CommitmentStatus.STARTED,
             CommitmentStatus.RECOVERED
         )
-        
+
         val EXCLUDED_BARRIER_STATES = listOf(
             BarrierConfirmationState.REJECTED,
             BarrierConfirmationState.DISMISSED
@@ -43,7 +43,7 @@ class AssembleRecommendationContextUseCase(
     suspend operator fun invoke(userId: String): Result<RecommendationContext, Exception> {
         val referenceTimeMs = timeProvider()
         val windowStartMs = referenceTimeMs - SEVEN_DAYS_MS
-        
+
         // 1. Bounded Goals
         val goalsResult = goalRepository.getActiveGoalsForUser(userId, MAX_GOALS)
         if (goalsResult is Result.Failure) return Result.Failure(goalsResult.error)
@@ -53,15 +53,15 @@ class AssembleRecommendationContextUseCase(
 
         // 2. Bounded Commitments
         val commitmentsResult = commitmentRepository.getActiveCommitmentsForUser(
-            userId = userId, 
-            statuses = ACTIVE_COMMITMENT_STATUSES, 
+            userId = userId,
+            statuses = ACTIVE_COMMITMENT_STATUSES,
             limit = MAX_COMMITMENTS
         )
         if (commitmentsResult is Result.Failure) return Result.Failure(commitmentsResult.error)
         val contextCommitments = (commitmentsResult as Result.Success).data.map {
             ContextCommitment(it.id, it.title, it.description, it.status, it.scheduledStartAt, it.scheduledEndAt)
         }
-        
+
         // 3. Bounded Observations
         val observationsResult = observationRepository.getObservationsForTimeWindow(
             userId = userId,
@@ -75,14 +75,16 @@ class AssembleRecommendationContextUseCase(
         val contextObservations = (observationsResult as Result.Success).data.map {
             ContextObservation(it.id, it.type, it.value, it.context, it.occurredAt)
         }
-        
+
         // 4. Bounded Patterns
         val patternsResult = patternRepository.getPatternsByStatus(userId, PatternStatus.ACTIVE, MAX_PATTERNS)
         if (patternsResult is Result.Failure) return Result.Failure(patternsResult.error)
-        val contextPatterns = (patternsResult as Result.Success).data.map {
-            ContextPattern(it.id, it.type, it.description)
-        }
-        
+        val contextPatterns = (patternsResult as Result.Success).data
+            .filter { it.confirmationState != com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState.USER_REJECTED && it.status == PatternStatus.ACTIVE }
+            .map {
+                ContextPattern(it.id, it.type, it.description, it.confirmationState)
+            }
+
         // 5. Bounded Barriers
         val barriersResult = barrierRepository.getActiveBarriersForUser(
             userId = userId,
@@ -93,7 +95,7 @@ class AssembleRecommendationContextUseCase(
         val contextBarriers = (barriersResult as Result.Success).data.map {
             ContextBarrier(it.id, it.category, it.description, it.confirmationState)
         }
-            
+
         // 6. Bounded Reflections
         val reflectionsResult = reflectionRepository.getReflectionsForTimeWindow(
             userId = userId,
@@ -106,7 +108,7 @@ class AssembleRecommendationContextUseCase(
         val contextReflections = (reflectionsResult as Result.Success).data.map {
             ContextReflection(it.id, it.content, it.createdAt)
         }
-        
+
         // 7. Bounded Corrections
         val correctionsResult = eventRepository.getEventsForTimeWindow(
             userId = userId,
@@ -117,14 +119,14 @@ class AssembleRecommendationContextUseCase(
             orderAsc = false // newest first
         )
         if (correctionsResult is Result.Failure) return Result.Failure(correctionsResult.error)
-        
+
         val contextCorrections = (correctionsResult as Result.Success).data.mapNotNull { event ->
             val parsedMeta = CorrectionMetadataParser.parse(event.metadata)
-            
+
             val type = parsedMeta.type
             val recommendation = parsedMeta.recommendation
             val correctedText = parsedMeta.correctedText
-            
+
             if (type == null || recommendation == null) {
                 null
             } else {
@@ -139,7 +141,7 @@ class AssembleRecommendationContextUseCase(
                 )
             }
         }
-        
+
         val context = RecommendationContext(
             userId = userId,
             activeGoals = contextGoals,
@@ -150,7 +152,7 @@ class AssembleRecommendationContextUseCase(
             recentReflections = contextReflections,
             recentCorrections = contextCorrections
         )
-        
+
         return Result.Success(context)
     }
 }

@@ -13,4 +13,7 @@ interface CalendarObservationSettingsDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdate(settings: CalendarObservationSettingsEntity)
+
+    @Query("DELETE FROM calendar_observation_settings WHERE userId = :userId")
+    suspend fun deleteSettingsForUser(userId: String)
 }

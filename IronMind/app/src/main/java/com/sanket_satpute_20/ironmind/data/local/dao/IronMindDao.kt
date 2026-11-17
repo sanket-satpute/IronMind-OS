@@ -23,7 +23,7 @@ interface IronMindDao {
     @Query("SELECT * FROM goal WHERE id = :id LIMIT 1")
     fun getGoal(id: String): GoalEntity?
 
-    @Query("SELECT * FROM goal WHERE userId = :userId ORDER BY createdAt DESC")
+    @Query("SELECT * FROM goal WHERE userId = :userId ORDER BY createdAt DESC, id ASC")
     fun getGoalsForUser(userId: String): List<GoalEntity>
 
     @Query("SELECT * FROM goal WHERE userId = :userId AND status = 'ACTIVE' ORDER BY createdAt DESC LIMIT :limit")
@@ -38,6 +38,9 @@ interface IronMindDao {
     @Query("SELECT * FROM plan WHERE goalId = :goalId ORDER BY createdAt DESC")
     fun getPlansForGoal(goalId: String): List<PlanEntity>
 
+    @Query("SELECT * FROM plan WHERE userId = :userId ORDER BY createdAt DESC, id ASC")
+    fun getPlansForUser(userId: String): List<PlanEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertTask(task: TaskEntity)
 
@@ -50,13 +53,16 @@ interface IronMindDao {
     @Query("SELECT * FROM task WHERE goalId = :goalId ORDER BY createdAt ASC")
     fun getTasksForGoal(goalId: String): List<TaskEntity>
 
+    @Query("SELECT * FROM task WHERE userId = :userId ORDER BY createdAt DESC, id ASC")
+    fun getTasksForUser(userId: String): List<TaskEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertCommitment(commitment: CommitmentEntity)
 
     @Query("SELECT * FROM commitment WHERE id = :id LIMIT 1")
     fun getCommitment(id: String): CommitmentEntity?
 
-    @Query("SELECT * FROM commitment WHERE userId = :userId ORDER BY createdAt DESC")
+    @Query("SELECT * FROM commitment WHERE userId = :userId ORDER BY createdAt DESC, id ASC")
     fun getCommitmentsForUser(userId: String): List<CommitmentEntity>
 
     @Query("SELECT * FROM commitment WHERE userId = :userId AND status IN (:statuses) ORDER BY priority DESC, createdAt ASC")
@@ -86,6 +92,9 @@ interface IronMindDao {
     @Query("SELECT * FROM outcome WHERE sourceEntityId = :sourceEntityId LIMIT 1")
     fun getOutcomeForSource(sourceEntityId: String): OutcomeEntity?
 
+    @Query("SELECT * FROM outcome WHERE userId = :userId ORDER BY completedAt DESC, id ASC")
+    fun getOutcomesForUser(userId: String): List<OutcomeEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertReflection(reflection: ReflectionEntity)
 
@@ -94,6 +103,9 @@ interface IronMindDao {
 
     @Query("SELECT * FROM reflection WHERE userId = :userId AND id = :id LIMIT 1")
     fun getReflectionForUser(userId: String, id: String): ReflectionEntity?
+
+    @Query("SELECT * FROM reflection WHERE userId = :userId ORDER BY createdAt DESC, id ASC")
+    fun getReflectionsForUser(userId: String): List<ReflectionEntity>
 
     @Query("SELECT * FROM reflection WHERE userId = :userId AND createdAt >= :startTime AND createdAt <= :endTime ORDER BY createdAt DESC")
     fun getReflectionsForDateRange(userId: String, startTime: Long, endTime: Long): List<ReflectionEntity>
@@ -111,7 +123,7 @@ interface IronMindDao {
     @Query("SELECT * FROM protection_rules WHERE id = :id LIMIT 1")
     fun getProtectionRule(id: String): ProtectionRuleEntity?
 
-    @Query("SELECT * FROM protection_rules WHERE userId = :userId ORDER BY priority DESC")
+    @Query("SELECT * FROM protection_rules WHERE userId = :userId ORDER BY priority DESC, id ASC")
     fun getProtectionRulesForUser(userId: String): List<ProtectionRuleEntity>
 
     @Query("SELECT COUNT(*) FROM protection_rules")
@@ -125,6 +137,9 @@ interface IronMindDao {
 
     @Query("SELECT * FROM protection_sessions WHERE userId = :userId AND status = 'ACTIVE' ORDER BY startedAt DESC")
     fun getActiveProtectionSessionsForUser(userId: String): List<ProtectionSessionEntity>
+
+    @Query("SELECT * FROM protection_sessions WHERE userId = :userId ORDER BY startedAt DESC, id ASC")
+    fun getProtectionSessionsForUser(userId: String): List<ProtectionSessionEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertEvent(event: EventEntity)
@@ -147,8 +162,17 @@ interface IronMindDao {
     @Query("SELECT * FROM memory WHERE id = :id LIMIT 1")
     fun getMemoryById(id: String): MemoryEntity?
 
-    @Query("SELECT * FROM memory WHERE userId = :userId ORDER BY createdAt DESC")
+    @Query("SELECT * FROM memory WHERE userId = :userId ORDER BY createdAt DESC, id ASC")
     fun getMemoriesForUser(userId: String): List<MemoryEntity>
+
+    @Query("SELECT * FROM memory WHERE userId = :userId AND status != 'DELETED' ORDER BY createdAt DESC")
+    fun observeMemoriesForUser(userId: String): kotlinx.coroutines.flow.Flow<List<MemoryEntity>>
+
+    @Query("DELETE FROM memory WHERE userId = :userId AND id = :id")
+    fun deleteMemory(userId: String, id: String): Int
+
+    @Query("UPDATE memory SET confirmationState = :confirmationState, status = :status, updatedAt = :updatedAt WHERE id = :id AND userId = :userId")
+    fun updateMemoryState(id: String, userId: String, confirmationState: String, status: String, updatedAt: Long): Int
 
     @Query("SELECT * FROM memory WHERE userId = :userId AND status NOT IN ('EXPIRED', 'DELETED', 'INACTIVE') ORDER BY confidence DESC")
     fun getActiveMemoriesForUser(userId: String): List<MemoryEntity>
@@ -202,17 +226,32 @@ interface IronMindDao {
     @Query("DELETE FROM user_profile WHERE id = :userId")
     fun deleteUserProfile(userId: String)
 
+    @Query("DELETE FROM goal WHERE userId = :userId AND id = :id")
+    fun deleteGoal(userId: String, id: String): Int
+
     @Query("DELETE FROM goal WHERE userId = :userId")
     fun deleteGoalsForUser(userId: String)
+
+    @Query("DELETE FROM plan WHERE userId = :userId AND id = :id")
+    fun deletePlan(userId: String, id: String): Int
 
     @Query("DELETE FROM plan WHERE userId = :userId")
     fun deletePlansForUser(userId: String)
 
+    @Query("DELETE FROM task WHERE userId = :userId AND id = :id")
+    fun deleteTask(userId: String, id: String): Int
+
     @Query("DELETE FROM task WHERE userId = :userId")
     fun deleteTasksForUser(userId: String)
 
+    @Query("DELETE FROM commitment WHERE userId = :userId AND id = :id")
+    fun deleteCommitment(userId: String, id: String): Int
+
     @Query("DELETE FROM commitment WHERE userId = :userId")
     fun deleteCommitmentsForUser(userId: String)
+
+    @Query("DELETE FROM reflection WHERE userId = :userId AND id = :id")
+    fun deleteReflection(userId: String, id: String): Int
 
     @Query("DELETE FROM reflection WHERE userId = :userId")
     fun deleteReflectionsForUser(userId: String)
@@ -228,6 +267,9 @@ interface IronMindDao {
 
     @Query("DELETE FROM memory WHERE userId = :userId")
     fun deleteMemoriesForUser(userId: String)
+
+    @Query("DELETE FROM outcome WHERE userId = :userId")
+    fun deleteOutcomesForUser(userId: String)
 
     @Query("DELETE FROM memory WHERE userId = :userId AND status = 'FORGOTTEN' AND updatedAt < :thresholdTime")
     fun deleteForgottenMemoriesOlderThan(userId: String, thresholdTime: Long)

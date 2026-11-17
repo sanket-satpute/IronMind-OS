@@ -1,0 +1,38 @@
+﻿package com.sanket_satpute_20.ironmind.domain.model.pattern
+
+/**
+ * Specific discovery types across the 4 pattern categories for IronMind Behaviour Pattern Discovery.
+ * Part of Phase 3.2.
+ */
+enum class PatternDiscoveryType(
+    val category: PatternCategory,
+    val defaultLegacyType: PatternType
+) {
+    // A. Productivity Patterns
+    REPEATEDLY_POSTPONED_TASKS(PatternCategory.PRODUCTIVITY, PatternType.POSTPONEMENT_PATTERN),
+    REPEATEDLY_MISSED_COMMITMENTS(PatternCategory.PRODUCTIVITY, PatternType.POSTPONEMENT_PATTERN),
+    TASK_COMPLETION_BY_TIME_OF_DAY(PatternCategory.PRODUCTIVITY, PatternType.TIME_PATTERN),
+    TASK_COMPLETION_BY_PRIORITY(PatternCategory.PRODUCTIVITY, PatternType.COMPLETION_PATTERN),
+    REPEATEDLY_OVERDUE_TASKS(PatternCategory.PRODUCTIVITY, PatternType.POSTPONEMENT_PATTERN),
+    GOAL_EXECUTION_CONSISTENCY(PatternCategory.PRODUCTIVITY, PatternType.SUCCESS_CONDITION_PATTERN),
+    PLAN_COMPLETION_TRENDS(PatternCategory.PRODUCTIVITY, PatternType.COMPLETION_PATTERN),
+
+    // B. Digital Behaviour Patterns
+    FREQUENTLY_USED_APPLICATIONS(PatternCategory.DIGITAL_BEHAVIOUR, PatternType.CONTEXT_PATTERN),
+    HIGH_USAGE_PERIODS(PatternCategory.DIGITAL_BEHAVIOUR, PatternType.TIME_PATTERN),
+    REPEATED_APP_USAGE_SESSIONS(PatternCategory.DIGITAL_BEHAVIOUR, PatternType.DISTRACTION_PATTERN),
+    USAGE_DISTRIBUTION_ACROSS_TIME_WINDOWS(PatternCategory.DIGITAL_BEHAVIOUR, PatternType.TIME_PATTERN),
+    USAGE_DURING_SCHEDULED_FOCUS(PatternCategory.DIGITAL_BEHAVIOUR, PatternType.CONTEXT_PATTERN),
+
+    // C. Focus Patterns
+    FOCUS_SESSION_FREQUENCY_AND_DURATION(PatternCategory.FOCUS, PatternType.FOCUS_PATTERN),
+    FOCUS_DURING_TASK_COMPLETION(PatternCategory.FOCUS, PatternType.SUCCESS_CONDITION_PATTERN),
+    REPEATED_FOCUS_INTERRUPTIONS(PatternCategory.FOCUS, PatternType.DISTRACTION_PATTERN),
+    FOCUS_CONSISTENCY_OVER_TIME(PatternCategory.FOCUS, PatternType.FOCUS_PATTERN),
+
+    // D. Cross-Domain Patterns (Strictly Non-Causal)
+    DIGITAL_USAGE_DURING_PLANNED_WORK(PatternCategory.CROSS_DOMAIN, PatternType.CROSS_DOMAIN_PATTERN),
+    APP_USAGE_COINCIDING_WITH_MISSED_COMMITMENTS(PatternCategory.CROSS_DOMAIN, PatternType.CROSS_DOMAIN_PATTERN),
+    FOCUS_ACTIVITY_COINCIDING_WITH_TASK_COMPLETION(PatternCategory.CROSS_DOMAIN, PatternType.CROSS_DOMAIN_PATTERN),
+    USAGE_WINDOW_EXECUTION_OUTCOME_CORRELATION(PatternCategory.CROSS_DOMAIN, PatternType.CROSS_DOMAIN_PATTERN)
+}

@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.data.local.dao
+﻿package com.sanket_satpute_20.ironmind.data.local.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
@@ -22,9 +22,9 @@ interface InterventionRecommendationDao {
     fun updateStatus(id: String, status: String)
 
     @Query("""
-        SELECT * FROM intervention_recommendations 
-        WHERE userId = :userId 
-        AND objective = :objective 
+        SELECT * FROM intervention_recommendations
+        WHERE userId = :userId
+        AND objective = :objective
         AND (targetEntityType = :targetEntityType OR (targetEntityType IS NULL AND :targetEntityType IS NULL))
         AND (targetEntityId = :targetEntityId OR (targetEntityId IS NULL AND :targetEntityId IS NULL))
         ORDER BY createdAt DESC
@@ -37,11 +37,11 @@ interface InterventionRecommendationDao {
     ): List<InterventionRecommendationEntity>
 
     @Query("""
-        SELECT * FROM intervention_recommendations 
-        WHERE userId = :userId 
-        AND createdAt >= :startTime 
-        AND createdAt < :endTime 
-        ORDER BY createdAt DESC, id ASC 
+        SELECT * FROM intervention_recommendations
+        WHERE userId = :userId
+        AND createdAt >= :startTime
+        AND createdAt < :endTime
+        ORDER BY createdAt DESC, id ASC
         LIMIT :limit
     """)
     fun getRecommendationsForUser(
@@ -50,6 +50,13 @@ interface InterventionRecommendationDao {
         endTime: Long,
         limit: Int
     ): List<InterventionRecommendationEntity>
+
+    @Query("""
+        SELECT * FROM intervention_recommendations
+        WHERE userId = :userId
+        ORDER BY createdAt DESC, id ASC
+    """)
+    fun getAllRecommendationsForUser(userId: String): List<InterventionRecommendationEntity>
 
     @Query("DELETE FROM intervention_recommendations WHERE userId = :userId")
     fun deleteRecommendationsForUser(userId: String): Int

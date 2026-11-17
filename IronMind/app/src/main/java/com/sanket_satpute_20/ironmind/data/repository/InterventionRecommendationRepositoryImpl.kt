@@ -20,7 +20,7 @@ class InterventionRecommendationRepositoryImpl(
                 dao.insert(recommendation.toEntity())
             }
             Result.Success(Unit)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -31,7 +31,7 @@ class InterventionRecommendationRepositoryImpl(
                 dao.getById(id)
             }
             Result.Success(entity?.toDomain())
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -48,7 +48,7 @@ class InterventionRecommendationRepositoryImpl(
                 dao.updateStatus(id, status.name)
             }
             Result.Success(Unit)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -64,7 +64,7 @@ class InterventionRecommendationRepositoryImpl(
                 dao.getEquivalentRecommendations(userId, objective, targetEntityType, targetEntityId)
             }
             Result.Success(entities.mapNotNull { it.toDomain() })
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -80,7 +80,7 @@ class InterventionRecommendationRepositoryImpl(
                 dao.getRecommendationsForUser(userId, startTime, endTime, limit)
             }
             Result.Success(entities.mapNotNull { it.toDomain() })
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }

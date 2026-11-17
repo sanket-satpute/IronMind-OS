@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.domain.engine
+﻿package com.sanket_satpute_20.ironmind.domain.engine
 
 import com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState
 import com.sanket_satpute_20.ironmind.domain.model.pattern.Pattern
@@ -26,7 +26,7 @@ class PatternAcceptanceEvaluator(
         zoneId: ZoneId,
         userId: String
     ): PatternAcceptanceResult {
-        
+
         // 1. Candidate Validation Boundary
         if (candidate.description.isBlank()) {
             return PatternAcceptanceResult.Rejected("Blank description")
@@ -45,11 +45,11 @@ class PatternAcceptanceEvaluator(
         if (actualExistingPattern == null) {
             // NEW Pattern Acceptance Path
             val sufficiencyResult = evidenceSufficiencyEvaluator.evaluate(distinctIncomingEvidence, zoneId)
-            
+
             if (sufficiencyResult is EvidenceSufficiencyResult.Sufficient) {
                 val minTimestamp = distinctIncomingEvidence.minOf { it.timestampMs }
                 val maxTimestamp = distinctIncomingEvidence.maxOf { it.timestampMs }
-                
+
                 val pattern = Pattern(
                     id = newPatternId,
                     userId = userId,
@@ -75,18 +75,28 @@ class PatternAcceptanceEvaluator(
         } else {
             // EXISTING Pattern Reinforcement Path
             val existingEvidenceIds = actualExistingPattern.evidenceReferences?.map { it.sourceId to it.sourceType }?.toSet() ?: emptySet()
-            
+
             val newEvidenceList = distinctIncomingEvidence.filter { (it.reference.sourceId to it.reference.sourceType) !in existingEvidenceIds }
-            
+
             if (newEvidenceList.isEmpty()) {
                 // EXPIRED pattern with NO new evidence is still a NoOp
                 return PatternAcceptanceResult.NoOp
             }
-            
+
+            // Explicit user rejection and dismissal protection:
+            // A pattern that the user refuted (USER_REJECTED) or dismissed (INACTIVE/DELETED)
+            // must NEVER be automatically revived or modified by incoming evidence.
+            if (actualExistingPattern.confirmationState == MemoryConfirmationState.USER_REJECTED) {
+                return PatternAcceptanceResult.Rejected("Pattern was explicitly rejected by the user")
+            }
+            if (actualExistingPattern.status == PatternStatus.INACTIVE || actualExistingPattern.status == PatternStatus.DELETED) {
+                return PatternAcceptanceResult.Rejected("Pattern was dismissed or deleted by the user")
+            }
+
             val mergedReferences = (actualExistingPattern.evidenceReferences ?: emptyList()) + newEvidenceList.map { it.reference }
             val newMaxTimestamp = newEvidenceList.maxOf { it.timestampMs }
             val updatedLastObservedAt = max(actualExistingPattern.lastObservedAt, newMaxTimestamp)
-            
+
             val updatedPattern = actualExistingPattern.copy(
                 description = normalizedDescription, // update in case of case/trim differences
                 conditions = candidate.conditions ?: actualExistingPattern.conditions,
@@ -98,7 +108,7 @@ class PatternAcceptanceEvaluator(
                 status = PatternStatus.ACTIVE, // Revives EXPIRED patterns
                 updatedAt = currentTimeMillis
             )
-            
+
             return PatternAcceptanceResult.UpdatedExisting(updatedPattern)
         }
     }

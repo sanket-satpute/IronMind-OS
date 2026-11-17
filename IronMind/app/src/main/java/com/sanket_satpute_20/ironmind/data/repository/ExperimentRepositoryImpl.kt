@@ -33,7 +33,7 @@ class ExperimentRepositoryImpl(
                 dao.update(entity)
             }
             Result.Success(record)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -42,7 +42,7 @@ class ExperimentRepositoryImpl(
         try {
             val entity = dao.getById(id)
             Result.Success(entity?.toDomain())
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -51,7 +51,7 @@ class ExperimentRepositoryImpl(
         try {
             val entities = dao.getActiveExperiments(userId)
             Result.Success(entities.map { it.toDomain() })
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -60,7 +60,7 @@ class ExperimentRepositoryImpl(
         try {
             val entities = dao.getAllForUser(userId)
             Result.Success(entities.map { it.toDomain() })
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }

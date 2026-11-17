@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.domain.usecase.pattern
+﻿package com.sanket_satpute_20.ironmind.domain.usecase.pattern
 
 import com.sanket_satpute_20.ironmind.domain.ai.AIOutput
 import com.sanket_satpute_20.ironmind.domain.ai.AIRequest
@@ -100,7 +100,7 @@ class LearnInterventionResponsePatternUseCase(
             val candidate = aiOutput.candidate
 
             Result.Success(candidate)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }

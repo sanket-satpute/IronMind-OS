@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.domain.usecase.search
+﻿package com.sanket_satpute_20.ironmind.domain.usecase.search
 
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.*
@@ -23,33 +23,33 @@ class LocalSearchUseCase(
         if (query.isBlank()) {
             return Result.Success(LocalSearchResult())
         }
-        
+
         try {
             val goals = when (val res = goalRepository.searchGoals(userId, query)) {
                 is Result.Success -> res.data
                 is Result.Failure -> emptyList()
             }
-            
+
             val commitments = when (val res = commitmentRepository.searchCommitments(userId, query)) {
                 is Result.Success -> res.data
                 is Result.Failure -> emptyList()
             }
-            
+
             val reflections = when (val res = reflectionRepository.searchReflections(userId, query)) {
                 is Result.Success -> res.data
                 is Result.Failure -> emptyList()
             }
-            
+
             val memories = when (val res = memoryRepository.searchMemories(userId, query)) {
                 is Result.Success -> res.data
                 is Result.Failure -> emptyList()
             }
-            
+
             val events = when (val res = eventRepository.searchEvents(userId, query)) {
                 is Result.Success -> res.data
                 is Result.Failure -> emptyList()
             }
-            
+
             return Result.Success(
                 LocalSearchResult(
                     goals = goals,
@@ -59,7 +59,7 @@ class LocalSearchUseCase(
                     events = events
                 )
             )
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             return Result.Failure(e)
         }
     }

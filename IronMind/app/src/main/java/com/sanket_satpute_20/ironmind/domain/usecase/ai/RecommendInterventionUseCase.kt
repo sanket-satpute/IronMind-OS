@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.domain.usecase.ai
+﻿package com.sanket_satpute_20.ironmind.domain.usecase.ai
 
 import com.sanket_satpute_20.ironmind.domain.ai.AIOutput
 import com.sanket_satpute_20.ironmind.domain.ai.AIRequest
@@ -11,6 +11,8 @@ import com.sanket_satpute_20.ironmind.domain.common.IdGenerator
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.AutonomyCapability
 import com.sanket_satpute_20.ironmind.domain.model.AutonomyLevel
+import com.sanket_satpute_20.ironmind.domain.model.MemoryConfirmationState
+import com.sanket_satpute_20.ironmind.domain.model.barrier.BarrierConfirmationState
 import com.sanket_satpute_20.ironmind.domain.model.intervention.CausalHypothesisReference
 import com.sanket_satpute_20.ironmind.domain.model.intervention.CausalHypothesisType
 import com.sanket_satpute_20.ironmind.domain.model.intervention.InterventionEquivalencePolicy
@@ -200,21 +202,44 @@ class RecommendInterventionUseCase(
     }
 
     private fun formatContextForAi(context: RecommendationContext): String {
+        val eligiblePatterns = context.activePatterns.filter {
+            it.confirmationState != MemoryConfirmationState.USER_REJECTED
+        }
+        val eligibleBarriers = context.activeBarriers.filter {
+            it.confirmationState !in setOf(BarrierConfirmationState.REJECTED, BarrierConfirmationState.DISMISSED)
+        }
+
         return """
             Context Summary:
             Active Goals: ${context.activeGoals.size}
             Active Commitments: ${context.activeCommitments.size}
             Recent Observations: ${context.recentObservations.size}
-            Active Patterns: ${context.activePatterns.size}
-            Active Barriers: ${context.activeBarriers.size}
+            Active Patterns: ${eligiblePatterns.size}
+            Active Barriers: ${eligibleBarriers.size}
             Recent Reflections: ${context.recentReflections.size}
             Recent Corrections: ${context.recentCorrections.size}
-            
+
             ${context.activeGoals.joinToString("\n") { "GOAL [${it.id}]: ${it.title} (${it.status})" }}
             ${context.activeCommitments.joinToString("\n") { "COMMITMENT [${it.id}]: ${it.title} (${it.status})" }}
             ${context.recentObservations.joinToString("\n") { "OBSERVATION [${it.id}]: ${it.type} - ${it.value}" }}
-            ${context.activePatterns.joinToString("\n") { "PATTERN [${it.id}]: ${it.type} - ${it.description}" }}
-            ${context.activeBarriers.joinToString("\n") { "BARRIER [${it.id}]: ${it.category} - ${it.description}" }}
+            ${eligiblePatterns.joinToString("\n") {
+                val epistemicLabel = when (it.confirmationState) {
+                    MemoryConfirmationState.USER_CONFIRMED -> "CONFIRMED"
+                    MemoryConfirmationState.SYSTEM_CONFIRMED -> "[System Confirmed]"
+                    MemoryConfirmationState.UNCONFIRMED -> "UNCONFIRMED HYPOTHESIS"
+                    MemoryConfirmationState.USER_REJECTED -> "REJECTED"
+                }
+                "PATTERN [${it.id}]: ${it.type} ($epistemicLabel) - ${it.description}"
+            }}
+            ${eligibleBarriers.joinToString("\n") {
+                val epistemicLabel = when (it.confirmationState) {
+                    BarrierConfirmationState.CONFIRMED -> "CONFIRMED"
+                    BarrierConfirmationState.UNCONFIRMED -> "UNCONFIRMED HYPOTHESIS"
+                    BarrierConfirmationState.REJECTED -> "REJECTED"
+                    BarrierConfirmationState.DISMISSED -> "DISMISSED"
+                }
+                "BARRIER [${it.id}]: ${it.category} ($epistemicLabel) - ${it.description}"
+            }}
             ${context.recentReflections.joinToString("\n") { "REFLECTION [${it.id}]: ${it.content}" }}
             ${context.recentCorrections.joinToString("\n") { "CORRECTION [${it.eventId}]: User explicitly corrected recommendation '${it.recommendation}' (Target: ${it.targetEntityId ?: "None"}, Type: ${it.interventionType}). Corrected Text: ${it.correctedText ?: "None provided"}" }}
         """.trimIndent()

@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.domain.usecase.intervention
+﻿package com.sanket_satpute_20.ironmind.domain.usecase.intervention
 
 import com.sanket_satpute_20.ironmind.domain.ai.AIOutput
 import com.sanket_satpute_20.ironmind.domain.ai.AIRequest
@@ -13,7 +13,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * Sprint V4.9: Adaptive Channel Selection.
- * 
+ *
  * Objective: Choose the least intrusive effective intervention channel.
  * Principle: Channel selection optimizes usefulness, not app engagement.
  */
@@ -31,7 +31,7 @@ class SelectInterventionChannelUseCase(
                 Evaluate the optimal delivery channel for this intervention.
                 Intervention Type: $interventionType
                 Reason: $interventionReason
-                
+
                 Choose the least intrusive but effective channel from:
                 IN_APP, NOTIFICATION, PROTECTION, SCHEDULING_SUGGESTION, OTHER.
                 Optimization goal: usefulness, not engagement.
@@ -63,7 +63,7 @@ class SelectInterventionChannelUseCase(
             // Fallback for unexpected valid types
             Result.Success(InterventionChannel.IN_APP)
 
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             // Safety fallback
             Result.Success(InterventionChannel.IN_APP)
         }

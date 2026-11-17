@@ -29,7 +29,7 @@ class LocationObservationSettingsRepositoryImpl(
                 )
             }
             Result.Success(settings)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -43,7 +43,7 @@ class LocationObservationSettingsRepositoryImpl(
             )
             dao.insertOrUpdate(entity)
             Result.Success(Unit)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }

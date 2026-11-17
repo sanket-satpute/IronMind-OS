@@ -23,7 +23,10 @@ data class MemoryEntity(
     val expiresAt: Long?,
     val createdAt: Long,
     val updatedAt: Long,
-    val schemaVersion: Int
+    val schemaVersion: Int,
+    val localRevision: Long = 1L,
+    val serverVersion: Long? = null,
+    val legacyBaseHash: String? = null
 ) {
     fun toDomain(): Memory = Memory(
         id = id,

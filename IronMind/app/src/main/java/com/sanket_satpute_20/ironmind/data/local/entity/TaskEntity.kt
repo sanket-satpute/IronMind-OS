@@ -22,5 +22,8 @@ data class TaskEntity(
     val completedAt: Long?,
     val postponedAt: Long?,
     val source: String,
-    val schemaVersion: Int
+    val schemaVersion: Int,
+    val localRevision: Long = 1L,
+    val serverVersion: Long? = null,
+    val legacyBaseHash: String? = null
 )

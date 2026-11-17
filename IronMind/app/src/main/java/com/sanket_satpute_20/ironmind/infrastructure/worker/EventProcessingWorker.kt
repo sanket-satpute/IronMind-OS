@@ -12,6 +12,8 @@ import com.sanket_satpute_20.ironmind.domain.common.Clock
 import com.sanket_satpute_20.ironmind.domain.common.Result as DomainResult
 import com.sanket_satpute_20.ironmind.domain.logging.IronLogger
 import com.sanket_satpute_20.ironmind.domain.repository.EventRepository
+import com.sanket_satpute_20.ironmind.domain.session.UserSessionProvider
+import com.sanket_satpute_20.ironmind.domain.session.runWithSession
 import com.sanket_satpute_20.ironmind.execution.background.DefaultEventProcessor
 import com.sanket_satpute_20.ironmind.execution.background.EventBackoffPolicy
 import com.sanket_satpute_20.ironmind.execution.background.EventProcessingOutcome
@@ -31,10 +33,12 @@ class EventProcessingWorker(
     private val batchSize: Int = DEFAULT_BATCH_SIZE,
     private val maxDrainIterations: Int = DEFAULT_MAX_DRAIN_ITERATIONS,
     private val database: IronMindDatabase? = null,
-    private val ironMindDao: IronMindDao? = null
+    private val ironMindDao: IronMindDao? = null,
+    private val userSessionProvider: UserSessionProvider
 ) : CoroutineWorker(appContext, workerParams) {
 
     companion object {
+        const val KEY_SESSION_GENERATION = UserSessionProvider.KEY_SESSION_GENERATION
         const val DEFAULT_LEASE_DURATION_MS: Long = 30_000L
         const val DEFAULT_BATCH_SIZE: Int = 10
         const val DEFAULT_MAX_DRAIN_ITERATIONS: Int = 5
@@ -43,6 +47,27 @@ class EventProcessingWorker(
     }
 
     override suspend fun doWork(): Result {
+        val generation = inputData.getLong(KEY_SESSION_GENERATION, -1L)
+        if (generation <= 0L) {
+            println("IronMindLifecycle [EventProcessingWorker] [FAILED_CLOSED] Reason=missing_or_invalid_generation generation=$generation")
+            return Result.failure()
+        }
+
+        return try {
+            userSessionProvider.withUserSession(expectedGeneration = generation) { activeUserId ->
+                doWorkForUser(activeUserId)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IllegalStateException) {
+            println("IronMindLifecycle [EventProcessingWorker] [REJECTED_STALE_GENERATION] error=${e.message}")
+            Result.failure()
+        } catch (e: Exception) {
+            Result.retry()
+        }
+    }
+
+    private suspend fun doWorkForUser(activeUserId: String): Result {
         logger?.logLifecycle("EventWorker", "STARTED", mapOf("runAttemptCount" to runAttemptCount.toString()))
 
         var totalProcessed = 0
@@ -52,7 +77,7 @@ class EventProcessingWorker(
         try {
             // First, sweep orphaned expired leases with claimCount >= maxAttempts
             val now = clock.currentTimeMillis()
-            learnerEventStatusDao.sweepClaimExhaustion(now)
+            learnerEventStatusDao.sweepClaimExhaustionForUser(activeUserId, now)
 
             while (iteration < maxDrainIterations && !isStopped) {
                 iteration++
@@ -60,12 +85,12 @@ class EventProcessingWorker(
                 val leaseExpiresAt = currentNow + leaseDurationMs
 
                 // 1. Discover expired processing leases for reclamation
-                val expiredIds = learnerEventStatusDao.getExpiredProcessingEventIds(currentNow, batchSize)
+                val expiredIds = learnerEventStatusDao.getExpiredProcessingEventIdsForUser(activeUserId, currentNow, batchSize)
 
                 // 2. Discover pending eligible events to fill remaining capacity
                 val remainingCapacity = (batchSize - expiredIds.size).coerceAtLeast(0)
                 val pendingIds = if (remainingCapacity > 0) {
-                    learnerEventStatusDao.getPendingEligibleEventIds(currentNow, remainingCapacity)
+                    learnerEventStatusDao.getPendingEligibleEventIdsForUser(activeUserId, currentNow, remainingCapacity)
                 } else {
                     emptyList()
                 }
@@ -86,15 +111,17 @@ class EventProcessingWorker(
 
                     // Atomic CAS claim
                     val claimResult = if (isExpired) {
-                        learnerEventStatusDao.claimExpiredProcessingEvent(
+                        learnerEventStatusDao.claimExpiredProcessingEventForUser(
                             eventId = eventId,
+                            userId = activeUserId,
                             now = currentNow,
                             leaseExpiresAt = leaseExpiresAt,
                             newLeaseToken = claimToken
                         )
                     } else {
-                        learnerEventStatusDao.claimPendingEvent(
+                        learnerEventStatusDao.claimPendingEventForUser(
                             eventId = eventId,
+                            userId = activeUserId,
                             now = currentNow,
                             leaseExpiresAt = leaseExpiresAt,
                             newLeaseToken = claimToken
@@ -107,7 +134,7 @@ class EventProcessingWorker(
                     }
 
                     totalClaimed++
-                    processClaimedEvent(eventId, claimToken)
+                    processClaimedEvent(eventId, claimToken, activeUserId)
                     totalProcessed++
                 }
             }
@@ -115,8 +142,8 @@ class EventProcessingWorker(
             // Tail-check: If remaining eligible work exists because drain iterations were capped,
             // return Result.retry() so WorkManager schedules a follow-up run without stranding work.
             val tailNow = clock.currentTimeMillis()
-            val hasRemainingPending = learnerEventStatusDao.getPendingEligibleEventIds(tailNow, 1).isNotEmpty()
-            val hasRemainingExpired = learnerEventStatusDao.getExpiredProcessingEventIds(tailNow, 1).isNotEmpty()
+            val hasRemainingPending = learnerEventStatusDao.getPendingEligibleEventIdsForUser(activeUserId, tailNow, 1).isNotEmpty()
+            val hasRemainingExpired = learnerEventStatusDao.getExpiredProcessingEventIdsForUser(activeUserId, tailNow, 1).isNotEmpty()
             val hasRemainingWork = hasRemainingPending || hasRemainingExpired
 
             if (hasRemainingWork) {
@@ -152,7 +179,7 @@ class EventProcessingWorker(
         }
     }
 
-    private suspend fun processClaimedEvent(eventId: String, claimToken: String) {
+    private suspend fun processClaimedEvent(eventId: String, claimToken: String, activeUserId: String) {
         val now = clock.currentTimeMillis()
         try {
             val eventResult = eventRepository.getEvent(eventId)
@@ -161,18 +188,22 @@ class EventProcessingWorker(
                 is DomainResult.Failure -> null
             }
 
+            if (event != null && event.userId != activeUserId) {
+                throw SessionOwnershipMismatchException("Queued event $eventId does not belong to the active session.")
+            }
+
             if (event == null) {
                 if (database != null) {
                     database.withTransaction {
-                        val status = learnerEventStatusDao.getEventStatus(eventId)
+                        val status = learnerEventStatusDao.getEventStatusForUser(eventId, activeUserId)
                         if (status != null && status.leaseToken == claimToken && status.status == "PROCESSING") {
-                            learnerEventStatusDao.failPermanent(eventId, claimToken, "SOURCE_EVENT_NOT_FOUND", now)
+                            learnerEventStatusDao.failPermanentForUser(eventId, activeUserId, claimToken, "SOURCE_EVENT_NOT_FOUND", now)
                         } else {
                             logger?.logLifecycle("EventWorker", "LEASE_LOST_MISSING_EVENT", mapOf("eventId" to eventId))
                         }
                     }
                 } else {
-                    val rows = learnerEventStatusDao.failPermanent(eventId, claimToken, "SOURCE_EVENT_NOT_FOUND", now)
+                    val rows = learnerEventStatusDao.failPermanentForUser(eventId, activeUserId, claimToken, "SOURCE_EVENT_NOT_FOUND", now)
                     if (rows == 0) {
                         logger?.logLifecycle("EventWorker", "LEASE_LOST_MISSING_EVENT", mapOf("eventId" to eventId))
                     }
@@ -181,16 +212,18 @@ class EventProcessingWorker(
             }
 
             val outcome = eventProcessor.processEvent(event)
-            handleOutcome(eventId, claimToken, outcome, event.userId)
+            handleOutcome(eventId, claimToken, outcome, activeUserId)
 
         } catch (e: CancellationException) {
             val cancelNow = clock.currentTimeMillis()
-            learnerEventStatusDao.releaseLease(eventId, claimToken, cancelNow)
+            learnerEventStatusDao.releaseLeaseForUser(eventId, activeUserId, claimToken, cancelNow)
             logger?.logLifecycle("EventWorker", "LEASE_RELEASED_ON_CANCELLATION", mapOf("eventId" to eventId))
+            throw e
+        } catch (e: SessionOwnershipMismatchException) {
             throw e
         } catch (e: Exception) {
             val failNow = clock.currentTimeMillis()
-            handleRetryableFailure(eventId, claimToken, e.message ?: "UNEXPECTED_FAILURE", failNow)
+            handleRetryableFailure(eventId, activeUserId, claimToken, e.message ?: "UNEXPECTED_FAILURE", failNow)
         }
     }
 
@@ -199,7 +232,7 @@ class EventProcessingWorker(
         if (database != null) {
             database.withTransaction {
                 // 1. Validate lease token and PROCESSING status under transaction lock
-                val status = learnerEventStatusDao.getEventStatus(eventId)
+                val status = learnerEventStatusDao.getEventStatusForUser(eventId, userId)
                 if (status == null || status.leaseToken != claimToken || status.status != "PROCESSING") {
                     logger?.logLifecycle("EventWorker", "LEASE_LOST_TRANSACTION_ABORTED", mapOf("eventId" to eventId))
                     return@withTransaction
@@ -212,10 +245,10 @@ class EventProcessingWorker(
                     return@withTransaction
                 }
                 // 3. Complete status atomically
-                applyOutcomeStatus(eventId, claimToken, outcome, now)
+                applyOutcomeStatus(eventId, userId, claimToken, outcome, now)
             }
         } else {
-            val status = learnerEventStatusDao.getEventStatus(eventId)
+            val status = learnerEventStatusDao.getEventStatusForUser(eventId, userId)
             if (status != null && (status.leaseToken != claimToken || status.status != "PROCESSING")) {
                 logger?.logLifecycle("EventWorker", "LEASE_LOST_EXECUTION_SKIPPED", mapOf("eventId" to eventId))
                 return
@@ -224,14 +257,14 @@ class EventProcessingWorker(
                 learnerEventStatusDao.deleteAllForUser(userId)
                 return
             }
-            applyOutcomeStatus(eventId, claimToken, outcome, now)
+            applyOutcomeStatus(eventId, userId, claimToken, outcome, now)
         }
     }
 
-    private suspend fun applyOutcomeStatus(eventId: String, claimToken: String, outcome: EventProcessingOutcome, now: Long) {
+    private suspend fun applyOutcomeStatus(eventId: String, userId: String, claimToken: String, outcome: EventProcessingOutcome, now: Long) {
         when (outcome) {
             is EventProcessingOutcome.Success -> {
-                val rows = learnerEventStatusDao.completeEvent(eventId, claimToken, now)
+                val rows = learnerEventStatusDao.completeEventForUser(eventId, userId, claimToken, now)
                 if (rows == 0) {
                     logger?.logLifecycle("EventWorker", "STALE_TOKEN_COMPLETE", mapOf("eventId" to eventId))
                 } else {
@@ -240,7 +273,7 @@ class EventProcessingWorker(
             }
 
             is EventProcessingOutcome.SuccessNoChange -> {
-                val rows = learnerEventStatusDao.completeEvent(eventId, claimToken, now)
+                val rows = learnerEventStatusDao.completeEventForUser(eventId, userId, claimToken, now)
                 if (rows == 0) {
                     logger?.logLifecycle("EventWorker", "STALE_TOKEN_COMPLETE", mapOf("eventId" to eventId, "reason" to outcome.reason))
                 } else {
@@ -249,11 +282,11 @@ class EventProcessingWorker(
             }
 
             is EventProcessingOutcome.RetryableFailure -> {
-                handleRetryableFailure(eventId, claimToken, outcome.message, now)
+                handleRetryableFailure(eventId, userId, claimToken, outcome.message, now)
             }
 
             is EventProcessingOutcome.PermanentFailure -> {
-                val rows = learnerEventStatusDao.failPermanent(eventId, claimToken, outcome.message, now)
+                val rows = learnerEventStatusDao.failPermanentForUser(eventId, userId, claimToken, outcome.message, now)
                 if (rows == 0) {
                     logger?.logLifecycle("EventWorker", "STALE_TOKEN_PERM_FAIL", mapOf("eventId" to eventId))
                 } else {
@@ -263,7 +296,7 @@ class EventProcessingWorker(
 
             is EventProcessingOutcome.UnsupportedEventType -> {
                 val message = "UNSUPPORTED_EVENT_TYPE: ${outcome.eventType.name}"
-                val rows = learnerEventStatusDao.failPermanent(eventId, claimToken, message, now)
+                val rows = learnerEventStatusDao.failPermanentForUser(eventId, userId, claimToken, message, now)
                 if (rows == 0) {
                     logger?.logLifecycle("EventWorker", "STALE_TOKEN_UNSUPPORTED", mapOf("eventId" to eventId))
                 } else {
@@ -273,20 +306,20 @@ class EventProcessingWorker(
         }
     }
 
-    private suspend fun handleRetryableFailure(eventId: String, claimToken: String, message: String, now: Long) {
-        val currentStatus = learnerEventStatusDao.getEventStatus(eventId)
+    private suspend fun handleRetryableFailure(eventId: String, userId: String, claimToken: String, message: String, now: Long) {
+        val currentStatus = learnerEventStatusDao.getEventStatusForUser(eventId, userId)
         val nextFailureCount = (currentStatus?.failureCount ?: 0) + 1
         val maxAttempts = currentStatus?.maxAttempts ?: 5
 
         if (nextFailureCount >= maxAttempts) {
             val permMessage = "MAX_ATTEMPTS_EXHAUSTED: $message"
-            val rows = learnerEventStatusDao.failPermanent(eventId, claimToken, permMessage, now)
+            val rows = learnerEventStatusDao.failPermanentForUser(eventId, userId, claimToken, permMessage, now)
             if (rows == 0) {
                 logger?.logLifecycle("EventWorker", "STALE_TOKEN_EXHAUSTED", mapOf("eventId" to eventId))
             }
         } else {
             val nextAttemptAt = EventBackoffPolicy.calculateNextAttemptAt(nextFailureCount, now)
-            val rows = learnerEventStatusDao.failRetryable(eventId, claimToken, nextAttemptAt, message, now)
+            val rows = learnerEventStatusDao.failRetryableForUser(eventId, userId, claimToken, nextAttemptAt, message, now)
             if (rows == 0) {
                 logger?.logLifecycle("EventWorker", "STALE_TOKEN_RETRY", mapOf("eventId" to eventId))
             } else {
@@ -295,3 +328,5 @@ class EventProcessingWorker(
         }
     }
 }
+
+private class SessionOwnershipMismatchException(message: String) : IllegalStateException(message)

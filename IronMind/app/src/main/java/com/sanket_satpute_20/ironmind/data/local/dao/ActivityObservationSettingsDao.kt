@@ -13,4 +13,7 @@ interface ActivityObservationSettingsDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateSettings(settings: ActivityObservationSettingsEntity)
+
+    @Query("DELETE FROM activity_observation_settings WHERE userId = :userId")
+    suspend fun deleteSettingsForUser(userId: String)
 }

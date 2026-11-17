@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.ui.screens.goals
+﻿package com.sanket_satpute_20.ironmind.ui.screens.goals
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -14,8 +15,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sanket_satpute_20.ironmind.domain.model.Goal
+import com.sanket_satpute_20.ironmind.domain.model.ProgressInfo
+import com.sanket_satpute_20.ironmind.ui.components.ProgressBarWithStats
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -26,6 +32,19 @@ fun GoalsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val showCreateForm by viewModel.showCreateForm.collectAsState()
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.loadGoals()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     Scaffold(
         modifier = modifier,
@@ -81,7 +100,11 @@ fun GoalsScreen(
                             modifier = Modifier.fillMaxSize()
                         ) {
                             items(state.goals, key = { it.id }) { goal ->
-                                GoalCard(goal = goal, onClick = { onNavigateToGoal(goal.id) })
+                                GoalCard(
+                                    goal = goal,
+                                    progress = state.progressMap[goal.id] ?: ProgressInfo.ZERO,
+                                    onClick = { onNavigateToGoal(goal.id) }
+                                )
                             }
                         }
                     }
@@ -97,7 +120,11 @@ fun GoalsScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GoalCard(goal: Goal, onClick: () -> Unit = {}) {
+fun GoalCard(
+    goal: Goal,
+    progress: ProgressInfo = ProgressInfo.ZERO,
+    onClick: () -> Unit = {}
+) {
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -122,6 +149,8 @@ fun GoalCard(goal: Goal, onClick: () -> Unit = {}) {
                     overflow = TextOverflow.Ellipsis
                 )
             }
+            Spacer(modifier = Modifier.height(8.dp))
+            ProgressBarWithStats(progress = progress)
             Spacer(modifier = Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -150,7 +179,7 @@ fun CreateGoalBottomSheet(viewModel: GoalsViewModel) {
     val newGoalImportance by viewModel.newGoalImportance.collectAsState()
     val isSaving by viewModel.isSaving.collectAsState()
     val saveError by viewModel.saveError.collectAsState()
-    
+
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
@@ -169,7 +198,7 @@ fun CreateGoalBottomSheet(viewModel: GoalsViewModel) {
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(16.dp))
-            
+
             OutlinedTextField(
                 value = newGoalTitle,
                 onValueChange = viewModel::updateNewGoalTitle,
@@ -177,7 +206,7 @@ fun CreateGoalBottomSheet(viewModel: GoalsViewModel) {
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
-            
+
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = newGoalDescription,
@@ -186,7 +215,7 @@ fun CreateGoalBottomSheet(viewModel: GoalsViewModel) {
                 modifier = Modifier.fillMaxWidth(),
                 maxLines = 3
             )
-            
+
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = newGoalWhy,
@@ -195,7 +224,7 @@ fun CreateGoalBottomSheet(viewModel: GoalsViewModel) {
                 modifier = Modifier.fillMaxWidth(),
                 maxLines = 3
             )
-            
+
             Spacer(modifier = Modifier.height(16.dp))
             Text("Importance: ${newGoalImportance.toInt()}/10")
             Slider(
@@ -215,7 +244,7 @@ fun CreateGoalBottomSheet(viewModel: GoalsViewModel) {
             }
 
             Spacer(modifier = Modifier.height(24.dp))
-            
+
             Button(
                 onClick = viewModel::createGoal,
                 modifier = Modifier.fillMaxWidth(),

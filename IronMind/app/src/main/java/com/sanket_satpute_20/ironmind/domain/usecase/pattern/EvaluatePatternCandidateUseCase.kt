@@ -131,7 +131,7 @@ class EvaluatePatternCandidateUseCase(
             )
 
             EvaluatePatternCandidateResult.Accepted(acceptanceResult)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             logSystemFailure(candidate, "Unhandled system error", e)
             EvaluatePatternCandidateResult.SystemFailure(e)
         }

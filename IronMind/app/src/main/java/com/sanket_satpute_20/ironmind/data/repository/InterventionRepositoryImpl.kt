@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.data.repository
+﻿package com.sanket_satpute_20.ironmind.data.repository
 
 import com.sanket_satpute_20.ironmind.data.local.dao.InterventionDao
 import com.sanket_satpute_20.ironmind.data.local.entity.InterventionRecordEntity
@@ -27,7 +27,7 @@ class InterventionRepositoryImpl(
                 createdAt = record.createdAt,
                 updatedAt = record.updatedAt
             )
-            
+
             val existing = interventionDao.getById(record.id)
             if (existing == null) {
                 interventionDao.insert(entity)
@@ -35,7 +35,7 @@ class InterventionRepositoryImpl(
                 interventionDao.update(entity)
             }
             Result.Success(record)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -61,7 +61,7 @@ class InterventionRepositoryImpl(
             } else {
                 Result.Success(null)
             }
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -74,7 +74,7 @@ class InterventionRepositoryImpl(
             val entities = interventionDao.getRecentInterventions(userId, since)
             val records = entities.map { mapToDomain(it) }
             Result.Success(records)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -84,7 +84,7 @@ class InterventionRepositoryImpl(
             val entities = interventionDao.getActiveInterventions(userId)
             val records = entities.map { mapToDomain(it) }
             Result.Success(records)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }

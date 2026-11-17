@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.data.local.dao
+﻿package com.sanket_satpute_20.ironmind.data.local.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
@@ -9,7 +9,7 @@ import com.sanket_satpute_20.ironmind.data.local.entity.ExperimentRecordEntity
 
 @Dao
 interface ExperimentDao {
-    
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insert(record: ExperimentRecordEntity)
 
@@ -19,7 +19,7 @@ interface ExperimentDao {
     @Query("SELECT * FROM experiment_records WHERE id = :id")
     fun getById(id: String): ExperimentRecordEntity?
 
-    @Query("SELECT * FROM experiment_records WHERE userId = :userId ORDER BY startedAt DESC")
+    @Query("SELECT * FROM experiment_records WHERE userId = :userId ORDER BY startedAt DESC, id ASC")
     fun getAllForUser(userId: String): List<ExperimentRecordEntity>
 
     @Query("SELECT * FROM experiment_records WHERE userId = :userId AND state = 'ACTIVE'")

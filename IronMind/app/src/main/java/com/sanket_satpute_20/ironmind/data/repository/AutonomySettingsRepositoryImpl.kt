@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.data.repository
+﻿package com.sanket_satpute_20.ironmind.data.repository
 
 import com.sanket_satpute_20.ironmind.data.local.dao.AutonomySettingsDao
 import com.sanket_satpute_20.ironmind.data.local.dao.GlobalAutonomyStateDao
@@ -23,9 +23,9 @@ class AutonomySettingsRepositoryImpl(
         try {
             val entities = dao.getSettingsForUser(userId)
             val globalState = globalStateDao.getStateForUser(userId)
-            
-            val map = entities.associate { 
-                AutonomyCapability.valueOf(it.capability) to AutonomyLevel.valueOf(it.level) 
+
+            val map = entities.associate {
+                AutonomyCapability.valueOf(it.capability) to AutonomyLevel.valueOf(it.level)
             }
             Result.Success(
                 AutonomySettings(
@@ -34,7 +34,7 @@ class AutonomySettingsRepositoryImpl(
                     isGlobalPauseActive = globalState?.isGlobalPauseActive ?: false
                 )
             )
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -53,7 +53,7 @@ class AutonomySettingsRepositoryImpl(
             )
             dao.upsertSetting(entity)
             Result.Success(Unit)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -67,7 +67,7 @@ class AutonomySettingsRepositoryImpl(
             )
             globalStateDao.upsertState(entity)
             Result.Success(Unit)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }

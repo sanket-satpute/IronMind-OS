@@ -17,7 +17,7 @@ class NotificationRecordRepositoryImpl(
         try {
             dao.insert(record.toEntity())
             Result.Success(Unit)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -26,7 +26,7 @@ class NotificationRecordRepositoryImpl(
         try {
             val entity = dao.getMostRecentByKey(key)
             Result.Success(entity?.toDomain())
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -35,7 +35,7 @@ class NotificationRecordRepositoryImpl(
         try {
             val list = dao.getRecent(limit).map { it.toDomain() }
             Result.Success(list)
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             Result.Failure(e)
         }
     }
@@ -53,6 +53,6 @@ fun NotificationRecordEntity.toDomain(): NotificationRecord = NotificationRecord
     id = id,
     timestamp = timestamp,
     deduplicationKey = deduplicationKey,
-    deliveryStatus = try { NotificationDeliveryStatus.valueOf(deliveryStatus) } catch (e: Exception) { NotificationDeliveryStatus.SUPPRESSED },
+    deliveryStatus = try { NotificationDeliveryStatus.valueOf(deliveryStatus) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { NotificationDeliveryStatus.SUPPRESSED },
     suppressionReason = suppressionReason
 )

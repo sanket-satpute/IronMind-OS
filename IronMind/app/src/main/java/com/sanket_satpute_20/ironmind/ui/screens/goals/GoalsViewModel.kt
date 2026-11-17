@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.ui.screens.goals
+﻿package com.sanket_satpute_20.ironmind.ui.screens.goals
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -9,8 +9,15 @@ import com.sanket_satpute_20.ironmind.IronMindApplication
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.logging.IronLogger
 import com.sanket_satpute_20.ironmind.domain.model.Goal
+import com.sanket_satpute_20.ironmind.domain.model.ProgressInfo
 import com.sanket_satpute_20.ironmind.domain.usecase.goal.CreateGoalUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.goal.GetGoalsUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.goal.GetGoalProgressUseCase
+import com.sanket_satpute_20.ironmind.domain.session.SessionState
+import com.sanket_satpute_20.ironmind.domain.session.UserSessionProvider
+import com.sanket_satpute_20.ironmind.domain.session.runWithSession
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,14 +25,19 @@ import kotlinx.coroutines.launch
 
 sealed class GoalsUiState {
     object Loading : GoalsUiState()
-    data class Success(val goals: List<Goal>) : GoalsUiState()
+    data class Success(
+        val goals: List<Goal>,
+        val progressMap: Map<String, ProgressInfo> = emptyMap()
+    ) : GoalsUiState()
     data class Error(val message: String) : GoalsUiState()
 }
 
 class GoalsViewModel(
     private val getGoalsUseCase: GetGoalsUseCase,
     private val createGoalUseCase: CreateGoalUseCase,
-    private val logger: IronLogger
+    private val logger: IronLogger,
+    private val userSessionProvider: UserSessionProvider? = null,
+    private val getGoalProgressUseCase: GetGoalProgressUseCase? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<GoalsUiState>(GoalsUiState.Loading)
@@ -37,43 +49,110 @@ class GoalsViewModel(
     // Form states
     private val _newGoalTitle = MutableStateFlow("")
     val newGoalTitle: StateFlow<String> = _newGoalTitle.asStateFlow()
-    
+
     private val _newGoalDescription = MutableStateFlow("")
     val newGoalDescription: StateFlow<String> = _newGoalDescription.asStateFlow()
-    
+
     private val _newGoalWhy = MutableStateFlow("")
     val newGoalWhy: StateFlow<String> = _newGoalWhy.asStateFlow()
-    
+
     private val _newGoalImportance = MutableStateFlow(5f)
     val newGoalImportance: StateFlow<Float> = _newGoalImportance.asStateFlow()
 
     private val _isSaving = MutableStateFlow(false)
     val isSaving: StateFlow<Boolean> = _isSaving.asStateFlow()
-    
+
     private val _saveError = MutableStateFlow<String?>(null)
     val saveError: StateFlow<String?> = _saveError.asStateFlow()
 
-    private val defaultUserId = "user-1" // V0 Local User
+    private val defaultUserId: String
+        get() = userSessionProvider?.getActiveUserId() ?: SessionState.DEFAULT_LEGACY_USER_ID
+
+    private var loadJob: Job? = null
+    private var loadGeneration = 0L
 
     init {
-        loadGoals()
+        observeSession()
     }
 
-    fun loadGoals() {
-        logger.logLifecycle("Goal", "LOAD_START")
+    private fun observeSession() {
+        if (userSessionProvider == null) {
+            loadGoals(SessionState.DEFAULT_LEGACY_USER_ID)
+            return
+        }
+
         viewModelScope.launch {
-            _uiState.value = GoalsUiState.Loading
-            val result = getGoalsUseCase(defaultUserId)
-            when (result) {
-                is Result.Success -> {
-                    logger.logLifecycle("Goal", "LOAD_SUCCESS", mapOf("count" to result.data.size))
-                    _uiState.value = GoalsUiState.Success(result.data)
-                }
-                is Result.Failure -> {
-                    logger.logLifecycle("Goal", "LOAD_FAILURE", mapOf("reason" to (result.error.message ?: "Unknown")))
-                    _uiState.value = GoalsUiState.Error(result.error.message ?: "Failed to load goals")
+            userSessionProvider.sessionState.collect { state ->
+                when (state) {
+                    is SessionState.Initializing -> {
+                        loadGeneration++
+                        loadJob?.cancel()
+                        _uiState.value = GoalsUiState.Loading
+                    }
+                    is SessionState.ReconciliationFailed -> {
+                        loadGeneration++
+                        loadJob?.cancel()
+                        _uiState.value = GoalsUiState.Error(
+                            "Session reconciliation failed: ${state.error.message ?: "Unknown error"}"
+                        )
+                    }
+                    is SessionState.OfflineFallback,
+                    is SessionState.Authenticated -> {
+                        loadGoals(state.currentUserId)
+                    }
                 }
             }
+        }
+    }
+
+    fun loadGoals(userId: String = defaultUserId) {
+        logger.logLifecycle("Goal", "LOAD_START")
+        loadJob?.cancel()
+        val generation = ++loadGeneration
+        loadJob = viewModelScope.launch {
+            _uiState.value = GoalsUiState.Loading
+            try {
+                userSessionProvider.runWithSession { activeUid ->
+                    if (activeUid != userId || !isCurrentLoad(userId, generation)) return@runWithSession
+                    when (val result = getGoalsUseCase(activeUid)) {
+                        is Result.Success -> if (isCurrentLoad(userId, generation)) {
+                            if (result.data.any { it.userId != activeUid }) {
+                                _uiState.value = GoalsUiState.Error("Goals do not belong to this session")
+                            } else {
+                                val goals = result.data
+                                val progressMap = goals.associate { goal ->
+                                    val progress = getGoalProgressUseCase?.invoke(goal.id, activeUid)?.let {
+                                        if (it is Result.Success) it.data else ProgressInfo.ZERO
+                                    } ?: ProgressInfo.ZERO
+                                    goal.id to progress
+                                }
+                                logger.logLifecycle("Goal", "LOAD_SUCCESS", mapOf("count" to goals.size))
+                                _uiState.value = GoalsUiState.Success(goals, progressMap)
+                            }
+                        }
+                        is Result.Failure -> if (isCurrentLoad(userId, generation)) {
+                            logger.logLifecycle("Goal", "LOAD_FAILURE", mapOf("reason" to (result.error.message ?: "Unknown")))
+                            _uiState.value = GoalsUiState.Error(result.error.message ?: "Failed to load goals")
+                        }
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (isCurrentLoad(userId, generation)) {
+                    _uiState.value = GoalsUiState.Error(e.message ?: "Failed to load goals")
+                }
+            }
+        }
+    }
+
+    private fun isCurrentLoad(userId: String, generation: Long): Boolean {
+        if (generation != loadGeneration) return false
+        val state = userSessionProvider?.sessionState?.value
+            ?: return userId == SessionState.DEFAULT_LEGACY_USER_ID
+        return when (state) {
+            is SessionState.Authenticated, is SessionState.OfflineFallback -> state.currentUserId == userId
+            is SessionState.Initializing, is SessionState.ReconciliationFailed -> false
         }
     }
 
@@ -103,27 +182,29 @@ class GoalsViewModel(
             logger.logLifecycle("Goal", "CREATE_START")
             _isSaving.value = true
             _saveError.value = null
-            
-            val result = createGoalUseCase(
-                userId = defaultUserId,
-                title = _newGoalTitle.value.trim(),
-                description = _newGoalDescription.value.trim(),
-                why = _newGoalWhy.value.trim(),
-                importance = _newGoalImportance.value.toInt(),
-                targetAt = null // Optional in V0
-            )
 
-            _isSaving.value = false
+            userSessionProvider.runWithSession { activeUid ->
+                val result = createGoalUseCase(
+                    userId = activeUid,
+                    title = _newGoalTitle.value.trim(),
+                    description = _newGoalDescription.value.trim(),
+                    why = _newGoalWhy.value.trim(),
+                    importance = _newGoalImportance.value.toInt(),
+                    targetAt = null // Optional in V0
+                )
 
-            when (result) {
-                is Result.Success -> {
-                    logger.logLifecycle("Goal", "CREATE_SUCCESS", mapOf("goalId" to result.data.id))
-                    closeCreateForm()
-                    loadGoals()
-                }
-                is Result.Failure -> {
-                    logger.logLifecycle("Goal", "CREATE_FAILURE", mapOf("reason" to (result.error.message ?: "Unknown error")))
-                    _saveError.value = result.error.message ?: "Failed to create goal"
+                _isSaving.value = false
+
+                when (result) {
+                    is Result.Success -> {
+                        logger.logLifecycle("Goal", "CREATE_SUCCESS", mapOf("goalId" to result.data.id))
+                        closeCreateForm()
+                        loadGoals(activeUid)
+                    }
+                    is Result.Failure -> {
+                        logger.logLifecycle("Goal", "CREATE_FAILURE", mapOf("reason" to (result.error.message ?: "Unknown error")))
+                        _saveError.value = result.error.message ?: "Failed to create goal"
+                    }
                 }
             }
         }
@@ -144,7 +225,9 @@ class GoalsViewModel(
                 GoalsViewModel(
                     getGoalsUseCase = application.container.getGoalsUseCase,
                     createGoalUseCase = application.container.createGoalUseCase,
-                    logger = application.container.logger
+                    logger = application.container.logger,
+                    userSessionProvider = application.container.userSessionProvider,
+                    getGoalProgressUseCase = application.container.getGoalProgressUseCase
                 )
             }
         }

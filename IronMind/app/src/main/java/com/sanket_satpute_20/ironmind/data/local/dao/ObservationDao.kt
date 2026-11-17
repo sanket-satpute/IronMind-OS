@@ -21,6 +21,9 @@ interface ObservationDao {
     @Query("SELECT * FROM observations WHERE userId = :userId ORDER BY occurredAt DESC LIMIT :limit OFFSET :offset")
     fun getObservations(userId: String, limit: Int, offset: Int): List<ObservationEntity>
 
+    @Query("SELECT * FROM observations WHERE userId = :userId ORDER BY occurredAt ASC, id ASC")
+    fun getAllObservationsForUser(userId: String): List<ObservationEntity>
+
     @Query("SELECT * FROM observations WHERE userId = :userId AND type = :type ORDER BY occurredAt DESC LIMIT 1")
     fun getLatestObservation(userId: String, type: String): ObservationEntity?
 

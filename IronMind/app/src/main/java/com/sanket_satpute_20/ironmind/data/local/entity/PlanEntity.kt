@@ -17,5 +17,8 @@ data class PlanEntity(
     val startedAt: Long?,
     val completedAt: Long?,
     val source: String,
-    val schemaVersion: Int
+    val schemaVersion: Int,
+    val localRevision: Long = 1L,
+    val serverVersion: Long? = null,
+    val legacyBaseHash: String? = null
 )

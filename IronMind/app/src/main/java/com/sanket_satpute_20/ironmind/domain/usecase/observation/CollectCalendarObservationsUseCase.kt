@@ -1,4 +1,4 @@
-package com.sanket_satpute_20.ironmind.domain.usecase.observation
+﻿package com.sanket_satpute_20.ironmind.domain.usecase.observation
 
 import com.sanket_satpute_20.ironmind.domain.common.Clock
 import com.sanket_satpute_20.ironmind.domain.common.IdGenerator
@@ -78,14 +78,14 @@ class CollectCalendarObservationsUseCase(
             )
 
             val insertResult = observationRepository.insertObservation(observation)
-            
+
             if (insertResult is Result.Success) {
                 println("IronMindLifecycle [CalendarObservation] [COLLECTED] userId=$userId count=1 events=${events.size}")
                 Result.Success(1)
             } else {
                 Result.Failure((insertResult as Result.Failure).error)
             }
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             println("IronMindLifecycle [CalendarObservation] [COLLECT_FAILED] userId=$userId error=${e.message}")
             Result.Failure(e)
         }
