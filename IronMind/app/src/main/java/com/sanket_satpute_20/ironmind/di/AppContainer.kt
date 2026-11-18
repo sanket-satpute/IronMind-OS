@@ -20,6 +20,10 @@ import com.sanket_satpute_20.ironmind.data.provider.AndroidAppProtectionProvider
 import com.sanket_satpute_20.ironmind.domain.provider.ReminderScheduler
 import com.sanket_satpute_20.ironmind.domain.provider.NotificationProvider
 import com.sanket_satpute_20.ironmind.domain.provider.SpeechToTextProvider
+import com.sanket_satpute_20.ironmind.domain.voice.VoiceRecorder
+import com.sanket_satpute_20.ironmind.domain.voice.VoiceFileManager
+import com.sanket_satpute_20.ironmind.data.voice.AndroidVoiceRecorder
+import com.sanket_satpute_20.ironmind.data.voice.AppPrivateVoiceFileManager
 import com.sanket_satpute_20.ironmind.domain.logging.IronLogger
 import com.sanket_satpute_20.ironmind.infrastructure.logging.DebugIronLogger
 import com.sanket_satpute_20.ironmind.data.provider.AndroidReminderScheduler
@@ -272,8 +276,11 @@ interface AppContainer {
     val refuteBarrierUseCase: RefuteBarrierUseCase
     val dismissBarrierUseCase: DismissBarrierUseCase
     val speechToTextProvider: SpeechToTextProvider
+    val voiceRecorder: VoiceRecorder
+    val voiceFileManager: VoiceFileManager
     val logger: IronLogger
     val clock: Clock
+    val idGenerator: IdGenerator
     val outboxRepository: OutboxRepository
     val syncRepository: SyncRepository
     val syncConflictRepository: com.sanket_satpute_20.ironmind.domain.repository.SyncConflictRepository
@@ -527,7 +534,7 @@ class DefaultAppContainer(
         override fun currentTimeMillis(): Long = System.currentTimeMillis()
     }
 
-    private val idGenerator = object : IdGenerator {
+    override val idGenerator: IdGenerator = object : IdGenerator {
         override fun generateId(): String = UUID.randomUUID().toString()
     }
 
@@ -659,6 +666,14 @@ class DefaultAppContainer(
 
     override val speechToTextProvider: SpeechToTextProvider by lazy {
         AndroidSpeechToTextProvider(context, logger)
+    }
+
+    override val voiceFileManager: VoiceFileManager by lazy {
+        AppPrivateVoiceFileManager(context, idGenerator)
+    }
+
+    override val voiceRecorder: VoiceRecorder by lazy {
+        AndroidVoiceRecorder(context, clock, logger)
     }
 
     override val createCommitmentUseCase: CreateCommitmentUseCase by lazy {

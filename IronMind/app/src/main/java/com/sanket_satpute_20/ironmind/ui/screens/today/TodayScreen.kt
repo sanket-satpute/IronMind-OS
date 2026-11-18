@@ -39,6 +39,8 @@ import com.sanket_satpute_20.ironmind.domain.model.briefing.DailyBriefing
 import com.sanket_satpute_20.ironmind.domain.model.briefing.GoalPlanAttentionItem
 import com.sanket_satpute_20.ironmind.domain.model.context.EpistemicAuthority
 import com.sanket_satpute_20.ironmind.domain.model.insight.PersonalInsight
+import com.sanket_satpute_20.ironmind.ui.screens.today.voice.VoiceCaptureViewModel
+import com.sanket_satpute_20.ironmind.ui.screens.today.voice.VoicePlannerCaptureCard
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
@@ -51,6 +53,7 @@ import java.util.Locale
 fun TodayScreen(
     modifier: Modifier = Modifier,
     viewModel: TodayViewModel = viewModel(factory = TodayViewModel.Factory),
+    voiceCaptureViewModel: VoiceCaptureViewModel = viewModel(factory = VoiceCaptureViewModel.Factory),
     onNavigateToProtection: () -> Unit = {},
     onNavigateToReflection: () -> Unit = {},
     onNavigateToPlan: (String) -> Unit = {}
@@ -61,6 +64,7 @@ fun TodayScreen(
     TodayScreenContent(
         modifier = modifier,
         uiState = uiState,
+        voiceCaptureViewModel = voiceCaptureViewModel,
         onStatusChange = { id, newStatus, outcome -> viewModel.updateCommitmentStatus(id, newStatus, outcome) },
         onNavigateToProtection = onNavigateToProtection,
         onNavigateToReflection = onNavigateToReflection,
@@ -93,6 +97,7 @@ fun TodayScreen(
 fun TodayScreenContent(
     modifier: Modifier = Modifier,
     uiState: TodayUiState,
+    voiceCaptureViewModel: VoiceCaptureViewModel? = null,
     onStatusChange: (String, CommitmentStatus, ResultStatus?) -> Unit,
     onNavigateToProtection: () -> Unit,
     onNavigateToReflection: () -> Unit,
@@ -195,6 +200,7 @@ fun TodayScreenContent(
                             dailyBriefing = state.dailyBriefing,
                             proposedActions = state.proposedActions,
                             isBriefingLoading = state.isBriefingLoading,
+                            voiceCaptureViewModel = voiceCaptureViewModel,
                             onStatusChange = onStatusChange,
                             onScheduleClick = onScheduleClick,
                             onCancelScheduleClick = onCancelScheduleClick,
@@ -228,6 +234,7 @@ fun TodayContent(
     dailyBriefing: DailyBriefing? = null,
     proposedActions: List<ProposedAction> = emptyList(),
     isBriefingLoading: Boolean = false,
+    voiceCaptureViewModel: VoiceCaptureViewModel? = null,
     onStatusChange: (String, CommitmentStatus, ResultStatus?) -> Unit,
     onScheduleClick: (String, Long) -> Unit,
     onCancelScheduleClick: (String) -> Unit,
@@ -259,6 +266,10 @@ fun TodayContent(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.padding(24.dp)
             ) {
+                if (voiceCaptureViewModel != null) {
+                    VoicePlannerCaptureCard(viewModel = voiceCaptureViewModel)
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
                 Text(
                     text = "No active commitments or due tasks for today.",
                     style = MaterialTheme.typography.bodyLarge,
@@ -283,6 +294,13 @@ fun TodayContent(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Voice Planner Capture Card
+        if (voiceCaptureViewModel != null) {
+            item(key = "voice_planner_capture_card") {
+                VoicePlannerCaptureCard(viewModel = voiceCaptureViewModel)
+            }
+        }
+
         // 1. Daily Intelligence Briefing Header
         if (dailyBriefing != null || isBriefingLoading) {
             item {
