@@ -5,7 +5,10 @@ import com.sanket_satpute_20.ironmind.domain.model.Commitment
 import com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus
 import com.sanket_satpute_20.ironmind.domain.model.EntitySource
 import com.sanket_satpute_20.ironmind.domain.model.Reflection
+import com.sanket_satpute_20.ironmind.domain.model.reflection.DigitalBehaviourSummary
+import com.sanket_satpute_20.ironmind.domain.model.reflection.ExecutionTimingContextSummary
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetCommitmentsForDateRangeUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.reflection.GetDailyReflectionContextUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.reflection.SaveReflectionUseCase
 import com.sanket_satpute_20.ironmind.testutil.TestDispatcherRule
 import com.sanket_satpute_20.ironmind.testutil.fake.FakeClock
@@ -119,5 +122,32 @@ class NightReflectionViewModelTest {
         val state = viewModel.uiState.value
         assertTrue(state is NightReflectionUiState.Success)
         assertTrue(!(state as NightReflectionUiState.Success).isSaved)
+    }
+
+    @Test
+    fun `loadSummary with getDailyReflectionContextUseCase provides digital and execution context`() = runTest {
+        createCommitment("1", CommitmentStatus.COMPLETED)
+        val dailyReflectionContextUseCase = GetDailyReflectionContextUseCase(
+            getCommitmentsForDateRangeUseCase = getCommitmentsForDateRangeUseCase,
+            contextEngine = null,
+            clock = clock
+        )
+
+        viewModel = NightReflectionViewModel(
+            getCommitmentsForDateRangeUseCase = getCommitmentsForDateRangeUseCase,
+            saveReflectionUseCase = saveReflectionUseCase,
+            reflectionRepository = reflectionRepository,
+            clock = clock,
+            logger = logger,
+            getDailyReflectionContextUseCase = dailyReflectionContextUseCase
+        )
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is NightReflectionUiState.Success)
+
+        val summary = (state as NightReflectionUiState.Success).summary
+        assertEquals(1, summary.completed.size)
+        assertEquals("1", summary.completed[0].id)
     }
 }

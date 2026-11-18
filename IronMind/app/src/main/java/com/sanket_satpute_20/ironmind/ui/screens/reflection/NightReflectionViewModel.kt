@@ -7,7 +7,10 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.sanket_satpute_20.ironmind.domain.common.Result
 import com.sanket_satpute_20.ironmind.domain.model.Commitment
+import com.sanket_satpute_20.ironmind.domain.model.reflection.DigitalBehaviourSummary
+import com.sanket_satpute_20.ironmind.domain.model.reflection.ExecutionTimingContextSummary
 import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetCommitmentsForDateRangeUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.reflection.GetDailyReflectionContextUseCase
 import com.sanket_satpute_20.ironmind.domain.usecase.reflection.SaveReflectionUseCase
 import com.sanket_satpute_20.ironmind.domain.repository.ReflectionRepository
 import com.sanket_satpute_20.ironmind.domain.common.Clock
@@ -26,7 +29,9 @@ import java.util.Calendar
 data class DaySummary(
     val completed: List<Commitment> = emptyList(),
     val missed: List<Commitment> = emptyList(),
-    val postponed: List<Commitment> = emptyList()
+    val postponed: List<Commitment> = emptyList(),
+    val digitalBehaviour: DigitalBehaviourSummary? = null,
+    val executionTiming: ExecutionTimingContextSummary? = null
 )
 
 sealed class NightReflectionUiState {
@@ -45,7 +50,8 @@ class NightReflectionViewModel(
     private val reflectionRepository: ReflectionRepository,
     private val clock: Clock,
     private val logger: IronLogger,
-    private val userSessionProvider: UserSessionProvider? = null
+    private val userSessionProvider: UserSessionProvider? = null,
+    private val getDailyReflectionContextUseCase: GetDailyReflectionContextUseCase? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<NightReflectionUiState>(NightReflectionUiState.Loading)
@@ -135,17 +141,33 @@ class NightReflectionViewModel(
             try {
                 userSessionProvider.runWithSession { activeUid ->
                     if (activeUid != userId || !isCurrentLoad(userId, generation)) return@runWithSession
-                    val result = getCommitmentsForDateRangeUseCase(activeUid, startTime, endTime)
-                    if (result is Result.Failure) {
-                        if (isCurrentLoad(userId, generation)) {
-                            _uiState.value = NightReflectionUiState.Error(result.error.message ?: "Failed to load summary")
+                    val summary: DaySummary = if (getDailyReflectionContextUseCase != null) {
+                        val result = getDailyReflectionContextUseCase(activeUid, startTime, endTime)
+                        if (result is Result.Failure) {
+                            if (isCurrentLoad(userId, generation)) {
+                                _uiState.value = NightReflectionUiState.Error(result.error.message ?: "Failed to load summary")
+                            }
+                            return@runWithSession
                         }
-                        return@runWithSession
-                    }
-                    val commitments = (result as Result.Success).data
-                    if (commitments.any { it.userId != activeUid }) {
-                        _uiState.value = NightReflectionUiState.Error("Commitments do not belong to this session")
-                        return@runWithSession
+                        (result as Result.Success).data
+                    } else {
+                        val result = getCommitmentsForDateRangeUseCase(activeUid, startTime, endTime)
+                        if (result is Result.Failure) {
+                            if (isCurrentLoad(userId, generation)) {
+                                _uiState.value = NightReflectionUiState.Error(result.error.message ?: "Failed to load summary")
+                            }
+                            return@runWithSession
+                        }
+                        val commitments = (result as Result.Success).data
+                        if (commitments.any { it.userId != activeUid }) {
+                            _uiState.value = NightReflectionUiState.Error("Commitments do not belong to this session")
+                            return@runWithSession
+                        }
+                        DaySummary(
+                            completed = commitments.filter { it.status == com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus.COMPLETED },
+                            missed = commitments.filter { it.status == com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus.MISSED },
+                            postponed = commitments.filter { it.status == com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus.POSTPONED }
+                        )
                     }
 
                     val reflectionResult = reflectionRepository.getReflectionsForDateRange(activeUid, startTime, endTime)
@@ -163,11 +185,6 @@ class NightReflectionViewModel(
                     if (!isCurrentLoad(userId, generation)) return@runWithSession
 
                     val existingReflection = reflections.firstOrNull()?.content
-                    val summary = DaySummary(
-                        completed = commitments.filter { it.status == com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus.COMPLETED },
-                        missed = commitments.filter { it.status == com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus.MISSED },
-                        postponed = commitments.filter { it.status == com.sanket_satpute_20.ironmind.domain.model.CommitmentStatus.POSTPONED }
-                    )
                     loadedUserId = activeUid
                     _uiState.value = NightReflectionUiState.Success(
                         summary = summary,
@@ -248,6 +265,7 @@ class NightReflectionViewModel(
                 val reflectionRepository = application.container.reflectionRepository
                 val clock = application.container.clock
                 val logger = application.container.logger
+                val getDailyReflectionContextUseCase = application.container.getDailyReflectionContextUseCase
 
                 NightReflectionViewModel(
                     getCommitmentsForDateRangeUseCase = getCommitmentsForDateRangeUseCase,
@@ -255,7 +273,8 @@ class NightReflectionViewModel(
                     reflectionRepository = reflectionRepository,
                     clock = clock,
                     logger = logger,
-                    userSessionProvider = application.container.userSessionProvider
+                    userSessionProvider = application.container.userSessionProvider,
+                    getDailyReflectionContextUseCase = getDailyReflectionContextUseCase
                 )
             }
         }

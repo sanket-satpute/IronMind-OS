@@ -33,6 +33,7 @@ import com.sanket_satpute_20.ironmind.domain.usecase.commitment.GetCommitmentsFo
 import com.sanket_satpute_20.ironmind.domain.repository.ReflectionRepository
 import com.sanket_satpute_20.ironmind.data.repository.ReflectionRepositoryImpl
 import com.sanket_satpute_20.ironmind.domain.usecase.reflection.SaveReflectionUseCase
+import com.sanket_satpute_20.ironmind.domain.usecase.reflection.GetDailyReflectionContextUseCase
 import com.sanket_satpute_20.ironmind.domain.repository.EventRepository
 import com.sanket_satpute_20.ironmind.data.repository.EventRepositoryImpl
 import com.sanket_satpute_20.ironmind.domain.usecase.history.GetTimelineUseCase
@@ -235,6 +236,7 @@ interface AppContainer {
     val proposeExperimentUseCase: ProposeExperimentUseCase
     val evolvePersonalModelUseCase: EvolvePersonalModelUseCase
     val saveReflectionUseCase: SaveReflectionUseCase
+    val getDailyReflectionContextUseCase: GetDailyReflectionContextUseCase
     val backgroundExecutor: BackgroundExecutor
     val protectionRepository: ProtectionRepository
     val startProtectionSessionUseCase: StartProtectionSessionUseCase
@@ -1107,6 +1109,14 @@ class DefaultAppContainer(
             getGoalProgressUseCase = getGoalProgressUseCase,
             getPlanProgressUseCase = getPlanProgressUseCase,
             zoneId = java.time.ZoneId.systemDefault()
+        )
+    }
+
+    override val getDailyReflectionContextUseCase: GetDailyReflectionContextUseCase by lazy {
+        GetDailyReflectionContextUseCase(
+            getCommitmentsForDateRangeUseCase = getCommitmentsForDateRangeUseCase,
+            contextEngine = contextEngine,
+            clock = clock
         )
     }
 

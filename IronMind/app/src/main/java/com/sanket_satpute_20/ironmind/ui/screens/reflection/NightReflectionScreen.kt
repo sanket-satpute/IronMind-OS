@@ -139,6 +139,116 @@ fun NightReflectionScreen(
                                 }
                             }
 
+                            val digital = state.summary.digitalBehaviour
+                            val timing = state.summary.executionTiming
+                            if (digital != null || (timing != null && timing.hasSufficientData)) {
+                                item {
+                                    Spacer(modifier = Modifier.height(24.dp))
+                                    Text(
+                                        "Observed Daily Rhythm & Context",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
+
+                                if (digital != null) {
+                                    item {
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                        ) {
+                                            Column(modifier = Modifier.padding(16.dp)) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        "Digital Telemetry",
+                                                        style = MaterialTheme.typography.titleMedium,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                    Text(
+                                                        "System Recorded",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.primary
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                                if (digital.isUsagePermissionGranted) {
+                                                    val usageDuration = digital.totalObservedUsageDurationMs
+                                                    if (usageDuration != null && usageDuration > 0) {
+                                                        Text("Total screen usage: ${formatDuration(usageDuration)}")
+                                                    } else {
+                                                        Text("No phone usage recorded during window.")
+                                                    }
+                                                    if (digital.topUsedAppName != null && digital.topUsedAppDurationMs != null) {
+                                                        Text("Top application: ${digital.topUsedAppName} (${formatDuration(digital.topUsedAppDurationMs)})")
+                                                    }
+                                                    if (digital.focusSessionCount > 0) {
+                                                        val overlap = digital.focusProtectionOverlapMs ?: 0L
+                                                        if (overlap > 0) {
+                                                            Text("Focus overlap: ${formatDuration(overlap)} phone usage during ${digital.focusSessionCount} focus session(s)")
+                                                        } else {
+                                                            Text("Focus sessions: ${digital.focusSessionCount} completed without observed phone overlap")
+                                                        }
+                                                    }
+                                                } else {
+                                                    Text(
+                                                        "Usage Access permission is not granted. Digital telemetry is unmeasured.",
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        color = MaterialTheme.colorScheme.outline
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (timing != null && timing.hasSufficientData) {
+                                    item {
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                        ) {
+                                            Column(modifier = Modifier.padding(16.dp)) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        "Execution Rhythm",
+                                                        style = MaterialTheme.typography.titleMedium,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                    Text(
+                                                        "Calculated",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.secondary
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                                Text("Tasks completed: ${timing.completedTaskCount} | Postponed: ${timing.postponedCount}")
+                                                if (timing.mostActiveBucket != null) {
+                                                    Text("Peak execution window: ${timing.mostActiveBucket.displayLabel}")
+                                                }
+                                                if (timing.averageStartDelayMs != null) {
+                                                    val delayMin = timing.averageStartDelayMs / 60_000
+                                                    val delayText = when {
+                                                        delayMin > 1 -> "Average task start: ${delayMin}m after scheduled"
+                                                        delayMin < -1 -> "Average task start: ${-delayMin}m before scheduled"
+                                                        else -> "Average task start: on schedule"
+                                                    }
+                                                    Text(delayText)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             item {
                                 Spacer(modifier = Modifier.height(24.dp))
                                 Text(
@@ -173,5 +283,18 @@ fun NightReflectionScreen(
                 }
             }
         }
+    }
+}
+
+private fun formatDuration(durationMs: Long): String {
+    val totalMinutes = durationMs / 60_000
+    val hours = totalMinutes / 60
+    val minutes = totalMinutes % 60
+    return when {
+        hours > 0 && minutes > 0 -> "${hours}h ${minutes}m"
+        hours > 0 -> "${hours}h"
+        minutes > 0 -> "${minutes}m"
+        durationMs > 0 -> "<1m"
+        else -> "0m"
     }
 }
